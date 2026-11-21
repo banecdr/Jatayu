@@ -1,2 +1,0 @@
-scopes = [{ name = "Program.cs", pattern = "file:Program.cs" }]
-fileColors = { colors = [{ color = "green", scope = "Program.cs" }, { color = "yellow", scope = "Non-Project Files" }, { color = "green", scope = "Tests" }], editorTabs = true, enabled = true, projectView = true }
