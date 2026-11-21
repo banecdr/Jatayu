@@ -179,6 +179,23 @@ public sealed class Window : IDisposable
     public event Action<bool>? VSyncChanged;
 
     /// <summary>
+    /// Event fired when a keyboard key is pressed, released, or repeated.
+    /// Passes (GlfwKey key, GlfwInputAction action).
+    /// </summary>
+    /// <summary>
+    /// Event fired when a keyboard key is pressed, released, or repeated.
+    /// Passes (GlfwKey key, GlfwKeyAction action).
+    /// </summary>
+    public event Action<GlfwKey, GlfwKeyAction>? KeyAction;
+
+    /// <summary>
+    /// Checks if a keyboard key is currently held down.
+    /// </summary>
+    /// <param name="key">The GLFW key code to check.</param>
+    /// <returns>True if the key is currently pressed, false otherwise.</returns>
+    public bool IsKeyDown(GlfwKey key) => _window.GetKey(key) == GlfwKeyAction.Press;
+
+    /// <summary>
     /// Creates and displays a new GLFW window configured specifically for Vulkan.
     /// </summary>
     /// <param name="title">Title shown on the window header.</param>
@@ -225,6 +242,12 @@ public sealed class Window : IDisposable
         _window.OnFramebufferSize += HandleFramebufferResize;
         _window.OnFocus += HandleFocus;
         _window.OnIconify += HandleIconify;
+        _window.OnKey += HandleKey;
+    }
+
+    private void HandleKey(GlfwWindow window, GlfwKey key, int scancode, GlfwKeyAction action, GlfwModifier mods)
+    {
+        KeyAction?.Invoke(key, action);
     }
 
     private static void EnsureGlfwInitialized()
@@ -297,6 +320,7 @@ public sealed class Window : IDisposable
                 _window.OnFramebufferSize -= HandleFramebufferResize;
                 _window.OnFocus -= HandleFocus;
                 _window.OnIconify -= HandleIconify;
+                _window.OnKey -= HandleKey;
                 _window.Dispose();
             }
 

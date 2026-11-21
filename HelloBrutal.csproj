@@ -76,4 +76,10 @@
     <PackageReference Include="Ahwoo.BRUTAL.Monitor.Host" Version="2026.10.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="assets\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

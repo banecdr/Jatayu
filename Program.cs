@@ -2,53 +2,44 @@
  * FILE: Program.cs
  * LOCATION: Program.cs
  * 
- * WHAT THIS FILE DOES:
- *   This is the complete, working "Hello Triangle" Vulkan 1.3 program built directly on the 
- *   BRUTAL framework (Ahwoo.BRUTAL.Vulkan, Vulkan.Abstractions, Vulkan.Vma, Glfw, ShaderC).
- *   It opens a GLFW desktop window, initializes modern Vulkan 1.3 with Dynamic Rendering, 
- *   allocates a vertex buffer using VMA, compiles GLSL shaders to SPIR-V at startup, 
- *   records command buffers, and renders a smooth color-interpolated triangle to your screen 
- *   while updating the window title with a live FPS counter.
+ * WHAT THIS APPLICATION DOES:
+ *   HelloBrutal Engine - Phase 2: 3D Geometry, Depth Buffering & 3D Perspective Camera.
+ *   
+ *   Renders a fully interactive, solid 3D textured/colored cube in true 3D space with:
+ *     1. Depth Testing (Z-Buffer): Hardware occlusion via our dedicated DepthBuffer attachment
+ *        (D32_SFLOAT). Faces behind other faces are automatically occluded, preventing inside-out
+ *        rendering artifacts.
+ *     2. 3D Perspective Camera: Mathematically transforms 3D coordinates using a View matrix (eye
+ *        looking at target) and a Vulkan-corrected Projection matrix (Y-flipped NDC, [0, 1] depth).
+ *     3. Camera Controller: Supports automatic orbital rotation and interactive user keyboard controls
+ *        (orbit yaw/pitch, zoom in/out, flycam motion).
+ *     4. Vulkan Push Constants: Injects the 64-byte Model-View-Projection (MVP) matrix directly into
+ *        the GPU command stream at maximum memory bandwidth with zero CPU allocations.
+ *     5. Indexed 3D Mesh: 24 vertices (interleaved Position, Color, Normal, TexCoord) and 36 indices
+ *        for the 12 triangles of the cube.
+ *     6. Directional Diffuse Shading: Surface normals evaluated in GLSL for realistic 3D lighting.
+ *     7. Multi-Frame Concurrency: 2 Frames in Flight allowing parallel CPU recording and GPU rendering.
+ *     8. Dynamic Rendering & Resizing: Zero-crash dynamic swapchain and depth buffer recreation.
  *
- * HOW IT WORKS INTERNALLY:
- *   1. GLFW Setup & Vulkan Loader:
- *      Touching Vulkan.GetInstanceProcAddr ensures Brutal's native Vulkan loader (libVulkanEx) 
- *      is loaded before GLFW queries extensions. GLFW is configured with ClientApi = 0 (no OpenGL).
- *
- *   2. Vulkan 1.3 Instance & Surface:
- *      Creates a Vulkan 1.3 instance with platform-required extensions and binds to the GLFW 
- *      window handle using Glfw.CreateWindowSurface to produce a VkSurfaceKHR.
- *
- *   3. GPU Selection & Device Creation:
- *      Iterates candidate GPUs to find one supporting graphics commands AND presentation to our 
- *      window surface. Enables Vulkan 1.3 Dynamic Rendering (which completely eliminates legacy 
- *      VkRenderPass / VkFramebuffer boilerplate!).
- *
- *   4. Memory Management (VMA):
- *      Initializes an AMD Vulkan Memory Allocator (VMA) instance. Uses it to create a host-visible, 
- *      persistently mapped vertex buffer holding the 3 vertices (Red, Green, Blue).
- *
- *   5. Shaders & Graphics Pipeline:
- *      Compiles GLSL vertex and fragment shaders into SPIR-V bytecode on startup using ShaderC. 
- *      Sets up fixed-function pipeline states using Brutal's Presets (TriangleList, CullNone).
- *
- *   6. Double-Buffered Swapchain & In-Flight Frame Synchronization:
- *      Allocates swapchain images and image views. Uses fences and semaphores (ImageAvailable, 
- *      RenderFinished) so the CPU never overwrites in-flight GPU frames.
- *
- *   7. Dynamic Rendering & Draw Loop:
- *      Each frame, transitions the swapchain image to ColorAttachmentOptimal, calls 
- *      BeginRendering(), binds the pipeline and vertex buffer, issues Draw(3), calls EndRendering(), 
- *      transitions image to PresentSrcKHR, and submits to the presentation queue.
- *
- *   8. Live FPS Counter:
- *      Integrates our HelloBrutal.Core.Time.GameTime clock to measure frame delta times and 
- *      updates the window title with live FPS and frame time in milliseconds.
+ * INTERACTIVE CONTROLS:
+ *   [Space]      : Toggle Auto-Orbit rotation On / Off
+ *   [Left/Right] : Orbit camera horizontally (Yaw)
+ *   [Up/Down]    : Orbit camera vertically (Pitch)
+ *   [W / S]      : Zoom camera in / out (Distance)
+ *   [V]          : Toggle V-Sync Live (Observe FPS change in Title Bar!)
+ *   [C]          : Cycle background clear color
+ *   [Drag Border]: Seamlessly resize window with live swapchain + depth buffer rebuild
+ *   [ESC]        : Clean shutdown
  * ================================================================================================= */
 
+using System;
+using System.IO;
+using System.Numerics;
+using System.Text;
 using Brutal;
 using Brutal.GlfwApi;
 using Brutal.Numerics;
+using Brutal.Pointers;
 using Brutal.ShaderCApi;
 using Brutal.Strings;
 using Brutal.VulkanApi;
@@ -56,150 +47,163 @@ using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
 using HelloBrutal.Core;
 using HelloBrutal.Core.Time;
+using HelloBrutal.Renderer.Camera;
+using HelloBrutal.Renderer.Mesh;
 using HelloBrutal.RHI.Vulkan.Context;
+using HelloBrutal.RHI.Vulkan.Memory;
+using HelloBrutal.RHI.Vulkan.Swapchain;
+using HelloBrutal.RHI.Vulkan.Sync;
+using HelloBrutal.RHI.Vulkan.Textures;
 
-// 1. Ensure Brutal's Vulkan loader is initialized before GLFW queries extensions
+// -------------------------------------------------------------------------------------------------
+// NATIVE VULKAN LOADER & RUNTIME INITIALIZATION
+// -------------------------------------------------------------------------------------------------
 _ = Vulkan.GetInstanceProcAddr;
 
-RunVulkanTriangle();
+RunEngineDemo();
 
-static unsafe void RunVulkanTriangle()
+static unsafe void RunEngineDemo()
 {
-    const int WindowWidth = 1200;
-    const int WindowHeight = 900;
+    const int InitialWidth = 1280;
+    const int InitialHeight = 720;
 
-    // Use our custom HelloBrutal.Core.Window (Vulkan-ready, centers on monitor, tracks High-DPI pixels)
-    using var window = new Window("BRUTAL Vulkan Triangle", WindowWidth, WindowHeight, resizable: false, vsync: false);
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
+    // ---------------------------------------------------------------------------------------------
+    using var window = new Window(
+        title: "BRUTAL Engine | Phase 2: 3D Geometry & Depth Buffer",
+        width: InitialWidth,
+        height: InitialHeight,
+        resizable: true,
+        vsync: true
+    );
 
-    window.GlfwHandle.OnKey += (handle, key, _, _, _) =>
-    {
-        if (key == GlfwKey.Escape)
-            handle.ShouldClose = true;
-    };
-
-    // 2. Initialize VulkanContext (Instance, Surface, Physical GPU selection, Dynamic Rendering, Device & Queues)
     using var context = new VulkanContext(window);
-    var instance = context.Instance;
-    var surface = context.Surface;
-    var physicalDevice = context.PhysicalDevice;
     var device = context.Device;
     var queue = context.GraphicsQueue;
     var queueFamily = context.QueueFamilies.GraphicsFamily!.Value;
 
-    // 3. Initialize VMA (Vulkan Memory Allocator)
-    var allocator = device.CreateVmaAllocator(
-        new VmaAllocatorCreateInfo
-        {
-            Instance = instance,
-            PhysicalDevice = physicalDevice,
-            Device = device,
-            VulkanApiVersion = (uint)VulkanHelpers.Api.VERSION_1_3,
-        }
+    // High-performance AMD Vulkan Memory Allocator
+    using var allocator = new GpuAllocator(context);
+
+    // Presentation swapchain
+    using var swapchain = new VulkanSwapchain(context, window);
+
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 2: DEPTH BUFFER & 3D PERSPECTIVE CAMERA INITIALIZATION
+    // ---------------------------------------------------------------------------------------------
+    // Create dedicated GPU Depth Buffer for hardware depth testing (Z-buffering occlusion)
+    using var depthBuffer = new DepthBuffer(context, allocator, swapchain.Width, swapchain.Height);
+
+    // 3D Perspective Camera looking at the origin
+    var camera = new Camera3D(
+        position: new Vector3(0f, 2.0f, 4.5f),
+        target: Vector3.Zero,
+        width: swapchain.Width,
+        height: swapchain.Height,
+        fovDegrees: 60f,
+        nearPlane: 0.1f,
+        farPlane: 1000f
     );
 
-    // 8. Allocate Vertex Buffer with 3 Colored Vertices (RGB Triangle)
-    ReadOnlySpan<Vertex> vertices =
-    [
-        new(new float2(0.0f, -0.6f), new float3(1.0f, 0.2f, 0.2f)), // Top (Red)
-        new(new float2(0.6f, 0.6f), new float3(0.2f, 1.0f, 0.2f)),  // Bottom Right (Green)
-        new(new float2(-0.6f, 0.6f), new float3(0.2f, 0.4f, 1.0f)), // Bottom Left (Blue)
-    ];
-    var verticesSize = ByteSize.Of(vertices);
-
-    allocator.CreateBuffer(
-        new VkBufferCreateInfo { Size = verticesSize, Usage = VkBufferUsageFlags.VertexBufferBit },
-        new VmaAllocationCreateInfo
-        {
-            Usage = VmaMemoryUsage.Auto,
-            Flags = VmaAllocationCreateFlags.HostAccessSequentialWriteBit | VmaAllocationCreateFlags.MappedBit,
-        },
-        out var vertexBuffer,
-        out var vertexAllocation,
-        out var vertexAllocationInfo
-    );
-
-    vertices.CopyTo(new Span<Vertex>((void*)vertexAllocationInfo.PMappedData, vertices.Length));
-    allocator.FlushAllocation(vertexAllocation, ByteSize.Zero, verticesSize);
-
-    // 9. Create Swapchain
-    var capabilities = physicalDevice.GetSurfaceCapabilitiesKHR(surface);
-    var extent = capabilities.CurrentExtent;
-    if (extent.Width == -1 && extent.Height == -1)
+    // Camera controller for smooth orbiting and keyboard input
+    var cameraController = new CameraController(camera)
     {
-        extent = new VkExtent2D(
-            Math.Clamp(window.FramebufferWidth, capabilities.MinImageExtent.Width, capabilities.MaxImageExtent.Width),
-            Math.Clamp(window.FramebufferHeight, capabilities.MinImageExtent.Height, capabilities.MaxImageExtent.Height)
-        );
-    }
-
-    var imageCount = Math.Max(capabilities.MinImageCount, 2);
-    if (capabilities.MaxImageCount > 0)
-        imageCount = Math.Min(imageCount, capabilities.MaxImageCount);
-
-    VkCompositeAlphaFlagsKHR[] alphaModes =
-    [
-        VkCompositeAlphaFlagsKHR.OpaqueBitKHR,
-        VkCompositeAlphaFlagsKHR.PreMultipliedBitKHR,
-        VkCompositeAlphaFlagsKHR.PostMultipliedBitKHR,
-        VkCompositeAlphaFlagsKHR.InheritBitKHR,
-    ];
-    var compositeAlpha = alphaModes.First(mode => (capabilities.SupportedCompositeAlpha & mode) != 0);
-
-    Span<VkSurfaceFormatKHR> surfaceFormats = stackalloc VkSurfaceFormatKHR[physicalDevice.GetSurfaceFormatsKHR_Count(surface)];
-    physicalDevice.GetSurfaceFormatsKHR_Write(surface, surfaceFormats);
-    var format = surfaceFormats[0].Format;
-
-    var swapchain = device.CreateSwapchainKHR(
-        new VkSwapchainCreateInfoKHR
-        {
-            Surface = surface,
-            MinImageCount = imageCount,
-            ImageFormat = format,
-            ImageColorSpace = surfaceFormats[0].ColorSpace,
-            ImageExtent = extent,
-            ImageArrayLayers = 1,
-            ImageUsage = VkImageUsageFlags.ColorAttachmentBit,
-            ImageSharingMode = VkSharingMode.Exclusive,
-            PreTransform = capabilities.CurrentTransform,
-            CompositeAlpha = compositeAlpha,
-            PresentMode = window.VSync ? VkPresentModeKHR.FifoKHR : VkPresentModeKHR.ImmediateKHR,
-            Clipped = true,
-        },
-        null
-    );
-
-    var images = new VkImage[device.GetSwapchainImagesKHR_Count(swapchain)];
-    device.GetSwapchainImagesKHR_Write(swapchain, images);
-
-    var colorRange = new VkImageSubresourceRange
-    {
-        AspectMask = VkImageAspectFlags.ColorBit,
-        LevelCount = 1,
-        LayerCount = 1,
+        Distance = 4.5f,
+        Pitch = 0.35f,
+        Yaw = 0.0f,
+        AutoOrbitEnabled = true,
+        OrbitSpeed = 0.75f,
+        MoveSpeed = 4.0f,
     };
 
-    var imageViews = new VkImageView[images.Length];
-    for (var i = 0; i < images.Length; i++)
+    // Recreate depth buffer and camera aspect ratio on window resize
+    window.Resized += (newWidth, newHeight) =>
     {
-        imageViews[i] = device.CreateImageView(
-            new VkImageViewCreateInfo
-            {
-                Image = images[i],
-                ViewType = VkImageViewType._2D,
-                Format = format,
-                SubresourceRange = colorRange,
-            },
-            null
-        );
-    }
+        depthBuffer.Recreate(newWidth, newHeight);
+        camera.UpdateAspectRatio(newWidth, newHeight);
+    };
 
-    // 10. Compile Shaders using ShaderC
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 3: 3D CUBE GEOMETRY & INDEX BUFFER
+    // ---------------------------------------------------------------------------------------------
+    // 24 vertices (4 per face) with distinct colors and normals for each of the 6 cube faces
+    Vertex3D[] cubeVertices =
+    [
+        // Face 1: Front (+Z) - Red tint
+        new(new float3(-1f, -1f,  1f), new float3(1.0f, 0.25f, 0.25f), new float3(0f, 0f, 1f), new float2(0f, 0f)),
+        new(new float3( 1f, -1f,  1f), new float3(1.0f, 0.25f, 0.25f), new float3(0f, 0f, 1f), new float2(1f, 0f)),
+        new(new float3( 1f,  1f,  1f), new float3(1.0f, 0.25f, 0.25f), new float3(0f, 0f, 1f), new float2(1f, 1f)),
+        new(new float3(-1f,  1f,  1f), new float3(1.0f, 0.25f, 0.25f), new float3(0f, 0f, 1f), new float2(0f, 1f)),
+
+        // Face 2: Back (-Z) - Cyan tint
+        new(new float3( 1f, -1f, -1f), new float3(0.2f, 0.9f, 0.9f), new float3(0f, 0f, -1f), new float2(0f, 0f)),
+        new(new float3(-1f, -1f, -1f), new float3(0.2f, 0.9f, 0.9f), new float3(0f, 0f, -1f), new float2(1f, 0f)),
+        new(new float3(-1f,  1f, -1f), new float3(0.2f, 0.9f, 0.9f), new float3(0f, 0f, -1f), new float2(1f, 1f)),
+        new(new float3( 1f,  1f, -1f), new float3(0.2f, 0.9f, 0.9f), new float3(0f, 0f, -1f), new float2(0f, 1f)),
+
+        // Face 3: Top (+Y) - Green tint
+        new(new float3(-1f,  1f,  1f), new float3(0.25f, 1.0f, 0.25f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
+        new(new float3( 1f,  1f,  1f), new float3(0.25f, 1.0f, 0.25f), new float3(0f, 1f, 0f), new float2(1f, 0f)),
+        new(new float3( 1f,  1f, -1f), new float3(0.25f, 1.0f, 0.25f), new float3(0f, 1f, 0f), new float2(1f, 1f)),
+        new(new float3(-1f,  1f, -1f), new float3(0.25f, 1.0f, 0.25f), new float3(0f, 1f, 0f), new float2(0f, 1f)),
+
+        // Face 4: Bottom (-Y) - Magenta tint
+        new(new float3(-1f, -1f, -1f), new float3(0.95f, 0.25f, 0.95f), new float3(0f, -1f, 0f), new float2(0f, 0f)),
+        new(new float3( 1f, -1f, -1f), new float3(0.95f, 0.25f, 0.95f), new float3(0f, -1f, 0f), new float2(1f, 0f)),
+        new(new float3( 1f, -1f,  1f), new float3(0.95f, 0.25f, 0.95f), new float3(0f, -1f, 0f), new float2(1f, 1f)),
+        new(new float3(-1f, -1f,  1f), new float3(0.95f, 0.25f, 0.95f), new float3(0f, -1f, 0f), new float2(0f, 1f)),
+
+        // Face 5: Right (+X) - Blue tint
+        new(new float3( 1f, -1f,  1f), new float3(0.25f, 0.5f, 1.0f), new float3(1f, 0f, 0f), new float2(0f, 0f)),
+        new(new float3( 1f, -1f, -1f), new float3(0.25f, 0.5f, 1.0f), new float3(1f, 0f, 0f), new float2(1f, 0f)),
+        new(new float3( 1f,  1f, -1f), new float3(0.25f, 0.5f, 1.0f), new float3(1f, 0f, 0f), new float2(1f, 1f)),
+        new(new float3( 1f,  1f,  1f), new float3(0.25f, 0.5f, 1.0f), new float3(1f, 0f, 0f), new float2(0f, 1f)),
+
+        // Face 6: Left (-X) - Amber/Yellow tint
+        new(new float3(-1f, -1f, -1f), new float3(1.0f, 0.85f, 0.2f), new float3(-1f, 0f, 0f), new float2(0f, 0f)),
+        new(new float3(-1f, -1f,  1f), new float3(1.0f, 0.85f, 0.2f), new float3(-1f, 0f, 0f), new float2(1f, 0f)),
+        new(new float3(-1f,  1f,  1f), new float3(1.0f, 0.85f, 0.2f), new float3(-1f, 0f, 0f), new float2(1f, 1f)),
+        new(new float3(-1f,  1f, -1f), new float3(1.0f, 0.85f, 0.2f), new float3(-1f, 0f, 0f), new float2(0f, 1f)),
+    ];
+
+    // 36 indices forming 12 triangles across 6 cube faces
+    ushort[] cubeIndices =
+    [
+        // Face 1: Front
+        0, 1, 2,  2, 3, 0,
+        // Face 2: Back
+        4, 5, 6,  6, 7, 4,
+        // Face 3: Top
+        8, 9, 10, 10, 11, 8,
+        // Face 4: Bottom
+        12, 13, 14, 14, 15, 12,
+        // Face 5: Right
+        16, 17, 18, 18, 19, 16,
+        // Face 6: Left
+        20, 21, 22, 22, 23, 20,
+    ];
+
+    using var vertexBuffer = allocator.CreateBufferWithData<Vertex3D>(
+        cubeVertices,
+        VkBufferUsageFlags.VertexBufferBit
+    );
+
+    using var indexBuffer = allocator.CreateBufferWithData<ushort>(
+        cubeIndices,
+        VkBufferUsageFlags.IndexBufferBit
+    );
+
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 4: 3D SHADER COMPILATION & VULKAN GRAPHICS PIPELINE
+    // ---------------------------------------------------------------------------------------------
     using var compiler = ShaderC.CreateCompiler();
     using var options = ShaderC.CreateCompilerOptions();
 
-    VkShaderModule CompileShader(ReadOnlySpan<byte> glsl, ShaderKind kind)
+    VkShaderModule CompileShaderFromFile(string filePath, ShaderKind kind)
     {
-        using var spirv = compiler.Compile(glsl, kind, "shader"u8, "main"u8, options);
+        var bytes = File.ReadAllBytes(filePath);
+        using var spirv = compiler.Compile(bytes, kind, "shader"u8, "main"u8, options);
         return ShaderModuleExtensions.FromSpirv(
             device,
             new ReadOnlySpan<byte>(spirv.GetBytes(), (int)spirv.GetLength()),
@@ -210,42 +214,27 @@ static unsafe void RunVulkanTriangle()
     using var shaderStages = new ShaderStages(
         device,
         [
-            Presets.ShaderStage.Vertex(
-                CompileShader(
-                    """
-                    #version 450
-                    layout(location = 0) in vec2 position;
-                    layout(location = 1) in vec3 inColor;
-                    layout(location = 0) out vec3 color;
-                    void main() {
-                        gl_Position = vec4(position, 0.0, 1.0);
-                        color = inColor;
-                    }
-                    """u8,
-                    ShaderKind.VertexShader
-                )
-            ),
-            Presets.ShaderStage.Fragment(
-                CompileShader(
-                    """
-                    #version 450
-                    layout(location = 0) in vec3 color;
-                    layout(location = 0) out vec4 outColor;
-                    void main() {
-                        outColor = vec4(color, 1.0);
-                    }
-                    """u8,
-                    ShaderKind.FragmentShader
-                )
-            ),
+            Presets.ShaderStage.Vertex(CompileShaderFromFile("assets/shaders/cube.vert", ShaderKind.VertexShader)),
+            Presets.ShaderStage.Fragment(CompileShaderFromFile("assets/shaders/cube.frag", ShaderKind.FragmentShader)),
         ],
         null
     );
 
-    // 11. Create Graphics Pipeline with Dynamic Rendering
-    var vertexInput = new VertexInput(1, 2).AddBindingWithAttributes<Vertex>(0, 0, VkVertexInputRate.Vertex);
-    var viewport = new VkViewport { Width = extent.Width, Height = extent.Height, MaxDepth = 1 };
-    var scissor = new VkRect2D(extent);
+    // Configure Vulkan Push Constant range for the 64-byte MVP matrix
+    var pushConstantRange = new VkPushConstantRange
+    {
+        StageFlags = VkShaderStageFlags.VertexBit,
+        Offset = new ByteSize32(0),
+        Size = new ByteSize32((uint)sizeof(Matrix4x4)), // 64 bytes
+    };
+
+    var pipelineLayout = device.CreatePipelineLayout([], [pushConstantRange], null);
+
+    // Configure Vulkan 1.3 Graphics Pipeline with Dynamic Rendering and Hardware Depth Stencil
+    var format = swapchain.ColorFormat;
+    var vertexInput = new VertexInput(1, 4).AddBindingWithAttributes<Vertex3D>(0, 0, VkVertexInputRate.Vertex);
+    var viewport = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
+    var scissor = new VkRect2D(swapchain.Extent);
     var viewportState = new VkPipelineViewportStateCreateInfo
     {
         ViewportCount = 1,
@@ -253,28 +242,49 @@ static unsafe void RunVulkanTriangle()
         ScissorCount = 1,
         Scissors = &scissor,
     };
-    var rendering = new VkPipelineRenderingCreateInfo { ColorAttachmentCount = 1, ColorAttachmentFormats = &format };
 
-    var pipelineLayout = device.CreatePipelineLayout([], [], null);
-    var pipeline = device.CreateGraphicsPipeline(
-        VkPipelineCache.NullHandle,
-        new VkGraphicsPipelineCreateInfo
+    // Specify both Color and Depth attachment formats directly on the pipeline!
+    var rendering = new VkPipelineRenderingCreateInfo
+    {
+        ColorAttachmentCount = 1,
+        ColorAttachmentFormats = &format,
+        DepthAttachmentFormat = depthBuffer.Format,
+    };
+
+    VkDynamicState[] dynamicStates = [VkDynamicState.Viewport, VkDynamicState.Scissor];
+    VkPipeline pipeline;
+    fixed (VkDynamicState* pDynamicStates = dynamicStates)
+    {
+        var dynamicState = new VkPipelineDynamicStateCreateInfo
         {
-            Next = &rendering,
-            StageCount = shaderStages.Count,
-            Stages = shaderStages,
-            VertexInputState = vertexInput,
-            InputAssemblyState = Presets.InputAssembly.TriangleList,
-            ViewportState = &viewportState,
-            RasterizationState = Presets.Rasterization.Fill.CullNone,
-            MultisampleState = Presets.Multisample.None,
-            ColorBlendState = Presets.BlendState.BlendNone,
-            Layout = pipelineLayout,
-        },
-        null
-    );
+            DynamicStateCount = 2,
+            DynamicStates = pDynamicStates,
+        };
 
-    // 12. Create Command Pool & Buffers
+        pipeline = device.CreateGraphicsPipeline(
+            VkPipelineCache.NullHandle,
+            new VkGraphicsPipelineCreateInfo
+            {
+                Next = &rendering,
+                StageCount = shaderStages.Count,
+                Stages = shaderStages,
+                VertexInputState = vertexInput,
+                InputAssemblyState = Presets.InputAssembly.TriangleList,
+                ViewportState = &viewportState,
+                RasterizationState = Presets.Rasterization.Fill.CullNone,
+                MultisampleState = Presets.Multisample.None,
+                DepthStencilState = Presets.DepthStencil.DepthTestWrite, // Active Depth Testing & Writing!
+                ColorBlendState = Presets.BlendState.BlendNone,
+                DynamicState = &dynamicState,
+                Layout = pipelineLayout,
+            },
+            null
+        );
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 5: COMMAND POOL & MULTI-FRAME IN-FLIGHT SYNCHRONIZATION
+    // ---------------------------------------------------------------------------------------------
     var commandPool = device.CreateCommandPool(
         new VkCommandPoolCreateInfo
         {
@@ -284,16 +294,26 @@ static unsafe void RunVulkanTriangle()
         null
     );
 
-    var commandBuffer = device.AllocateCommandBuffer(
-        new VkCommandBufferAllocateInfo { CommandPool = commandPool, Level = VkCommandBufferLevel.Primary }
-    );
+    using var frameSync = new FrameSync(context, maxFramesInFlight: 2);
 
-    var imageAvailable = device.CreateSemaphore(new VkSemaphoreCreateInfo(), null);
-    var renderFinished = images.Select(_ => device.CreateSemaphore(new VkSemaphoreCreateInfo(), null)).ToArray();
-    var frameFence = device.CreateFence(VkFenceCreateFlags.SignaledBit, null);
+    var commandBuffers = new CommandBuffer[frameSync.MaxFramesInFlight];
+    for (var i = 0; i < frameSync.MaxFramesInFlight; i++)
+    {
+        commandBuffers[i] = device.AllocateCommandBuffer(
+            new VkCommandBufferAllocateInfo { CommandPool = commandPool, Level = VkCommandBufferLevel.Primary }
+        );
+    }
 
-    void TransitionImage(
-        VkImage image,
+    var colorRange = new VkImageSubresourceRange
+    {
+        AspectMask = VkImageAspectFlags.ColorBit,
+        LevelCount = 1,
+        LayerCount = 1,
+    };
+
+    void TransitionColorImage(
+        CommandBuffer cmd,
+        VkImage img,
         VkImageLayout from,
         VkImageLayout to,
         VkPipelineStageFlags srcStage,
@@ -302,7 +322,7 @@ static unsafe void RunVulkanTriangle()
         VkAccessFlags dstAccess
     )
     {
-        commandBuffer.PipelineBarrier(
+        cmd.PipelineBarrier(
             srcStage,
             dstStage,
             VkDependencyFlags.None,
@@ -317,43 +337,164 @@ static unsafe void RunVulkanTriangle()
                     NewLayout = to,
                     SrcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
                     DstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-                    Image = image,
+                    Image = img,
                     SubresourceRange = colorRange,
                 },
             ]
         );
     }
 
-    // 13. Initialize GameTime Clock for Frame Timing and FPS
+    // ---------------------------------------------------------------------------------------------
+    // INTERACTIVE HOTKEY EVENT HOOKS
+    // ---------------------------------------------------------------------------------------------
+    float4[] clearColors =
+    [
+        new float4(0.08f, 0.08f, 0.12f, 1.0f), // Deep Slate Blue
+        new float4(0.05f, 0.05f, 0.05f, 1.0f), // Dark Charcoal
+        new float4(0.12f, 0.05f, 0.08f, 1.0f), // Deep Crimson
+        new float4(0.04f, 0.10f, 0.08f, 1.0f), // Dark Forest
+    ];
+    var clearColorIndex = 0;
+
+    window.KeyAction += (key, action) =>
+    {
+        if (action == GlfwKeyAction.Press)
+        {
+            if (key == GlfwKey.V)
+            {
+                window.VSync = !window.VSync;
+                Console.WriteLine($"[Input] V-Sync toggled -> {(window.VSync ? "ENABLED (Locked to monitor refresh)" : "DISABLED (Uncapped FPS)")}");
+            }
+            else if (key == GlfwKey.C)
+            {
+                clearColorIndex = (clearColorIndex + 1) % clearColors.Length;
+                Console.WriteLine($"[Input] Clear Color switched to Palette #{clearColorIndex + 1}");
+            }
+            else if (key == GlfwKey.Space)
+            {
+                cameraController.AutoOrbitEnabled = !cameraController.AutoOrbitEnabled;
+                Console.WriteLine($"[Input] Auto-Orbit toggled -> {(cameraController.AutoOrbitEnabled ? "ENABLED" : "PAUSED (Manual control active)")}");
+            }
+            else if (key == GlfwKey.Escape)
+            {
+                window.Close();
+            }
+        }
+    };
+
+    // ---------------------------------------------------------------------------------------------
+    // PRINT DETAILED ENGINE DIAGNOSTICS & STATUS
+    // ---------------------------------------------------------------------------------------------
+    Console.WriteLine("================================================================================");
+    Console.WriteLine("        HELLO BRUTAL VULKAN 1.3 3D ENGINE - PHASE 2 (3D CUBE & DEPTH)           ");
+    Console.WriteLine("================================================================================");
+    Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
+    Console.WriteLine($" [Vulkan API]    : 1.3 (Dynamic Rendering, Push Constants, Hardware Depth Stencil)");
+    Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Precision)");
+    Console.WriteLine($" [3D Mesh]       : 3D Colored Cube ({cubeVertices.Length} Vertices, {cubeIndices.Length} Indices, 12 Triangles)");
+    Console.WriteLine($" [Push Constants]: 64-byte MVP Matrix directly in Command Stream");
+    Console.WriteLine($" [Camera]        : 3D Perspective (FOV: {camera.FovDegrees}°, Vulkan Y-Inverted NDC, [0,1] Depth)");
+    Console.WriteLine($" [Swapchain]     : {swapchain.Width}x{swapchain.Height} | Buffers: {swapchain.ImageCount} | Format: {swapchain.ColorFormat}");
+    Console.WriteLine($" [Sync Engine]   : {frameSync.MaxFramesInFlight} Frames in Flight (Parallel CPU/GPU Execution)");
+    Console.WriteLine("--------------------------------------------------------------------------------");
+    Console.WriteLine(" INTERACTIVE HOTKEYS:");
+    Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
+    Console.WriteLine("   [Left/Right]  : Manual horizontal orbit (Yaw)");
+    Console.WriteLine("   [Up/Down]     : Manual vertical orbit (Pitch)");
+    Console.WriteLine("   [W / S]       : Zoom camera in / out");
+    Console.WriteLine("   [V]           : Toggle V-Sync Live (Observe FPS change in Title Bar!)");
+    Console.WriteLine("   [C]           : Cycle background clear colors");
+    Console.WriteLine("   [Resize]      : Drag window border to test dynamic swapchain + depth buffer rebuild");
+    Console.WriteLine("   [ESC]         : Graceful Shutdown");
+    Console.WriteLine("================================================================================");
+
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 6: THE MASTER 3D RENDER LOOP
+    // ---------------------------------------------------------------------------------------------
     var time = new GameTime();
 
-    Console.WriteLine("========================================");
-    Console.WriteLine(" BRUTAL Vulkan 1.3 Triangle Running!");
-    Console.WriteLine(" Press ESC or close window to exit.");
-    Console.WriteLine("========================================");
-
-    // 14. Master Render Loop
     while (!window.ShouldClose)
     {
+        // 1. Process OS window events
         window.PollEvents();
+
+        // Skip rendering while minimized
+        if (window.IsMinimized)
+            continue;
+
+        // 2. Tick high-precision game clock
         time.Update();
+        var dt = time.DeltaTime;
 
-        // Update Window Title with Live FPS & Frame Time
-        window.Title = $"BRUTAL Vulkan Triangle | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms)";
+        // Interactive manual camera controls when held down
+        if (window.IsKeyDown(GlfwKey.Left))
+        {
+            cameraController.AutoOrbitEnabled = false;
+            cameraController.Yaw -= 2.0f * dt;
+        }
+        if (window.IsKeyDown(GlfwKey.Right))
+        {
+            cameraController.AutoOrbitEnabled = false;
+            cameraController.Yaw += 2.0f * dt;
+        }
+        if (window.IsKeyDown(GlfwKey.Up))
+        {
+            cameraController.Pitch += 1.5f * dt;
+        }
+        if (window.IsKeyDown(GlfwKey.Down))
+        {
+            cameraController.Pitch -= 1.5f * dt;
+        }
+        if (window.IsKeyDown(GlfwKey.W))
+        {
+            cameraController.Zoom(-3.0f * dt);
+        }
+        if (window.IsKeyDown(GlfwKey.S))
+        {
+            cameraController.Zoom(3.0f * dt);
+        }
 
-        // Wait for previous frame fence
-        device.WaitForFence(frameFence, -1);
-        device.ResetFences([frameFence]);
+        // Update camera position
+        cameraController.Update(dt);
 
-        // Acquire next swapchain image
-        device.AcquireNextImageKHR(swapchain, -1, imageAvailable, VkFence.NullHandle, out var imageIndex);
-        var image = images[imageIndex];
+        // Update live telemetry in the window title
+        window.Title = $"BRUTAL 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | {swapchain.Width}x{swapchain.Height} | Depth: {depthBuffer.Format} | VSync: {(window.VSync ? "ON" : "OFF")} | Orbit: {(cameraController.AutoOrbitEnabled ? "AUTO" : "MANUAL")} | Frame #{time.FrameCount}";
 
-        // Record commands
-        commandBuffer.Reset();
-        commandBuffer.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
+        // Handle dynamic swapchain / window resize
+        if (swapchain.IsOutOfDate)
+        {
+            swapchain.Recreate();
+            depthBuffer.Recreate(swapchain.Width, swapchain.Height);
+            camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            continue;
+        }
 
-        TransitionImage(
+        // 3. Wait for current frame fence
+        frameSync.WaitForFrameFence();
+
+        // 4. Acquire next swapchain image
+        var acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out var imageIndex);
+        if (acquireResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
+        {
+            swapchain.Recreate();
+            depthBuffer.Recreate(swapchain.Width, swapchain.Height);
+            camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            continue;
+        }
+
+        frameSync.ResetFrameFence();
+
+        var cmd = commandBuffers[frameSync.CurrentFrame];
+        var image = swapchain.Images[imageIndex];
+        var imageView = swapchain.ImageViews[imageIndex];
+
+        // 5. Record GPU Rendering Commands
+        cmd.Reset();
+        cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
+
+        // Transition swapchain image: Undefined -> ColorAttachmentOptimal
+        TransitionColorImage(
+            cmd,
             image,
             VkImageLayout.Undefined,
             VkImageLayout.ColorAttachmentOptimal,
@@ -365,29 +506,62 @@ static unsafe void RunVulkanTriangle()
 
         var colorAttachment = new VkRenderingAttachmentInfo
         {
-            ImageView = imageViews[imageIndex],
+            ImageView = imageView,
             ImageLayout = VkImageLayout.ColorAttachmentOptimal,
             LoadOp = VkAttachmentLoadOp.Clear,
             StoreOp = VkAttachmentStoreOp.Store,
-            ClearValue = new VkClearColorValue { Float32 = new float4(0.08f, 0.08f, 0.12f, 1.0f) }, // Dark navy clear
+            ClearValue = new VkClearColorValue { Float32 = clearColors[clearColorIndex] },
         };
 
-        commandBuffer.BeginRendering(
+        // Depth Attachment: Clear depth buffer to 1.0 (furthest distance) every frame
+        var depthAttachment = depthBuffer.GetAttachmentInfo(
+            loadOp: VkAttachmentLoadOp.Clear,
+            storeOp: VkAttachmentStoreOp.DontCare,
+            clearDepth: 1.0f
+        );
+
+        // Begin Modern Vulkan 1.3 Dynamic Rendering with Depth Buffer!
+        cmd.BeginRendering(
             new VkRenderingInfo
             {
-                RenderArea = new VkRect2D(extent),
+                RenderArea = new VkRect2D(swapchain.Extent),
                 LayerCount = 1,
                 ColorAttachmentCount = 1,
                 ColorAttachments = &colorAttachment,
+                DepthAttachment = &depthAttachment,
             }
         );
 
-        commandBuffer.BindPipeline(VkPipelineBindPoint.Graphics, pipeline);
-        commandBuffer.BindVertexBuffers(0, [vertexBuffer], [new ByteSize64(0)]);
-        commandBuffer.Draw(3, 1, 0, 0);
-        commandBuffer.EndRendering();
+        // Bind 3D graphics pipeline, set dynamic viewport & scissor
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, pipeline);
+        cmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
+        cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
 
-        TransitionImage(
+        // Calculate Model-View-Projection Matrix:
+        // Rotate 3D cube around multiple axes to showcase true 3D spatial geometry and depth occlusion
+        var rotTime = (float)time.TotalTime;
+        var model = Matrix4x4.CreateRotationY(rotTime * 0.9f) *
+                    Matrix4x4.CreateRotationX(rotTime * 0.45f);
+        var mvp = model * camera.ViewProjection;
+
+        // Push MVP Matrix to GPU via high-speed Push Constants (64 bytes)
+        cmd.PushConstants(
+            pipelineLayout,
+            VkShaderStageFlags.VertexBit,
+            0,
+            new ReadOnlySpan<byte>(&mvp, sizeof(Matrix4x4))
+        );
+
+        // Bind vertex and index buffers and draw the 36 indices (12 triangles)
+        cmd.BindVertexBuffers(0, [vertexBuffer.Handle], [new ByteSize64(0)]);
+        cmd.BindIndexBuffer(indexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt16);
+        cmd.DrawIndexed(36, 1, 0, 0, 0);
+
+        cmd.EndRendering();
+
+        // Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
+        TransitionColorImage(
+            cmd,
             image,
             VkImageLayout.ColorAttachmentOptimal,
             VkImageLayout.PresentSrcKHR,
@@ -397,59 +571,43 @@ static unsafe void RunVulkanTriangle()
             VkAccessFlags.None
         );
 
-        commandBuffer.End();
+        cmd.End();
 
-        // Submit to Queue
-        var signalSemaphore = renderFinished[imageIndex];
+        // 6. Submit recorded commands to GPU Graphics Queue
+        var waitSemaphore = frameSync.CurrentImageAvailable;
+        var signalSemaphore = frameSync.CurrentRenderFinished;
         queue.Submit(
-            [imageAvailable],
+            [waitSemaphore],
             [VkPipelineStageFlags.ColorAttachmentOutputBit],
-            [commandBuffer],
+            [cmd],
             [signalSemaphore],
-            frameFence
+            frameSync.CurrentFence
         );
 
-        // Present to Window
-        queue.PresentKHR(
-            new VkPresentInfoKHR
-            {
-                WaitSemaphoreCount = 1,
-                WaitSemaphores = &signalSemaphore,
-                SwapchainCount = 1,
-                Swapchains = &swapchain,
-                ImageIndices = &imageIndex,
-            }
-        );
+        // 7. Present rendered image to the desktop window surface
+        var presentResult = swapchain.Present(queue, signalSemaphore, imageIndex);
+        if (presentResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
+        {
+            swapchain.Recreate();
+            depthBuffer.Recreate(swapchain.Width, swapchain.Height);
+            camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+        }
+
+        // 8. Advance ring buffer to next frame slot (0 -> 1 -> 0 -> 1)
+        frameSync.AdvanceFrame();
     }
 
-    // 15. Cleanup Vulkan Resources
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 7: GRACEFUL SHUTDOWN & CLEANUP
+    // ---------------------------------------------------------------------------------------------
+    Console.WriteLine("[Shutdown] Waiting for GPU idle...");
     device.WaitIdle();
 
-    allocator.DestroyBuffer(vertexBuffer, vertexAllocation);
-    device.DestroyVmaAllocator(allocator);
-    device.DestroyFence(frameFence, null);
-    device.DestroySemaphore(imageAvailable, null);
-    foreach (var semaphore in renderFinished)
-        device.DestroySemaphore(semaphore, null);
     device.DestroyCommandPool(commandPool, null);
     device.DestroyPipeline(pipeline, null);
     device.DestroyPipelineLayout(pipelineLayout, null);
-    foreach (var imageView in imageViews)
-        device.DestroyImageView(imageView, null);
-    device.DestroySwapchainKHR(swapchain, null);
-}
 
-/// <summary>
-/// Vertex structure holding 2D position and RGB color.
-/// </summary>
-struct Vertex
-{
-    public float2 Position;
-    public float3 Color;
-
-    public Vertex(float2 position, float3 color)
-    {
-        Position = position;
-        Color = color;
-    }
+    // C# 'using' automatically disposes indexBuffer, vertexBuffer, depthBuffer,
+    // frameSync, swapchain, allocator, context, and window.
+    Console.WriteLine("[Shutdown] All 3D resources released cleanly. Goodbye!");
 }
