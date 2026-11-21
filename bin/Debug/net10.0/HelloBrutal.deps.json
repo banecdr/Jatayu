@@ -1,0 +1,2506 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "HelloBrutal/1.0.0": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Box2D": "2026.10.2",
+          "Ahwoo.BRUTAL.Collections": "2026.10.2",
+          "Ahwoo.BRUTAL.Concurrency": "2026.10.2",
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Fmod": "2026.10.4",
+          "Ahwoo.BRUTAL.FreeType": "2026.10.2",
+          "Ahwoo.BRUTAL.Glfw": "2026.10.5",
+          "Ahwoo.BRUTAL.Gli": "2026.10.2",
+          "Ahwoo.BRUTAL.Gltf": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.Abstractions": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.Backends": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.Extensions": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.FreeType": "2026.10.3",
+          "Ahwoo.BRUTAL.ImPlot": "2026.10.3",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Jolt": "2026.10.4",
+          "Ahwoo.BRUTAL.Ktx": "2026.10.2",
+          "Ahwoo.BRUTAL.Localization": "2026.10.3",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Maths": "2026.10.3",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.MeshOptimizer": "2026.10.2",
+          "Ahwoo.BRUTAL.Monitor.Common": "2026.10.3",
+          "Ahwoo.BRUTAL.Monitor.Host": "2026.10.3",
+          "Ahwoo.BRUTAL.NativeFileDialog": "2026.10.3",
+          "Ahwoo.BRUTAL.NotCurses": "2026.10.1",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.OpenAl": "2026.10.3",
+          "Ahwoo.BRUTAL.OpenGl": "2026.10.2",
+          "Ahwoo.BRUTAL.RakNet": "2026.10.3",
+          "Ahwoo.BRUTAL.Render.Common": "2026.10.2",
+          "Ahwoo.BRUTAL.Render.Debug": "2026.10.2",
+          "Ahwoo.BRUTAL.Render.Mesh": "2026.10.2",
+          "Ahwoo.BRUTAL.RenderDoc": "2026.10.3",
+          "Ahwoo.BRUTAL.RenderDoc.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Image": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Mixer": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Ttf": "2026.10.3",
+          "Ahwoo.BRUTAL.ShaderC": "2026.10.3",
+          "Ahwoo.BRUTAL.Slang": "2026.10.3",
+          "Ahwoo.BRUTAL.Stb": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "Ahwoo.BRUTAL.Texture": "2026.10.3",
+          "Ahwoo.BRUTAL.Texture.Abstractions": "2026.10.3",
+          "Ahwoo.BRUTAL.Vulkan": "2026.10.3",
+          "Ahwoo.BRUTAL.Vulkan.Abstractions": "2026.10.3",
+          "Ahwoo.BRUTAL.Vulkan.Vma": "2026.10.3",
+          "Ahwoo.BRUTAL.ZLib": "2026.10.2"
+        },
+        "runtime": {
+          "HelloBrutal.dll": {}
+        }
+      },
+      "Ahwoo.BRUTAL.Box2D/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Box2D.Native": "2026.10.2",
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Box2D.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Box2D.Native/2026.10.2": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libbox2d.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libbox2d.so.3": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libbox2d.so.3.1.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libbox2d.3.1.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libbox2d.3.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libbox2d.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/box2d.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Collections/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2",
+          "Microsoft.Extensions.Logging.Console": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Collections.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Concurrency/2026.10.2": {
+        "runtime": {
+          "lib/net10.0/Brutal.Concurrency.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Core/2026.10.4": {
+        "dependencies": {
+          "CommunityToolkit.HighPerformance": "8.4.2",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Console": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.4.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Fmod/2026.10.4": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Fmod.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.4.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.FreeType/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.ZLib": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.FreeType.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libfreetype.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libfreetype.so.6": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libfreetype.so.6.20.6": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libpng18.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libpng18.so.18": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libpng18.so.18.0.git": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libfreetype.6.20.6.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libfreetype.6.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libfreetype.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libpng18.18.0.git.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libpng18.18.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libpng18.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/freetype.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "2.14.3.0"
+          },
+          "runtimes/win-x64/native/png18.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Glfw/2026.10.5": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Glfw.Native": "2026.10.5",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Glfw.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.5.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Glfw.Native/2026.10.5": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libglfw.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libglfw.so.3": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libglfw.so.3.5": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libglfw.3.5.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libglfw.3.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libglfw.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/glfw3.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.5.1.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Gli/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Gli.Native": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Gli.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Gli.Native/2026.10.2": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libgli.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libgli.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/gli.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Gltf/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Texture": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Gltf.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.ImGui.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Localization": "2026.10.3",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImGui.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.Abstractions/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.Extensions": "2026.10.3",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "System.CommandLine": "2.0.9"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImGui.Abstractions.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.Backends/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Glfw": "2026.10.5",
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.OpenGl": "2026.10.2",
+          "Ahwoo.BRUTAL.Vulkan.Abstractions": "2026.10.3",
+          "CommunityToolkit.HighPerformance": "8.4.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImGui.Backends.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.Extensions/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImGui.Extensions.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.FreeType/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.ImGui.FreeType.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImGui.FreeType.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.FreeType.Native/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.FreeType": "2026.10.2",
+          "Ahwoo.BRUTAL.ImGui.Native": "2026.10.3"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libimgui_freetype.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libimgui_freetype.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/imgui_freetype.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImGui.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libimgui.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libimgui.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/imgui.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImPlot/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.ImPlot.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ImPlot.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ImPlot.Native/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui.Native": "2026.10.3"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libimplot.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libimplot.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/implot.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Interop/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Interop.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Jolt/2026.10.4": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Jolt.Native": "2026.10.4",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Jolt.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.4.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Jolt.Native/2026.10.4": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libjolt.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libjolt.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/jolt.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Ktx/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Ktx.Native": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Ktx.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Ktx.Native/2026.10.2": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libKtx.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libKtx.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/Ktx.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Localization/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Localization.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Logging/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Console": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Logging.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Maths/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Maths.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Memory/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Console": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Memory.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.MeshOptimizer/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.MeshOptimizer.Native": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.MeshOptimizer.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.MeshOptimizer.Native/2026.10.2": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libmeshoptimizer.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libmeshoptimizer.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/meshoptimizer.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Monitor.Common/2026.10.3": {
+        "runtime": {
+          "lib/net10.0/Brutal.Monitor.Common.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Monitor.Host/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Monitor.Common": "2026.10.3",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Monitor.Host.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/Brutal.Monitor.Subprocess": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/Brutal.Monitor.Subprocess": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/Brutal.Monitor.Subprocess.exe": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.NativeFileDialog/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.NativeFileDialog.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.NativeFileDialog.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.NativeFileDialog.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libnfd.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnfd.so.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnfd.so.1.2.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnfd.1.2.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnfd.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnfd.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/nfd.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.NotCurses/2026.10.1": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.NotCurses.Native": "2026.10.1",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.NotCurses.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.1.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.NotCurses.Native/2026.10.1": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ZLib": "2026.10.2"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libncursesw.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libncursesw.so.6": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libncursesw.so.6.6": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-core.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-core.so.3": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-core.so.3.0.17": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-ffi.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-ffi.so.3": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libnotcurses-ffi.so.3.0.17": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libunistring.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libunistring.so.5": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libunistring.so.5.2.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libncursesw.6.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libncursesw.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-core.3.0.17.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-core.3.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-core.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-ffi.3.0.17.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-ffi.3.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libnotcurses-ffi.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libunistring.5.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libunistring.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/libncursesw6.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/libunistring-5.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.4.0.0"
+          },
+          "runtimes/win-x64/native/libwinpthread-1.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.0.0.0"
+          },
+          "runtimes/win-x64/native/notcurses-core.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/notcurses-ffi.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Numerics/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "CommunityToolkit.HighPerformance": "8.4.2",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Console": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Numerics.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.OpenAl/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.OpenAl.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.OpenAl.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.OpenAl.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libopenal.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libopenal.so.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libopenal.so.1.25.2": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libopenal.1.25.2.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libopenal.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libopenal.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/OpenAL32.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.25.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.OpenGl/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.OpenGl.Native": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.OpenGl.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.OpenGl.Native/2026.10.2": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libglad.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libglad.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/glad.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.RakNet/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.RakNet.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.RakNet.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.RakNet.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libRakNetDLL.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libRakNetDLL.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/RakNetDLL.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Render.Common/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Render.Common.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Render.Debug/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Render.Common": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Render.Debug.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Render.Mesh/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Collections": "2026.10.2",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Render.Common": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Render.Mesh.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.RenderDoc/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.RenderDoc.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.RenderDoc.ImGui/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.ImGui": "2026.10.3",
+          "Ahwoo.BRUTAL.RenderDoc": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.RenderDoc.ImGui.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Sdl.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Image/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Image.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Sdl.Image.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Image.Native/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Sdl.Native": "2026.10.3"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libSDL3_image.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_image.so.0": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_image.so.0.4.4": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_image.0.4.4.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_image.0.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_image.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SDL3_image.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.4.4.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Mixer/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Mixer.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Sdl.Mixer.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Mixer.Native/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Sdl.Native": "2026.10.3"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libSDL3_mixer.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_mixer.so.0": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_mixer.so.0.2.4": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_mixer.0.2.4.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_mixer.0.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_mixer.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SDL3_mixer.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.2.4.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libSDL3.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3.so.0": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3.so.0.4.12": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3.0.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SDL3.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.4.12.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Ttf/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl": "2026.10.3",
+          "Ahwoo.BRUTAL.Sdl.Ttf.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Sdl.Ttf.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Sdl.Ttf.Native/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Sdl.Native": "2026.10.3"
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libSDL3_ttf.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_ttf.so.0": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libSDL3_ttf.so.0.2.2": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_ttf.0.2.2.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_ttf.0.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSDL3_ttf.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SDL3_ttf.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "3.2.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ShaderC/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.ShaderC.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.ShaderC.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ShaderC.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libSPIRV-Tools-shared.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libshaderc_shared.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libshaderc_shared.so.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libSPIRV-Tools-shared.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libshaderc_shared.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libshaderc_shared.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/SPIRV-Tools-shared.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/shaderc_shared.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Slang/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Slang.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Slang.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Slang.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libslang-compiler.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libslang-compiler.so.0.2026.7": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libslang-glsl-module-2026.7.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libslang-glslang-2026.7.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libslang.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libslang-compiler.0.2026.7.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libslang-compiler.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libslang-glsl-module-2026.7.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libslang-glslang-2026.7.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libslang.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/slang-compiler.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/slang-glsl-module.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/slang-glslang.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/slang.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Stb/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Stb.Native": "2026.10.3",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Stb.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Stb.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libstb.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libstb.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/stb.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Strings/2026.10.2": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Collections": "2026.10.2",
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "CommunityToolkit.HighPerformance": "8.4.2",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Console": "10.0.0",
+          "Microsoft.Extensions.ObjectPool": "11.0.0-preview.5.26302.115"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Strings.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Texture/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Gli": "2026.10.2",
+          "Ahwoo.BRUTAL.Interop": "2026.10.2",
+          "Ahwoo.BRUTAL.Ktx": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Stb": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Texture.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Texture.Abstractions/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Texture": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Texture.Abstractions.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Vulkan/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Core": "2026.10.4",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "Ahwoo.BRUTAL.Vulkan.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Vulkan.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Vulkan.Abstractions/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Collections": "2026.10.2",
+          "Ahwoo.BRUTAL.Logging": "2026.10.3",
+          "Ahwoo.BRUTAL.Memory": "2026.10.2",
+          "Ahwoo.BRUTAL.Numerics": "2026.10.2",
+          "Ahwoo.BRUTAL.Strings": "2026.10.2",
+          "Ahwoo.BRUTAL.Vulkan": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Vulkan.Abstractions.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Vulkan.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libVulkanEx.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libVulkanEx.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/VulkanEx.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Vulkan.Vma/2026.10.3": {
+        "dependencies": {
+          "Ahwoo.BRUTAL.Vulkan": "2026.10.3",
+          "Ahwoo.BRUTAL.Vulkan.Abstractions": "2026.10.3",
+          "Ahwoo.BRUTAL.Vulkan.Vma.Native": "2026.10.3"
+        },
+        "runtime": {
+          "lib/net10.0/Brutal.Vulkan.Vma.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.3.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.Vulkan.Vma.Native/2026.10.3": {
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libvma.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libvma.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/vma.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "Ahwoo.BRUTAL.ZLib/2026.10.2": {
+        "runtime": {
+          "lib/net10.0/Brutal.ZLib.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "2026.10.2.0"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libzlib.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libzlib.so.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/linux-x64/native/libzlib.so.1.3.2.1": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libzlib.1.3.2.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libzlib.1.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/osx-arm64/native/libzlib.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0"
+          },
+          "runtimes/win-x64/native/zlib.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "1.3.2.0"
+          }
+        }
+      },
+      "CommunityToolkit.HighPerformance/8.4.2": {
+        "runtime": {
+          "lib/net8.0/CommunityToolkit.HighPerformance.dll": {
+            "assemblyVersion": "8.4.0.0",
+            "fileVersion": "8.4.2.1"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Primitives": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration.Abstractions/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration.Binder/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.0",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.Binder.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Abstractions/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Configuration/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.0",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Configuration.Binder": "10.0.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Configuration.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Console/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging": "10.0.0",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Logging.Configuration": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Console.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.ObjectPool/11.0.0-preview.5.26302.115": {
+        "runtime": {
+          "lib/netstandard2.0/Microsoft.Extensions.ObjectPool.dll": {
+            "assemblyVersion": "11.0.0.0",
+            "fileVersion": "11.0.26.30315"
+          }
+        }
+      },
+      "Microsoft.Extensions.Options/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Primitives": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Options.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Options.ConfigurationExtensions/10.0.0": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Configuration.Binder": "10.0.0",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.0",
+          "Microsoft.Extensions.Options": "10.0.0",
+          "Microsoft.Extensions.Primitives": "10.0.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Options.ConfigurationExtensions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.Extensions.Primitives/10.0.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Primitives.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "System.CommandLine/2.0.9": {
+        "runtime": {
+          "lib/net8.0/System.CommandLine.dll": {
+            "assemblyVersion": "2.0.9.0",
+            "fileVersion": "2.0.926.27113"
+          }
+        },
+        "resources": {
+          "lib/net8.0/cs/System.CommandLine.resources.dll": {
+            "locale": "cs"
+          },
+          "lib/net8.0/de/System.CommandLine.resources.dll": {
+            "locale": "de"
+          },
+          "lib/net8.0/es/System.CommandLine.resources.dll": {
+            "locale": "es"
+          },
+          "lib/net8.0/fr/System.CommandLine.resources.dll": {
+            "locale": "fr"
+          },
+          "lib/net8.0/it/System.CommandLine.resources.dll": {
+            "locale": "it"
+          },
+          "lib/net8.0/ja/System.CommandLine.resources.dll": {
+            "locale": "ja"
+          },
+          "lib/net8.0/ko/System.CommandLine.resources.dll": {
+            "locale": "ko"
+          },
+          "lib/net8.0/pl/System.CommandLine.resources.dll": {
+            "locale": "pl"
+          },
+          "lib/net8.0/pt-BR/System.CommandLine.resources.dll": {
+            "locale": "pt-BR"
+          },
+          "lib/net8.0/ru/System.CommandLine.resources.dll": {
+            "locale": "ru"
+          },
+          "lib/net8.0/tr/System.CommandLine.resources.dll": {
+            "locale": "tr"
+          },
+          "lib/net8.0/zh-Hans/System.CommandLine.resources.dll": {
+            "locale": "zh-Hans"
+          },
+          "lib/net8.0/zh-Hant/System.CommandLine.resources.dll": {
+            "locale": "zh-Hant"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "HelloBrutal/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Ahwoo.BRUTAL.Box2D/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-d6DBNrrVkrSU5z0LyA+GgG46H6KPgjHVUG7YGGgs7yS1mNPP6GO/j2/poppqTrRVe9o9jAjKk7/81S5BjDOrzQ==",
+      "path": "ahwoo.brutal.box2d/2026.10.2",
+      "hashPath": "ahwoo.brutal.box2d.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Box2D.Native/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-hMosA1WJhVpJkKRSFxdd4UcAMyoVheTKQKSUGitCuMLQEnrjbFtE8rZsrkmuZY1+GR/ZFZJUmeMsbI60TgEPHQ==",
+      "path": "ahwoo.brutal.box2d.native/2026.10.2",
+      "hashPath": "ahwoo.brutal.box2d.native.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Collections/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bKn8Yu+c0kP4fE0plfgIyzpJVWHbfGSP8TQVUmz4ikpIzq+DDmuW7aAQdS8gv+h22h21kr9lLnUaXv2RixxysA==",
+      "path": "ahwoo.brutal.collections/2026.10.2",
+      "hashPath": "ahwoo.brutal.collections.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Concurrency/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GKntNywsIU/EzmNf55FOHIDxGgrBlFVBMI7JUX7Bs/obI3CtJhii3rnLvjN6L+LWwz3N8C6RH8KyxcUREyPpsg==",
+      "path": "ahwoo.brutal.concurrency/2026.10.2",
+      "hashPath": "ahwoo.brutal.concurrency.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Core/2026.10.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-7fAX/NyQIWtxP8b6bU6yBeN5lcbjVvhxFgVCanD4LYaGJzuhAA2/GDaOWiw1or7lJmddlAZgfuhqHaUOR33s4Q==",
+      "path": "ahwoo.brutal.core/2026.10.4",
+      "hashPath": "ahwoo.brutal.core.2026.10.4.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Fmod/2026.10.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-VbSbeCO9NZxtpHYhqAYRQaAcpur+WhiHMG4w6yMK6XXeI3ERwOkZfu3mGo1PK+U+PEjZSyszOJegNVA6mX1j5g==",
+      "path": "ahwoo.brutal.fmod/2026.10.4",
+      "hashPath": "ahwoo.brutal.fmod.2026.10.4.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.FreeType/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QCEzHp+De3y83CAPghyHv99eM2Pu9jCpXlhjZTd9SYJRVHCcQNDBifFxdHAdMWaYcNoP51LfHXfZDUDv7/EklA==",
+      "path": "ahwoo.brutal.freetype/2026.10.2",
+      "hashPath": "ahwoo.brutal.freetype.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Glfw/2026.10.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-p3Il0ZJHU00en4EnN4xGy2lWAItgbaw4IPyVtFhINAOruochLLGcBu5L3Qmky9akqs1ldjsgkYMCRdYOTkMnIQ==",
+      "path": "ahwoo.brutal.glfw/2026.10.5",
+      "hashPath": "ahwoo.brutal.glfw.2026.10.5.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Glfw.Native/2026.10.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-rK/ZnsFI2CVdJwCXz1rzjyOZz0xlbMocAQk1DYZ2sB9U090mwlhLRyCtcrspBYhdQXg0V9J/Kzhvhhnu52yy5A==",
+      "path": "ahwoo.brutal.glfw.native/2026.10.5",
+      "hashPath": "ahwoo.brutal.glfw.native.2026.10.5.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Gli/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QXEtKrNl0I7PpmLZy0cgGohezh9SmQUlGgrrqt7mYdsZKNFoXpELdV00t8ZZYQsJ0a+HwRcShrOT7I01QBgtSQ==",
+      "path": "ahwoo.brutal.gli/2026.10.2",
+      "hashPath": "ahwoo.brutal.gli.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Gli.Native/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Wqx84lnwuq2njBXjdV3QgcADfsC/ma/XFc03vc1FQUO6Lf+8/bMu0+AjotLQhOboi38O+VRJPmHdoa1LCR+r7g==",
+      "path": "ahwoo.brutal.gli.native/2026.10.2",
+      "hashPath": "ahwoo.brutal.gli.native.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Gltf/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-us0uT2q2cKZQY6R90zJiiqreviH9rF1pbAcJXviMmSX2rc+oCCPIOZPUaIbd4+gmxH/SBeTR3iKL12ImWwkpMQ==",
+      "path": "ahwoo.brutal.gltf/2026.10.3",
+      "hashPath": "ahwoo.brutal.gltf.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-USCy09GwYrVpfHZFiLftdCnzFiSzeNg618OV2MIADBlf72oNJ3I3M7XEPXCfqXHWx+QR8hn3jXoGkc13knmbFw==",
+      "path": "ahwoo.brutal.imgui/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.Abstractions/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-7jUH2kyGGWjjYJ2rt0AdUk9aa69T4kxeCOwXfTIDXgvHBhkcEROF/LErCKvtmxd4uYZkwtsE6FZXD4JtXD+m5A==",
+      "path": "ahwoo.brutal.imgui.abstractions/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.abstractions.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.Backends/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Do4OQA5WQeNxt2VYsYS2RCrdhjuky5Vea59MaGzsoGkMIcCtxWW+ZSGorOi7Tl5iuCriWxTXOShLYhCHt7gzrw==",
+      "path": "ahwoo.brutal.imgui.backends/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.backends.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.Extensions/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-uL8OrL5VZ6RDQtCZj/xFBPfuxzt8OXejwGAM1DamdnY5ljUtUoREgjgGHEfVOwYlufxID09b/Pi7MIpddRx4Aw==",
+      "path": "ahwoo.brutal.imgui.extensions/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.extensions.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.FreeType/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-z4I0uzcWcUO2Kwmvs8fpwVtG3iqxKlQilWz/yMxiCeO5plGGPDLi0PkSf81AYjffOmx3Y/qKmdyt/tKbf12Iag==",
+      "path": "ahwoo.brutal.imgui.freetype/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.freetype.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.FreeType.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bB5+ObK16fSEKFN8ZfYLqVwqKqeiEAzVBch122ZirTlaJwgwZDoOwwFLvy2n/Ot5DIOgyNWY2EUcEhjzbW+gzA==",
+      "path": "ahwoo.brutal.imgui.freetype.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.freetype.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImGui.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-O2Zyy6T7Rg1Qa53zLIQ8n/IkpBeyb+fAAnUQZ8EeZhmwiIU4ssdSAPOCQJogZiMqLvF3NB6BcjpJERwS4H8b/w==",
+      "path": "ahwoo.brutal.imgui.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.imgui.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImPlot/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-25JVd4ZAiGP4HQqECBdaxluxcLieX59JzfawFneIXMnYxqF/PwA6JjHnNw+gBnsaEPdLtwoodzEsn2xQk7xmsg==",
+      "path": "ahwoo.brutal.implot/2026.10.3",
+      "hashPath": "ahwoo.brutal.implot.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ImPlot.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2DZcul/QCwrWpw2glLBrftOG62a6l+pq3b+tdiE3x1H0zrLqVzGPuzJto8zcZSHYCJq76yVBj5jy/pXVwX81Yg==",
+      "path": "ahwoo.brutal.implot.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.implot.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Interop/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-zkw974UmzSw35DpsPcqttmE4JsvqFrMfweQ0TiKDchtjAFSK1W1BDUrSJm6Xd73gz7YiqSBW533D5S4EOLH4Hw==",
+      "path": "ahwoo.brutal.interop/2026.10.2",
+      "hashPath": "ahwoo.brutal.interop.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Jolt/2026.10.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YIPTGmiJbJaTDOkbk5nhYTb2tIAcYKfUZJTb+d9jKHP/7L3kDD9UgZ5ET2hvd14sGMTN58Z4ExgLfZYMJQIXnQ==",
+      "path": "ahwoo.brutal.jolt/2026.10.4",
+      "hashPath": "ahwoo.brutal.jolt.2026.10.4.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Jolt.Native/2026.10.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Gx9bTpCH2JQJ2afa3ZaYXmNodv2gmL07Va1J3I4mBl/fP9VolKR3l4IQtLnjsMF4AY2oDDRXGz8jNT53OGfmsA==",
+      "path": "ahwoo.brutal.jolt.native/2026.10.4",
+      "hashPath": "ahwoo.brutal.jolt.native.2026.10.4.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Ktx/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-xUXO3XcdJOhfvjWM5gbgR9EzE3mYsPZTIke7wdBjoOcmB6db5uzfPMRDOqdF6y1paq0BzLYX7AS2ictweb12cw==",
+      "path": "ahwoo.brutal.ktx/2026.10.2",
+      "hashPath": "ahwoo.brutal.ktx.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Ktx.Native/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/QXqaaVhV2hXZQPvWIFhSY4ICwPEtNWSfe2ooPyrlCg23a7oZepNFO5/ccqTgzMlw2U95C0odV88lddjbBTQCg==",
+      "path": "ahwoo.brutal.ktx.native/2026.10.2",
+      "hashPath": "ahwoo.brutal.ktx.native.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Localization/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-sK6FmyAXwSxrvvHfYTe10TnKoJBMl72EdzqjmKJteiQ2XTUrclZ1nkiVolk/JvBltlaQH4HhiP7b3L3zvWbqkw==",
+      "path": "ahwoo.brutal.localization/2026.10.3",
+      "hashPath": "ahwoo.brutal.localization.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Logging/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-syrOdPOfzYbbovhiWgDULik/9L4eYyDIM59aeZ0a6cJJIUE5WLR+9OemlFK7c4QHR9xCDScu4qxRse487Bg7jA==",
+      "path": "ahwoo.brutal.logging/2026.10.3",
+      "hashPath": "ahwoo.brutal.logging.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Maths/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-fujdQvrtajZie3I+nTl3jBTWOfuOhnb+cBbNdKOaq6h9czvaUQyVqhlhcVPdQCRt4KslV53Mx0oVEghAodj3hg==",
+      "path": "ahwoo.brutal.maths/2026.10.3",
+      "hashPath": "ahwoo.brutal.maths.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Memory/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-kOzj5ungJ9f1SeofvKv2rGocIrqmB21hXBWS9Ekq1y+XthNrKlgkU555jYbnkqssnq+XGX11q8qK+GGbIGJQ3Q==",
+      "path": "ahwoo.brutal.memory/2026.10.2",
+      "hashPath": "ahwoo.brutal.memory.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.MeshOptimizer/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-0horEpNslasAtzX246tw/DSlo5X/8SJ4R0LBrh1gHO7KHULvI2cuCWS8GtUkiaZgcsT7Fdw98qDLXRv0DFPuMw==",
+      "path": "ahwoo.brutal.meshoptimizer/2026.10.2",
+      "hashPath": "ahwoo.brutal.meshoptimizer.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.MeshOptimizer.Native/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-bRpEb5Z/ZKhjWi10dnUVjfQpZTpUFw6jQUxwmJqFQpT4i/HqxTwNfVcfnx9jWbcRD+cW7BQckKSbyKXQr8kMNw==",
+      "path": "ahwoo.brutal.meshoptimizer.native/2026.10.2",
+      "hashPath": "ahwoo.brutal.meshoptimizer.native.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Monitor.Common/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ayNppwQaYQ0Kx4Y9HBu4RcG7qMBT0Fez2ljQ7sFvrrjv4UlOv+8lO7B2VoXcrTyzlGhipRAWWCfKmZ+I2Jyp2Q==",
+      "path": "ahwoo.brutal.monitor.common/2026.10.3",
+      "hashPath": "ahwoo.brutal.monitor.common.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Monitor.Host/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-nIekbswFaVSiTgkheZ+yCtBQ2/cZztm2s7OuPLo+YmJG5rmhbRz+n8ogrE7HU4+IT3aNSf3dvmw4C2pBmMn9pw==",
+      "path": "ahwoo.brutal.monitor.host/2026.10.3",
+      "hashPath": "ahwoo.brutal.monitor.host.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.NativeFileDialog/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-DdDJIk1tquUtlOfVHguBG8OoI9sBk62onTa/9DUIytLQoqFZQod4PqLoiG2Q330ZboI9svThZcc1t0cueLSxuA==",
+      "path": "ahwoo.brutal.nativefiledialog/2026.10.3",
+      "hashPath": "ahwoo.brutal.nativefiledialog.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.NativeFileDialog.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-mbJgNzExkomCrQjexNHmC42Wxyuk3l59OfHsM0EIVgiN2s7K0LvkpFAI8QyzR6nh4d+M4y/9D2qvoRu2b3tHrQ==",
+      "path": "ahwoo.brutal.nativefiledialog.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.nativefiledialog.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.NotCurses/2026.10.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GmaBSi06FBr5jEJ6X28v9w2Uws6OMrw0fib4nEccNEa5pwZYJNai4eagsYMmZWG/bM5MQtc6DEFCWZlYqqlQVw==",
+      "path": "ahwoo.brutal.notcurses/2026.10.1",
+      "hashPath": "ahwoo.brutal.notcurses.2026.10.1.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.NotCurses.Native/2026.10.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ThnKN3K3uwDHEZ+D0RvWj0IpzQcGVQcn57Efwv3LvXZxawPJh4zzFX5cIDfsOZmPp0O0XS/yqy3JcpMarI1sDA==",
+      "path": "ahwoo.brutal.notcurses.native/2026.10.1",
+      "hashPath": "ahwoo.brutal.notcurses.native.2026.10.1.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Numerics/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-OB2wZve4iKzjBQSDT7jbJo04kjjkYE1wwAWaN8UGsMEP4WZmstbnzvo112nDcVp3u1HXQ5XlTzsthfQQJAtlxQ==",
+      "path": "ahwoo.brutal.numerics/2026.10.2",
+      "hashPath": "ahwoo.brutal.numerics.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.OpenAl/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GbPgN3GKROvH8WX5FICzY641VEOXWNxVFqqJtY1NtAQ/Z6REZsgGJms53gTMC0IHE8vSWCalZ2CntXlaqejuCg==",
+      "path": "ahwoo.brutal.openal/2026.10.3",
+      "hashPath": "ahwoo.brutal.openal.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.OpenAl.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-jZmeuxbTvDusryEatQVZxBrHfwXZPCQ87vuNojj+mE8atnx4MFj4oe6WW9/s5r1QJbZfR8UX2DAouct/y0k5SA==",
+      "path": "ahwoo.brutal.openal.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.openal.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.OpenGl/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-mqSW1Ay9iir7DZcmdIXK3TGaBF9qVNOf2O/DkG8fv458ope+fiLutV71kO8vP4PMmoAPOa6nH8CnZYfUcxIqwg==",
+      "path": "ahwoo.brutal.opengl/2026.10.2",
+      "hashPath": "ahwoo.brutal.opengl.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.OpenGl.Native/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-I0t9h8J2DRKyOhy008uT7z5+EwDJ/18nk1DcMAm0xGVR1GUl5iWRuV0cPRLP6hEjuiUk27chElX0B+wSr90gPg==",
+      "path": "ahwoo.brutal.opengl.native/2026.10.2",
+      "hashPath": "ahwoo.brutal.opengl.native.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.RakNet/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ATSz1c3nqA8biJ1DfNm8q0Al+gN5pARtMwehW0wWkb313OuSiDcfwz5cakTvo75NdykVDgyIUVl3R34XPiAFpg==",
+      "path": "ahwoo.brutal.raknet/2026.10.3",
+      "hashPath": "ahwoo.brutal.raknet.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.RakNet.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-BSDYPPheQLZ17ZMWw7VFxU+pEt+sQQ0U7qc4aq2QG6VIynKIw0/CK4T/J+u7kngmRsNl/ol39wHqZ2CuoaWF5A==",
+      "path": "ahwoo.brutal.raknet.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.raknet.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Render.Common/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-JkI3gHk5U8B6oQCagrERcZpT3gvDD0lqf+ojxrPs9WfBSa7FlyawjAcxa1+5HfpJO6I4obfdrvjVJqucx+k/Kg==",
+      "path": "ahwoo.brutal.render.common/2026.10.2",
+      "hashPath": "ahwoo.brutal.render.common.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Render.Debug/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-iBBMzFv0Y1ARG+Ijl/d4u0lwqRJ5cDI5jEhX0DOtcZGqaS8y1KHmo+h9M2Vym4B6WgIyUfVXJdi2tcfBesx4lA==",
+      "path": "ahwoo.brutal.render.debug/2026.10.2",
+      "hashPath": "ahwoo.brutal.render.debug.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Render.Mesh/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-k6D3b1j/Lv2jmi5xcJNE55ULuTrFNuNJyi52T1uhCXScnzUDGboMOclIhRr2BLD48IF51lvP1lFmFlku68B8Bg==",
+      "path": "ahwoo.brutal.render.mesh/2026.10.2",
+      "hashPath": "ahwoo.brutal.render.mesh.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.RenderDoc/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-25kZvIv27U1wISbcecS/ZlNKUe5mTIL8Ki6mbJm2/9wzfWj5AkRHa53edSFUqUscdkjZcv1oMs1E5RkHfYx0pw==",
+      "path": "ahwoo.brutal.renderdoc/2026.10.3",
+      "hashPath": "ahwoo.brutal.renderdoc.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.RenderDoc.ImGui/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-PipJDasD2BkeSWu97WZ3BzrdxhJSQ/2BIUlANss1u2jHy/iL0+CHDqw8g+8ksFX9FP/Qti1YoladWSkgjpuQfQ==",
+      "path": "ahwoo.brutal.renderdoc.imgui/2026.10.3",
+      "hashPath": "ahwoo.brutal.renderdoc.imgui.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GVNfXjwE8rMakreNxpUqfT9MiZPIOqc1XWj5PtlZa4DbO7jiKy9xBcUfnxFkFbItCoELbEod3PYnJubXNCyc0g==",
+      "path": "ahwoo.brutal.sdl/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Image/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-4XFJqUSHhJ0yKuQbYfFsj7a3hrsG5D8RczH3MALzI5rhdJGxk8dAY/gygmGF9Glg9t48id5S4cHpR85WDkA3jQ==",
+      "path": "ahwoo.brutal.sdl.image/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.image.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Image.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-b3GreJ3nk6LyrkpmGe+srMi5Q9olxchHKJ1LeaRRS1yIf4NI6XHrjgkw/meKV4O+U3VgvQLj0nt22wd0sgnI4w==",
+      "path": "ahwoo.brutal.sdl.image.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.image.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Mixer/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-AAymGgjXb3hZlHJb0pnu108qLO8qD3QkzxBxUR8LhRnJREvzstLrKaccNK6n4RtV1wi2iQICV1HHnJ32FDju+g==",
+      "path": "ahwoo.brutal.sdl.mixer/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.mixer.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Mixer.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2w4Q6oRqjdjVzTc6CqFO4LsML9SrokoogNtlqJPe9UfajM53qewCTk5kH0lriNCp3artTiKUQKzNi6pMq7HhKQ==",
+      "path": "ahwoo.brutal.sdl.mixer.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.mixer.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-jdznWQL6CTKd30scd9IEB7CLsCtT4AuFWWhpjfYPqj2woUe5QnNarMKnziY95zpTtmgYCX0vIxLXiY+zOXNziQ==",
+      "path": "ahwoo.brutal.sdl.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Ttf/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FQI1860/3Kkr9+AwBhPcVga6mrLKOMKLJ+/Uw/1Mu1pqMb59Fde4CsIYU37EMGutbW0199bYTHlFqI+YR2Z80g==",
+      "path": "ahwoo.brutal.sdl.ttf/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.ttf.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Sdl.Ttf.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-ynjrDA7GNq1f+whuFZSif2Bp983PYv1PaII1Cxso7UyBQs3G+DnkrNWqcwuR+Z0PVm4n/IzkR2JOwDkbI9o3bQ==",
+      "path": "ahwoo.brutal.sdl.ttf.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.sdl.ttf.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ShaderC/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-8WdUr2TQpiMz78ag8WVelUV5fRrREZqB7T15WyEgCyNGbEw0iyjg9pexibx2NUEdEiDwGf0dn91GSSbeWVxdSQ==",
+      "path": "ahwoo.brutal.shaderc/2026.10.3",
+      "hashPath": "ahwoo.brutal.shaderc.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ShaderC.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-mJgkbVx+Jodj9VCGzEn8FyuUkCTfrR7BwxDONB3V3ORO5NjOld6qqlplOx59xaE4cc3q3JM/wQY+7i+u1xRi/g==",
+      "path": "ahwoo.brutal.shaderc.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.shaderc.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Slang/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-z7U5IdhKTP0kgiveii0bTnRpagTASvewzT70a6ATIdl823DhepjYK17s+Y7qpDART3eSd/09xGOZrFVCd6b1XA==",
+      "path": "ahwoo.brutal.slang/2026.10.3",
+      "hashPath": "ahwoo.brutal.slang.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Slang.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-UfpBwUVW7x+vaIlEFwXLjvB66Fsq7Go0S5JRBNUqAQgsTIFmXA4SCM8gHrH/6unT/dWx+zJu17yge3BkR2YNow==",
+      "path": "ahwoo.brutal.slang.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.slang.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Stb/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-+yI/jhThN7g5rKXDBN6wqhg2NCYvd28QxjLMbnSRsqxXR7Pt6vNMrkjKra/vpBawfFPvxkWQullMgpC/Q51sOw==",
+      "path": "ahwoo.brutal.stb/2026.10.3",
+      "hashPath": "ahwoo.brutal.stb.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Stb.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-YVmNOHa8pnQqfI7HBHuBWTIrIafK2Ctllnkssi2ZinAX3L/JDyZHYBiur4sPDM+cW+A2LTbOseGC6rQ63E6Jmw==",
+      "path": "ahwoo.brutal.stb.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.stb.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Strings/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-fbFYcIhiWX1X5rwQKWxySJH6Y52R+ZRjN5LQ6PrDHJ7rHm/T7w68+B80laZDgWIQl9CovQkBhOXlLwshtL3Lrw==",
+      "path": "ahwoo.brutal.strings/2026.10.2",
+      "hashPath": "ahwoo.brutal.strings.2026.10.2.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Texture/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-q5ug4aXubCbJ6ygNsKG08IUmMmmWqxMeTLRp3m7P/O6Ifl5NpzCA1wRpMLtN/c5zvzwVYMP+7BzyJwWBjBfxEw==",
+      "path": "ahwoo.brutal.texture/2026.10.3",
+      "hashPath": "ahwoo.brutal.texture.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Texture.Abstractions/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-f2RetsPmVnfYUVjJe6qFbo8yFsLf2ooQ6R+epPuUHMdo1MgyNEvevDRqzdZK/cPQDH61cN45IP011RbmshkUaQ==",
+      "path": "ahwoo.brutal.texture.abstractions/2026.10.3",
+      "hashPath": "ahwoo.brutal.texture.abstractions.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Vulkan/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-TzZBecLi83ym93HO5TG12rwDN2EMcELwLqy3A8WQWc8Oq/ElGYQrKQBdShmZkHq/cAsVjO1A9H8Avex4YZMHrg==",
+      "path": "ahwoo.brutal.vulkan/2026.10.3",
+      "hashPath": "ahwoo.brutal.vulkan.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Vulkan.Abstractions/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-9XF+fDjzn087ws6xIUTYB32mPC2sUj2EG8139eYuNN1PAF4hCAhVxvlko22nJalpgKxk5+FiiA85yV7SQntTKA==",
+      "path": "ahwoo.brutal.vulkan.abstractions/2026.10.3",
+      "hashPath": "ahwoo.brutal.vulkan.abstractions.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Vulkan.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dq55Wj4DxR8I8MfUzTvjztut/Lgy7bs3uNRg2U+bH8wQMP6NFrhv6/c3Dprq7pfSWTomczk3Ud694hZruWRlNA==",
+      "path": "ahwoo.brutal.vulkan.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.vulkan.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Vulkan.Vma/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-drha5c+uWXuywbRDYnMaHOM6sAk2q/A1JRCRgiWFF+o2CTlp206/XTtw9q0+qQAiXqJzqkiE1obbleZ5/VlO3w==",
+      "path": "ahwoo.brutal.vulkan.vma/2026.10.3",
+      "hashPath": "ahwoo.brutal.vulkan.vma.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.Vulkan.Vma.Native/2026.10.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-yKXxY9jG/IElufFYobNh3ePj+s6TXY8ks5LZ8ClIjtB+mrV2Oy8gN1/XF+elb3r43nziTIPwFeYcHsPTxCdHow==",
+      "path": "ahwoo.brutal.vulkan.vma.native/2026.10.3",
+      "hashPath": "ahwoo.brutal.vulkan.vma.native.2026.10.3.nupkg.sha512"
+    },
+    "Ahwoo.BRUTAL.ZLib/2026.10.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-9DEO2pufrUrSy2fy7vWvpxuzQzuKvJtLxgrhSIHpdYXsbHYwkgmXq2PKyFikp/CVWSaZAKgg6L9tJekOi5MFGw==",
+      "path": "ahwoo.brutal.zlib/2026.10.2",
+      "hashPath": "ahwoo.brutal.zlib.2026.10.2.nupkg.sha512"
+    },
+    "CommunityToolkit.HighPerformance/8.4.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2hmtrrU18x6NL3mbuAqwy0KpnoEEJOuK6sH5RKQfD/jHijn2pqvqBUC7WGy9dgNBL9BDA7eOC0kirsNPMp2f4Q==",
+      "path": "communitytoolkit.highperformance/8.4.2",
+      "hashPath": "communitytoolkit.highperformance.8.4.2.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-H4SWETCh/cC5L1WtWchHR6LntGk3rDTTznZMssr4cL8IbDmMWBxY+MOGDc/ASnqNolLKPIWHWeuC1ddiL/iNPw==",
+      "path": "microsoft.extensions.configuration/10.0.0",
+      "hashPath": "microsoft.extensions.configuration.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration.Abstractions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-d2kDKnCsJvY7mBVhcjPSp9BkJk48DsaHPg5u+Oy4f8XaOqnEedRy/USyvnpHL92wpJ6DrTPy7htppUUzskbCXQ==",
+      "path": "microsoft.extensions.configuration.abstractions/10.0.0",
+      "hashPath": "microsoft.extensions.configuration.abstractions.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration.Binder/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-tMF9wNh+hlyYDWB8mrFCQHQmWHlRosol1b/N2Jrefy1bFLnuTlgSYmPyHNmz8xVQgs7DpXytBRWxGhG+mSTp0g==",
+      "path": "microsoft.extensions.configuration.binder/10.0.0",
+      "hashPath": "microsoft.extensions.configuration.binder.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.DependencyInjection/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-f0RBabswJq+gRu5a+hWIobrLWiUYPKMhCD9WO3sYBAdSy3FFH14LMvLVFZc2kPSCimBLxSuitUhsd6tb0TAY6A==",
+      "path": "microsoft.extensions.dependencyinjection/10.0.0",
+      "hashPath": "microsoft.extensions.dependencyinjection.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-L3AdmZ1WOK4XXT5YFPEwyt0ep6l8lGIPs7F5OOBZc77Zqeo01Of7XXICy47628sdVl0v/owxYJTe86DTgFwKCA==",
+      "path": "microsoft.extensions.dependencyinjection.abstractions/10.0.0",
+      "hashPath": "microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-BStFkd5CcnEtarlcgYDBcFzGYCuuNMzPs02wN3WBsOFoYIEmYoUdAiU+au6opzoqfTYJsMTW00AeqDdnXH2CvA==",
+      "path": "microsoft.extensions.logging/10.0.0",
+      "hashPath": "microsoft.extensions.logging.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Abstractions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FU/IfjDfwaMuKr414SSQNTIti/69bHEMb+QKrskRb26oVqpx3lNFXMjs/RC9ZUuhBhcwDM2BwOgoMw+PZ+beqQ==",
+      "path": "microsoft.extensions.logging.abstractions/10.0.0",
+      "hashPath": "microsoft.extensions.logging.abstractions.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Configuration/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-j8zcwhS6bYB6FEfaY3nYSgHdpiL2T+/V3xjpHtslVAegyI1JUbB9yAt/BFdvZdsNbY0Udm4xFtvfT/hUwcOOOg==",
+      "path": "microsoft.extensions.logging.configuration/10.0.0",
+      "hashPath": "microsoft.extensions.logging.configuration.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Console/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-treWetuksp8LVb09fCJ5zNhNJjyDkqzVm83XxcrlWQnAdXznR140UUXo8PyEPBvFlHhjKhFQZEOP3Sk/ByCvEw==",
+      "path": "microsoft.extensions.logging.console/10.0.0",
+      "hashPath": "microsoft.extensions.logging.console.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.ObjectPool/11.0.0-preview.5.26302.115": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-CQvL+zywyWbD5bmS3Fr7f6ObcYII7xizBz2GJGqnsgRDTZM42+CG4FkiJ2PnBJIHn0aEV6Sk5DyDv2WEOoKeTw==",
+      "path": "microsoft.extensions.objectpool/11.0.0-preview.5.26302.115",
+      "hashPath": "microsoft.extensions.objectpool.11.0.0-preview.5.26302.115.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Options/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-8oCAgXOow5XDrY9HaXX1QmH3ORsyZO/ANVHBlhLyCeWTH5Sg4UuqZeOTWJi6484M+LqSx0RqQXDJtdYy2BNiLQ==",
+      "path": "microsoft.extensions.options/10.0.0",
+      "hashPath": "microsoft.extensions.options.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Options.ConfigurationExtensions/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-tL9cSl3maS5FPzp/3MtlZI21ExWhni0nnUCF8HY4npTsINw45n9SNDbkKXBMtFyUFGSsQep25fHIDN4f/Vp3AQ==",
+      "path": "microsoft.extensions.options.configurationextensions/10.0.0",
+      "hashPath": "microsoft.extensions.options.configurationextensions.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Primitives/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-inRnbpCS0nwO/RuoZIAqxQUuyjaknOOnCEZB55KSMMjRhl0RQDttSmLSGsUJN3RQ3ocf5NDLFd2mOQViHqMK5w==",
+      "path": "microsoft.extensions.primitives/10.0.0",
+      "hashPath": "microsoft.extensions.primitives.10.0.0.nupkg.sha512"
+    },
+    "System.CommandLine/2.0.9": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-SW0WhEk4NFVZ4lOnsLrHQOV/7s0eTidezNybHQWXfqhuXWB17X3RXbrifeWBbUx1iu+NcYchVSufmW7svjUEnA==",
+      "path": "system.commandline/2.0.9",
+      "hashPath": "system.commandline.2.0.9.nupkg.sha512"
+    }
+  }
+}
