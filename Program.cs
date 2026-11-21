@@ -601,8 +601,8 @@ static unsafe void RunEngineDemo()
 
         // Calculate Model-View-Projection Matrix:
         var rotTime = (float)time.TotalTime;
-        var model = Matrix4x4.CreateRotationY(rotTime * 0.9f) *
-                    Matrix4x4.CreateRotationX(rotTime * 0.5f);
+        var model = Matrix4x4.CreateRotationY(rotTime * 0f) *
+                    Matrix4x4.CreateRotationX(rotTime * 0f);
         var mvp = model * camera.ViewProjection;
 
         // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
