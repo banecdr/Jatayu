@@ -1,0 +1,50 @@
+# =====================================================================
+# .gitignore for HelloBrutal (.NET 10 / Vulkan / C# / JetBrains / VS)
+# =====================================================================
+
+# Build outputs & intermediate object directories
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+build/
+
+# JetBrains Rider, IntelliJ & OpenIdea
+.idea/
+.openidea/
+*.sln.iml
+
+# Visual Studio & VS Code
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+
+# NuGet package restore cache & lock files
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.assets.json
+
+# Crash dumps, logs & diagnostics
+*.log
+*.crash
+*.dump
+*.dmp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
