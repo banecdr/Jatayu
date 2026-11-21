@@ -3,25 +3,24 @@
  * LOCATION: Program.cs
  * 
  * WHAT THIS APPLICATION DOES:
- *   HelloBrutal Engine - Phase 2: 3D Geometry, Depth Buffering & 3D Perspective Camera.
+ *   HelloBrutal Engine - Phase 2 with Panini (Pannini) Projection.
  *   
  *   Renders a fully interactive, solid 3D textured/colored cube in true 3D space with:
- *     1. Depth Testing (Z-Buffer): Hardware occlusion via our dedicated DepthBuffer attachment
- *        (D32_SFLOAT). Faces behind other faces are automatically occluded, preventing inside-out
- *        rendering artifacts.
- *     2. 3D Perspective Camera: Mathematically transforms 3D coordinates using a View matrix (eye
- *        looking at target) and a Vulkan-corrected Projection matrix (Y-flipped NDC, [0, 1] depth).
- *     3. Camera Controller: Supports automatic orbital rotation and interactive user keyboard controls
- *        (orbit yaw/pitch, zoom in/out, flycam motion).
- *     4. Vulkan Push Constants: Injects the 64-byte Model-View-Projection (MVP) matrix directly into
- *        the GPU command stream at maximum memory bandwidth with zero CPU allocations.
- *     5. Indexed 3D Mesh: 24 vertices (interleaved Position, Color, Normal, TexCoord) and 36 indices
- *        for the 12 triangles of the cube.
+ *     1. Depth Testing (Z-Buffer): Hardware occlusion via dedicated DepthBuffer (D32_SFLOAT).
+ *     2. 3D Perspective Camera: View matrix + Vulkan-corrected Projection matrix (Y-flipped NDC).
+ *     3. Panini Projection Support: Advanced cylindrical projection model that eliminates peripheral
+ *        stretching at wide and ultra-wide fields of view (FOV 90°–140°) while keeping vertical lines
+ *        straight and upright!
+ *     4. Vulkan Push Constants: 80-byte push constant block (64-byte MVP matrix + 16-byte Panini parameters).
+ *     5. Indexed 3D Mesh: 24 vertices (Position, Color, Normal, TexCoord) and 36 indices.
  *     6. Directional Diffuse Shading: Surface normals evaluated in GLSL for realistic 3D lighting.
  *     7. Multi-Frame Concurrency: 2 Frames in Flight allowing parallel CPU recording and GPU rendering.
  *     8. Dynamic Rendering & Resizing: Zero-crash dynamic swapchain and depth buffer recreation.
  *
  * INTERACTIVE CONTROLS:
+ *   [P]          : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)
+ *   [F]          : Toggle FOV (Normal 60° <-> Ultra-Wide 110° to showcase Panini edge correction!)
+ *   [1] / [2]    : Fine-tune Panini distance 'd' (-0.1 / +0.1)
  *   [Space]      : Toggle Auto-Orbit rotation On / Off
  *   [Left/Right] : Orbit camera horizontally (Yaw)
  *   [Up/Down]    : Orbit camera vertically (Pitch)
@@ -35,6 +34,7 @@
 using System;
 using System.IO;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using Brutal;
 using Brutal.GlfwApi;
@@ -71,7 +71,7 @@ static unsafe void RunEngineDemo()
     // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
     // ---------------------------------------------------------------------------------------------
     using var window = new Window(
-        title: "BRUTAL Engine | Phase 2: 3D Geometry & Depth Buffer",
+        title: "BRUTAL Engine | Phase 2: 3D Geometry + Panini Projection",
         width: InitialWidth,
         height: InitialHeight,
         resizable: true,
@@ -90,12 +90,12 @@ static unsafe void RunEngineDemo()
     using var swapchain = new VulkanSwapchain(context, window);
 
     // ---------------------------------------------------------------------------------------------
-    // PHASE 2: DEPTH BUFFER & 3D PERSPECTIVE CAMERA INITIALIZATION
+    // PHASE 2: DEPTH BUFFER & 3D PERSPECTIVE CAMERA WITH PANINI PROJECTION
     // ---------------------------------------------------------------------------------------------
-    // Create dedicated GPU Depth Buffer for hardware depth testing (Z-buffering occlusion)
+    // Dedicated GPU Depth Buffer for hardware depth testing (Z-buffering occlusion)
     using var depthBuffer = new DepthBuffer(context, allocator, swapchain.Width, swapchain.Height);
 
-    // 3D Perspective Camera looking at the origin
+    // 3D Perspective Camera with Panini projection capabilities
     var camera = new Camera3D(
         position: new Vector3(0f, 2.0f, 4.5f),
         target: Vector3.Zero,
@@ -104,7 +104,12 @@ static unsafe void RunEngineDemo()
         fovDegrees: 60f,
         nearPlane: 0.1f,
         farPlane: 1000f
-    );
+    )
+    {
+        PaniniEnabled = false,
+        PaniniDistance = 0.5f,
+        PaniniScale = 1.0f,
+    };
 
     // Camera controller for smooth orbiting and keyboard input
     var cameraController = new CameraController(camera)
@@ -220,12 +225,13 @@ static unsafe void RunEngineDemo()
         null
     );
 
-    // Configure Vulkan Push Constant range for the 64-byte MVP matrix
+    // Configure Vulkan Push Constant range for the 80-byte PushConstantData struct
+    // (64-byte MVP matrix + 16-byte Panini projection parameters)
     var pushConstantRange = new VkPushConstantRange
     {
         StageFlags = VkShaderStageFlags.VertexBit,
         Offset = new ByteSize32(0),
-        Size = new ByteSize32((uint)sizeof(Matrix4x4)), // 64 bytes
+        Size = new ByteSize32((uint)sizeof(PushConstantData)), // 80 bytes
     };
 
     var pipelineLayout = device.CreatePipelineLayout([], [pushConstantRange], null);
@@ -356,6 +362,9 @@ static unsafe void RunEngineDemo()
     ];
     var clearColorIndex = 0;
 
+    // Panini mode state machine (0 = OFF, 1 = Moderate d=0.5, 2 = Full d=1.0)
+    var paniniMode = 0;
+
     window.KeyAction += (key, action) =>
     {
         if (action == GlfwKeyAction.Press)
@@ -375,6 +384,54 @@ static unsafe void RunEngineDemo()
                 cameraController.AutoOrbitEnabled = !cameraController.AutoOrbitEnabled;
                 Console.WriteLine($"[Input] Auto-Orbit toggled -> {(cameraController.AutoOrbitEnabled ? "ENABLED" : "PAUSED (Manual control active)")}");
             }
+            else if (key == GlfwKey.P)
+            {
+                // Cycle Panini projection modes: OFF -> Moderate (d=0.5) -> Full (d=1.0) -> OFF
+                paniniMode = (paniniMode + 1) % 3;
+                switch (paniniMode)
+                {
+                    case 0:
+                        camera.PaniniEnabled = false;
+                        Console.WriteLine("[Panini] Projection: OFF (Standard Rectilinear Perspective)");
+                        break;
+                    case 1:
+                        camera.PaniniEnabled = true;
+                        camera.PaniniDistance = 0.5f;
+                        Console.WriteLine("[Panini] Projection: ON (Moderate d = 0.50 - ideal for 90°-100° FOV)");
+                        break;
+                    case 2:
+                        camera.PaniniEnabled = true;
+                        camera.PaniniDistance = 1.0f;
+                        Console.WriteLine("[Panini] Projection: ON (Full Cylindrical d = 1.00 - ideal for 110°-140° FOV)");
+                        break;
+                }
+            }
+            else if (key == GlfwKey.F)
+            {
+                // Toggle between normal 60° FOV and ultra-wide 110° FOV to witness Panini edge correction!
+                if (camera.FovDegrees < 80f)
+                {
+                    camera.FovDegrees = 110f;
+                    Console.WriteLine("[Camera] FOV switched to ULTRA-WIDE (110° FOV) - Notice how Panini [P] eliminates edge stretching!");
+                }
+                else
+                {
+                    camera.FovDegrees = 60f;
+                    Console.WriteLine("[Camera] FOV switched to STANDARD (60° FOV)");
+                }
+            }
+            else if (key == GlfwKey.Minus)
+            {
+                camera.PaniniDistance = MathF.Max(0.0f, camera.PaniniDistance - 0.1f);
+                camera.PaniniEnabled = camera.PaniniDistance > 0.001f;
+                Console.WriteLine($"[Panini] Distance 'd' decreased -> {camera.PaniniDistance:F2} (Effective: {(camera.PaniniEnabled ? "ON" : "OFF")})");
+            }
+            else if (key == GlfwKey.Equal)
+            {
+                camera.PaniniDistance = MathF.Min(2.0f, camera.PaniniDistance + 0.1f);
+                camera.PaniniEnabled = true;
+                Console.WriteLine($"[Panini] Distance 'd' increased -> {camera.PaniniDistance:F2} (Effective: ON)");
+            }
             else if (key == GlfwKey.Escape)
             {
                 window.Close();
@@ -386,18 +443,22 @@ static unsafe void RunEngineDemo()
     // PRINT DETAILED ENGINE DIAGNOSTICS & STATUS
     // ---------------------------------------------------------------------------------------------
     Console.WriteLine("================================================================================");
-    Console.WriteLine("        HELLO BRUTAL VULKAN 1.3 3D ENGINE - PHASE 2 (3D CUBE & DEPTH)           ");
+    Console.WriteLine("     HELLO BRUTAL VULKAN 1.3 3D ENGINE - PHASE 2 + PANINI PROJECTION            ");
     Console.WriteLine("================================================================================");
     Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
     Console.WriteLine($" [Vulkan API]    : 1.3 (Dynamic Rendering, Push Constants, Hardware Depth Stencil)");
     Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Precision)");
     Console.WriteLine($" [3D Mesh]       : 3D Colored Cube ({cubeVertices.Length} Vertices, {cubeIndices.Length} Indices, 12 Triangles)");
-    Console.WriteLine($" [Push Constants]: 64-byte MVP Matrix directly in Command Stream");
+    Console.WriteLine($" [Push Constants]: 80-byte PushConstantData (64-byte MVP + 16-byte Panini parameters)");
     Console.WriteLine($" [Camera]        : 3D Perspective (FOV: {camera.FovDegrees}°, Vulkan Y-Inverted NDC, [0,1] Depth)");
+    Console.WriteLine($" [Panini Proj]   : Active: {(camera.PaniniEnabled ? "YES" : "NO")} | Distance 'd': {camera.PaniniDistance:F2} | Scale: {camera.PaniniScale:F2}");
     Console.WriteLine($" [Swapchain]     : {swapchain.Width}x{swapchain.Height} | Buffers: {swapchain.ImageCount} | Format: {swapchain.ColorFormat}");
     Console.WriteLine($" [Sync Engine]   : {frameSync.MaxFramesInFlight} Frames in Flight (Parallel CPU/GPU Execution)");
     Console.WriteLine("--------------------------------------------------------------------------------");
     Console.WriteLine(" INTERACTIVE HOTKEYS:");
+    Console.WriteLine("   [P]           : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)");
+    Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
+    Console.WriteLine("   [-] / [=]     : Fine-tune Panini distance 'd' (-0.1 / +0.1)");
     Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
     Console.WriteLine("   [Left/Right]  : Manual horizontal orbit (Yaw)");
     Console.WriteLine("   [Up/Down]     : Manual vertical orbit (Pitch)");
@@ -458,7 +519,8 @@ static unsafe void RunEngineDemo()
         cameraController.Update(dt);
 
         // Update live telemetry in the window title
-        window.Title = $"BRUTAL 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | {swapchain.Width}x{swapchain.Height} | Depth: {depthBuffer.Format} | VSync: {(window.VSync ? "ON" : "OFF")} | Orbit: {(cameraController.AutoOrbitEnabled ? "AUTO" : "MANUAL")} | Frame #{time.FrameCount}";
+        var paniniStatus = camera.PaniniEnabled ? $"Panini: ON (d={camera.PaniniDistance:F2})" : "Panini: OFF (Rectilinear)";
+        window.Title = $"BRUTAL 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | FOV: {camera.FovDegrees:F0}° | {paniniStatus} | VSync: {(window.VSync ? "ON" : "OFF")} | Frame #{time.FrameCount}";
 
         // Handle dynamic swapchain / window resize
         if (swapchain.IsOutOfDate)
@@ -538,18 +600,27 @@ static unsafe void RunEngineDemo()
         cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
 
         // Calculate Model-View-Projection Matrix:
-        // Rotate 3D cube around multiple axes to showcase true 3D spatial geometry and depth occlusion
         var rotTime = (float)time.TotalTime;
         var model = Matrix4x4.CreateRotationY(rotTime * 0.9f) *
                     Matrix4x4.CreateRotationX(rotTime * 0.45f);
         var mvp = model * camera.ViewProjection;
 
-        // Push MVP Matrix to GPU via high-speed Push Constants (64 bytes)
+        // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
+        var pushData = new PushConstantData
+        {
+            Mvp = mvp,
+            PaniniDistance = camera.EffectivePaniniDistance,
+            PaniniScale = camera.PaniniScale,
+            AspectRatio = camera.AspectRatio,
+            Padding = 0f,
+        };
+
+        // Push MVP Matrix & Panini parameters to GPU via Push Constants (80 bytes)
         cmd.PushConstants(
             pipelineLayout,
             VkShaderStageFlags.VertexBit,
             0,
-            new ReadOnlySpan<byte>(&mvp, sizeof(Matrix4x4))
+            new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
         );
 
         // Bind vertex and index buffers and draw the 36 indices (12 triangles)
@@ -610,4 +681,37 @@ static unsafe void RunEngineDemo()
     // C# 'using' automatically disposes indexBuffer, vertexBuffer, depthBuffer,
     // frameSync, swapchain, allocator, context, and window.
     Console.WriteLine("[Shutdown] All 3D resources released cleanly. Goodbye!");
+}
+
+/// <summary>
+/// 80-byte Push Constant data structure matching the layout in cube.vert.
+/// Injects Model-View-Projection matrix and real-time Panini parameters with zero allocation.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+struct PushConstantData
+{
+    /// <summary>
+    /// Combined 64-byte Model-View-Projection transformation matrix.
+    /// </summary>
+    public Matrix4x4 Mvp;
+
+    /// <summary>
+    /// Panini projection distance parameter 'd' (0.0 = linear perspective, >0 = Panini compression).
+    /// </summary>
+    public float PaniniDistance;
+
+    /// <summary>
+    /// Panini scale/crop factor (default: 1.0).
+    /// </summary>
+    public float PaniniScale;
+
+    /// <summary>
+    /// Viewport aspect ratio (Width / Height) needed to keep vertical proportions conformal.
+    /// </summary>
+    public float AspectRatio;
+
+    /// <summary>
+    /// 4-byte padding to maintain 16-byte alignment.
+    /// </summary>
+    public float Padding;
 }

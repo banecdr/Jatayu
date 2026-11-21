@@ -3,27 +3,29 @@
  * LOCATION: assets/shaders/cube.vert
  * 
  * WHAT THIS SHADER DOES:
- *   3D Vertex shader for rendering 3D meshes (such as our 3D colored cube) in Vulkan 1.3.
- *   Receives vertex attributes (Position, Color, Normal, TexCoord) from the GPU vertex buffer,
- *   transforms the 3D position by a 64-byte Model-View-Projection (MVP) matrix supplied via
- *   a high-speed Vulkan Push Constant, and forwards interpolated attributes to the fragment shader.
+ *   3D Vertex shader for rendering 3D meshes with built-in Panini (Pannini) cylindrical projection.
+ *   Receives vertex attributes from the GPU vertex buffer, transforms the position by the 64-byte
+ *   Model-View-Projection (MVP) matrix, and applies cylindrical Panini projection when enabled
+ *   to eliminate wide-angle peripheral distortion.
  *
- * HOW IT WORKS INTERNALLY:
- *   1. Vertex Inputs:
- *      - location = 0: vec3 inPosition (3D local object-space coordinates)
- *      - location = 1: vec3 inColor    (Per-vertex RGB color tint)
- *      - location = 2: vec3 inNormal   (Surface normal vector for directional lighting)
- *      - location = 3: vec2 inTexCoord (UV texture mapping coordinates)
+ * HOW PANINI PROJECTION WORKS IN THIS SHADER:
+ *   1. Standard linear perspective stretches geometry towards the edges of wide-angle screens (FOV > 90°).
+ *   2. When uPaniniDistance > 0.0, this shader converts the vertex clip position to Normalized Device
+ *      Coordinates (NDC) and applies the TK Sharpless Panini formula:
+ *        u = ndc.x * uAspect;
+ *        denom = 1.0 + d * sqrt(1.0 + u * u);
+ *        factor = ((d + 1.0) / denom) * uPaniniScale;
+ *        ndc.x = (u * factor) / uAspect;
+ *        ndc.y = ndc.y * factor;
+ *   3. Vertical lines remain straight and upright while horizontal coordinates are gently compressed,
+ *      eliminating tangential distortion and edge elongation.
  *
- *   2. Push Constant:
- *      - layout(push_constant) uniform PushConstants { mat4 uMvp; };
- *      Push constants are the fastest uniform mechanism in Vulkan. They bypass descriptor sets
- *      and are embedded directly into the GPU command stream (up to 128 bytes guaranteed by spec).
- *      A single mat4 requires exactly 16 floats * 4 bytes = 64 bytes.
- *
- *   3. Position Transformation:
- *      gl_Position = uMvp * vec4(inPosition, 1.0);
- *      Transforms local 3D vertex coordinates into Vulkan Clip Space for hardware rasterization.
+ * PUSH CONSTANT MEMORY LAYOUT (80 BYTES TOTAL):
+ *   - offset 0  (64 bytes): mat4  uMvp            (Combined Model-View-Projection Matrix)
+ *   - offset 64 ( 4 bytes): float uPaniniDistance (0.0 = linear perspective, 0.5 = moderate, 1.0 = full)
+ *   - offset 68 ( 4 bytes): float uPaniniScale    (Fit/scale factor, default: 1.0)
+ *   - offset 72 ( 4 bytes): float uAspect         (Viewport aspect ratio: Width / Height)
+ *   - offset 76 ( 4 bytes): float uPad            (Alignment padding)
  * ================================================================================================= */
 
 #version 450
@@ -39,13 +41,40 @@ layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
 
-// 64-byte Model-View-Projection Matrix via Vulkan Push Constants
+// 80-byte Push Constants: 64-byte MVP matrix + 16-byte Panini parameters
 layout(push_constant) uniform PushConstants {
     mat4 uMvp;
+    float uPaniniDistance;
+    float uPaniniScale;
+    float uAspect;
+    float uPad;
 };
 
+// TK Sharpless Panini cylindrical projection function
+vec2 ApplyPanini(vec2 ndc, float d, float aspect, float scale) {
+    if (d <= 0.0001)
+        return ndc;
+
+    float u = ndc.x * aspect;
+    float v = ndc.y;
+
+    float denom = 1.0 + d * sqrt(1.0 + u * u);
+    float factor = ((d + 1.0) / denom) * scale;
+
+    return vec2((u * factor) / aspect, v * factor);
+}
+
 void main() {
-    gl_Position = uMvp * vec4(inPosition, 1.0);
+    vec4 clip = uMvp * vec4(inPosition, 1.0);
+
+    // Apply Panini projection to clip-space coordinates when enabled
+    if (uPaniniDistance > 0.0001 && clip.w > 0.0) {
+        vec2 ndc = clip.xy / clip.w;
+        vec2 paniniNdc = ApplyPanini(ndc, uPaniniDistance, uAspect, uPaniniScale);
+        clip.xy = paniniNdc * clip.w;
+    }
+
+    gl_Position = clip;
     fragColor = inColor;
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;
