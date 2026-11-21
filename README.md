@@ -1,5 +1,7 @@
 # HelloBrutal
 
+<img width="1290" height="759" alt="image" src="https://github.com/user-attachments/assets/2480b1cf-67fa-4b98-ad92-51d61c472e00" />
+
 A simple 3D Vulkan playground and testbed built with C# (.NET 10) and the BRUTAL library bindings (`Ahwoo.BRUTAL.*`).
 
 Right now it sets up a basic Vulkan 1.3 render pipeline, draws a lit 3D cube with depth testing, and experiments with Panini projection to keep wide field-of-view angles from stretching near the screen edges.
