@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: GpuAllocator.cs
  * LOCATION: src/RHI/Vulkan/Memory/GpuAllocator.cs
  * 
@@ -74,9 +74,9 @@ using Brutal;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
-using HelloBrutal.RHI.Vulkan.Context;
+using Jatayu.RHI.Vulkan.Context;
 
-namespace HelloBrutal.RHI.Vulkan.Memory;
+namespace Jatayu.RHI.Vulkan.Memory;
 
 /// <summary>
 /// High-performance GPU memory manager wrapping the AMD Vulkan Memory Allocator (VMA).

@@ -1,9 +1,9 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: Vertex3D.cs
  * LOCATION: src/Renderer/Mesh/Vertex3D.cs
  * 
  * WHAT THIS FILE DOES:
- *   Defines the standard 3D vertex data structure used across the HelloBrutal 3D engine.
+ *   Defines the standard 3D vertex data structure used across the Jatayu 3D engine.
  *   Each vertex stores 3D position (X, Y, Z), vertex color (R, G, B), surface normal (X, Y, Z)
  *   for lighting calculations, and UV texture coordinates (U, V).
  *
@@ -39,7 +39,7 @@
 using System.Runtime.InteropServices;
 using Brutal.Numerics;
 
-namespace HelloBrutal.Renderer.Mesh;
+namespace Jatayu.Renderer.Mesh;
 
 /// <summary>
 /// Standard 3D vertex struct containing Position, Color, Normal, and Texture Coordinates.

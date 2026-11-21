@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: VulkanContext.cs
  * LOCATION: src/RHI/Vulkan/Context/VulkanContext.cs
  * 
@@ -54,9 +54,9 @@ using Brutal.GlfwApi;
 using Brutal.Strings;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
-using HelloBrutal.Core;
+using Jatayu.Core;
 
-namespace HelloBrutal.RHI.Vulkan.Context;
+namespace Jatayu.RHI.Vulkan.Context;
 
 /// <summary>
 /// Encapsulates the Vulkan 1.3 Instance, Surface, Physical GPU, Logical Device, and hardware Queues.

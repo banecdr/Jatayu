@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: FrameSync.cs
  * LOCATION: src/RHI/Vulkan/Sync/FrameSync.cs
  * 
@@ -66,9 +66,9 @@
 using System;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
-using HelloBrutal.RHI.Vulkan.Context;
+using Jatayu.RHI.Vulkan.Context;
 
-namespace HelloBrutal.RHI.Vulkan.Sync;
+namespace Jatayu.RHI.Vulkan.Sync;
 
 /// <summary>
 /// Manages multi-frame synchronization primitives (Semaphores and Fences) for concurrent CPU/GPU execution.

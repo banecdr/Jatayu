@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: DepthBuffer.cs
  * LOCATION: src/RHI/Vulkan/Textures/DepthBuffer.cs
  * 
@@ -63,10 +63,10 @@
 using System;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Vma;
-using HelloBrutal.RHI.Vulkan.Context;
-using HelloBrutal.RHI.Vulkan.Memory;
+using Jatayu.RHI.Vulkan.Context;
+using Jatayu.RHI.Vulkan.Memory;
 
-namespace HelloBrutal.RHI.Vulkan.Textures;
+namespace Jatayu.RHI.Vulkan.Textures;
 
 /// <summary>
 /// Encapsulates a Vulkan 1.3 depth attachment image and image view for 3D depth testing.

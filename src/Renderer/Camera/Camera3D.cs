@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: Camera3D.cs
  * LOCATION: src/Renderer/Camera/Camera3D.cs
  * 
@@ -60,7 +60,7 @@
 using System;
 using System.Numerics;
 
-namespace HelloBrutal.Renderer.Camera;
+namespace Jatayu.Renderer.Camera;
 
 /// <summary>
 /// 3D Perspective Camera for Vulkan 1.3 rendering with automatic NDC Y-axis flipping

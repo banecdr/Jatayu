@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: QueueFamilies.cs
  * LOCATION: src/RHI/Vulkan/Context/QueueFamilies.cs
  * 
@@ -46,7 +46,7 @@
 
 using Brutal.VulkanApi;
 
-namespace HelloBrutal.RHI.Vulkan.Context;
+namespace Jatayu.RHI.Vulkan.Context;
 
 /// <summary>
 /// Discovers and tracks GPU queue family indices for Graphics, Presentation, Compute, and Transfer.

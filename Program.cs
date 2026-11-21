@@ -3,7 +3,7 @@
  * LOCATION: Program.cs
  * 
  * WHAT THIS APPLICATION DOES:
- *   HelloBrutal Engine - Phase 2 with Panini (Pannini) Projection.
+ *   Jatayu Engine - Phase 2 with Panini (Pannini) Projection.
  *   
  *   Renders a fully interactive, solid 3D textured/colored cube in true 3D space with:
  *     1. Depth Testing (Z-Buffer): Hardware occlusion via dedicated DepthBuffer (D32_SFLOAT).
@@ -45,15 +45,15 @@ using Brutal.Strings;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
-using HelloBrutal.Core;
-using HelloBrutal.Core.Time;
-using HelloBrutal.Renderer.Camera;
-using HelloBrutal.Renderer.Mesh;
-using HelloBrutal.RHI.Vulkan.Context;
-using HelloBrutal.RHI.Vulkan.Memory;
-using HelloBrutal.RHI.Vulkan.Swapchain;
-using HelloBrutal.RHI.Vulkan.Sync;
-using HelloBrutal.RHI.Vulkan.Textures;
+using Jatayu.Core;
+using Jatayu.Core.Time;
+using Jatayu.Renderer.Camera;
+using Jatayu.Renderer.Mesh;
+using Jatayu.RHI.Vulkan.Context;
+using Jatayu.RHI.Vulkan.Memory;
+using Jatayu.RHI.Vulkan.Swapchain;
+using Jatayu.RHI.Vulkan.Sync;
+using Jatayu.RHI.Vulkan.Textures;
 
 // -------------------------------------------------------------------------------------------------
 // NATIVE VULKAN LOADER & RUNTIME INITIALIZATION
@@ -71,7 +71,7 @@ static unsafe void RunEngineDemo()
     // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
     // ---------------------------------------------------------------------------------------------
     using var window = new Window(
-        title: "BRUTAL Engine | Phase 2: 3D Geometry + Panini Projection",
+        title: "Jatayu Engine | Phase 2: 3D Geometry + Panini Projection",
         width: InitialWidth,
         height: InitialHeight,
         resizable: true,
@@ -443,7 +443,7 @@ static unsafe void RunEngineDemo()
     // PRINT DETAILED ENGINE DIAGNOSTICS & STATUS
     // ---------------------------------------------------------------------------------------------
     Console.WriteLine("================================================================================");
-    Console.WriteLine("     HELLO BRUTAL VULKAN 1.3 3D ENGINE - PHASE 2 + PANINI PROJECTION            ");
+    Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - PHASE 2 + PANINI PROJECTION            ");
     Console.WriteLine("================================================================================");
     Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
     Console.WriteLine($" [Vulkan API]    : 1.3 (Dynamic Rendering, Push Constants, Hardware Depth Stencil)");
@@ -520,7 +520,7 @@ static unsafe void RunEngineDemo()
 
         // Update live telemetry in the window title
         var paniniStatus = camera.PaniniEnabled ? $"Panini: ON (d={camera.PaniniDistance:F2})" : "Panini: OFF (Rectilinear)";
-        window.Title = $"BRUTAL 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | FOV: {camera.FovDegrees:F0}° | {paniniStatus} | VSync: {(window.VSync ? "ON" : "OFF")} | Frame #{time.FrameCount}";
+        window.Title = $"Jatayu 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | FOV: {camera.FovDegrees:F0}° | {paniniStatus} | VSync: {(window.VSync ? "ON" : "OFF")} | Frame #{time.FrameCount}";
 
         // Handle dynamic swapchain / window resize
         if (swapchain.IsOutOfDate)

@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: VulkanSwapchain.cs
  * LOCATION: src/RHI/Vulkan/Swapchain/VulkanSwapchain.cs
  * 
@@ -63,10 +63,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
-using HelloBrutal.Core;
-using HelloBrutal.RHI.Vulkan.Context;
+using Jatayu.Core;
+using Jatayu.RHI.Vulkan.Context;
 
-namespace HelloBrutal.RHI.Vulkan.Swapchain;
+namespace Jatayu.RHI.Vulkan.Swapchain;
 
 /// <summary>
 /// Manages the Vulkan presentation swapchain, display image views, and dynamic window resizing.

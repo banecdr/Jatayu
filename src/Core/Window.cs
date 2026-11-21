@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: Window.cs
  * LOCATION: src/Core/Window.cs
  * 
@@ -69,7 +69,7 @@
 using Brutal.GlfwApi;
 using Brutal.Numerics;
 
-namespace HelloBrutal.Core;
+namespace Jatayu.Core;
 
 /// <summary>
 /// Manages the desktop window lifecycle, OS event pumping, framebuffer sizing, and V-Sync configuration for Vulkan.

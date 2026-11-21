@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: CameraController.cs
  * LOCATION: src/Renderer/Camera/CameraController.cs
  * 
@@ -50,7 +50,7 @@
 using System;
 using System.Numerics;
 
-namespace HelloBrutal.Renderer.Camera;
+namespace Jatayu.Renderer.Camera;
 
 /// <summary>
 /// Controller for Camera3D providing orbit controls and first-person flying capabilities.

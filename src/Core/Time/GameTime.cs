@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: GameTime.cs
  * LOCATION: src/Core/Time/GameTime.cs
  * 
@@ -69,7 +69,7 @@
 
 using System.Diagnostics;
 
-namespace HelloBrutal.Core.Time;
+namespace Jatayu.Core.Time;
 
 /// <summary>
 /// Provides high-precision frame timing, variable delta tracking, FPS metrics,

@@ -1,4 +1,4 @@
-/* =================================================================================================
+﻿/* =================================================================================================
  * FILE: GpuBuffer.cs
  * LOCATION: src/RHI/Vulkan/Memory/GpuBuffer.cs
  * 
@@ -63,7 +63,7 @@ using Brutal.Pointers;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Vma;
 
-namespace HelloBrutal.RHI.Vulkan.Memory;
+namespace Jatayu.RHI.Vulkan.Memory;
 
 /// <summary>
 /// Represents a GPU-allocated buffer (vertex, index, uniform, or storage) managed by VMA.

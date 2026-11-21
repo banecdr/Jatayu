@@ -1,4 +1,4 @@
-# HelloBrutal
+﻿# Jatayu
 
 A simple 3D Vulkan playground and testbed built with C# (.NET 10) and the BRUTAL library bindings (`Ahwoo.BRUTAL.*`).
 

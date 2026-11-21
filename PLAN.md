@@ -1,9 +1,9 @@
-<!-- =================================================================================================
+﻿<!-- =================================================================================================
  * FILE: PLAN.md
  * LOCATION: PLAN.md
  * 
  * WHAT THIS FILE DOES:
- *   This is the master architectural blueprint and implementation roadmap for the HelloBrutal 3D
+ *   This is the master architectural blueprint and implementation roadmap for the Jatayu 3D
  *   game engine built on .NET 10 and the BRUTAL framework (Ahwoo.BRUTAL.*).
  *   It details every single subsystem, directory, and source file required to evolve this project
  *   from our current working Vulkan 1.3 foundation into a feature-complete, commercial-grade 3D
@@ -23,7 +23,7 @@
  *   8. Developer Tooling & UI: Embedded ImGui overlays, performance profiling, and scene inspection.
  * ================================================================================================= -->
 
-# HelloBrutal: Complete 3D Game Engine Master Architecture Plan
+# Jatayu: Complete 3D Game Engine Master Architecture Plan
 
 ```
                                ┌──────────────────────────────────────────────┐
