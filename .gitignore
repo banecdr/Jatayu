@@ -1,4 +1,4 @@
-﻿# =====================================================================
+# =====================================================================
 # .gitignore for Jatayu (.NET 10 / Vulkan / C# / JetBrains / VS)
 # =====================================================================
 
@@ -48,6 +48,7 @@ desktop.ini
 *.bak
 *.swp
 *~
+imgui.ini
 assets/shaders/cache/
 /Jatayu\ Engine\ Agent\ Brief\ 2\ (PLAN.md\ Reconciliation\ and\ Implementation\ Protocol).md
 /Jatayu\ Engine\ Gap\ Analysis\ and\ Open-World\ Implementation\ Brief.md

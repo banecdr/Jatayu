@@ -55,14 +55,32 @@ public class ApiInspectionTests
     }
 
     [Fact]
-    public void InspectImGuiApi()
+    public void InspectSync2Types()
     {
-        _output.WriteLine("=== Searching ImGui types ===");
-        var imguiAsm = typeof(Brutal.ImGuiApi.ImGui).Assembly;
-        foreach (var t in imguiAsm.GetExportedTypes())
+        _output.WriteLine("=== Searching Sync2 types and methods ===");
+        var assemblies = new[] { typeof(Brutal.VulkanApi.Vulkan).Assembly, typeof(Brutal.VulkanApi.Abstractions.DeviceEx).Assembly };
+        foreach (var asm in assemblies)
         {
-            if (t.Name.Contains("Draw") || t.Name.Contains("Vert") || t.Name.Contains("Font"))
-                _output.WriteLine($"Type: {t.FullName}");
+            foreach (var type in asm.GetExportedTypes())
+            {
+                if (type.Name.Contains("Barrier2") || type.Name.Contains("DependencyInfo") || type.Name.Contains("PipelineStageFlags2") || type.Name.Contains("AccessFlags2"))
+                {
+                    _output.WriteLine($"Type: {type.FullName}");
+                }
+            }
         }
+        _output.WriteLine("=== All types with CommandBuffer or Barrier in Brutal assemblies ===");
+        _output.WriteLine("=== VkDependencyInfo Fields & Properties ===");
+        foreach (var f in typeof(Brutal.VulkanApi.VkDependencyInfo).GetFields())
+            _output.WriteLine($"  {f.FieldType.Name} {f.Name}");
+        foreach (var p in typeof(Brutal.VulkanApi.VkDependencyInfo).GetProperties())
+            _output.WriteLine($"  prop: {p.PropertyType.Name} {p.Name}");
+
+        _output.WriteLine("=== VkImageMemoryBarrier2 Fields & Properties ===");
+        foreach (var f in typeof(Brutal.VulkanApi.VkImageMemoryBarrier2).GetFields())
+            _output.WriteLine($"  {f.FieldType.Name} {f.Name}");
+        foreach (var p in typeof(Brutal.VulkanApi.VkImageMemoryBarrier2).GetProperties())
+            _output.WriteLine($"  prop: {p.PropertyType.Name} {p.Name}");
     }
 }
+

@@ -1,4 +1,4 @@
-﻿<!-- =================================================================================================
+<!-- =================================================================================================
  * FILE: PLAN.md
  * LOCATION: PLAN.md
  * 
@@ -189,11 +189,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.2 Multithreading & Job System (`src/Core/Jobs/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Core/Jobs/JobSystem.cs` | **PLANNED** | Work-stealing thread pool sized to physical cores minus 1-2. Supports priorities (`High`, `Normal`, `Background`) and dependencies. (Sprint 4). |
-| `src/Core/Jobs/Job.cs` | **PLANNED** | Pooled unmanaged/struct job definition representing an executable delegate or function pointer. Zero allocation per task. (Sprint 4). |
-| `src/Core/Jobs/JobHandle.cs` | **PLANNED** | Lightweight completion and dependency token for jobs with `.Wait()`, `.IsCompleted`, and `.Combine()`. (Sprint 4). |
-| `src/Core/Jobs/ParallelFor.cs` | **PLANNED** | Batched parallel-for range partitioner for parallel execution of culling, animation, and data processing. (Sprint 4). |
-| `src/Core/Jobs/MainThreadDispatcher.cs` | **PLANNED** | Lock-free queue for job results requiring main-thread execution (GPU resource finalization, scene mutation) with ms time budgeting. (Sprint 4). |
+| `src/Core/Jobs/JobSystem.cs` | **DONE** | Work-stealing thread pool sized to physical cores minus 1-2. Supports priorities (`High`, `Normal`, `Background`) and dependencies. (Sprint 4). |
+| `src/Core/Jobs/Job.cs` | **DONE** | Pooled unmanaged/struct job definition representing an executable delegate or function pointer. Zero allocation per task. (Sprint 4). |
+| `src/Core/Jobs/JobHandle.cs` | **DONE** | Lightweight completion and dependency token for jobs with `.Wait()`, `.IsCompleted`, and `.Combine()`. (Sprint 4). |
+| `src/Core/Jobs/ParallelFor.cs` | **DONE** | Batched parallel-for range partitioner for parallel execution of culling, animation, and data processing. (Sprint 4). |
+| `src/Core/Jobs/MainThreadDispatcher.cs` | **DONE** | Lock-free queue for job results requiring main-thread execution (GPU resource finalization, scene mutation) with ms time budgeting. (Sprint 4). |
 
 ### 2.3 Diagnostics, Profiling & GPU Metrics (`src/Core/Profiling/` & `src/RHI/Vulkan/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -234,15 +234,15 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 *Note: `src/Jatayu.AssetFormats/` is a lightweight shared class library without GPU/Vulkan dependencies, shared between runtime engine, cooker, and world generator.*
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Jatayu.AssetFormats/AssetGuid.cs` | **PLANNED** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
-| `src/Jatayu.AssetFormats/CookedFormats.cs` | **PLANNED** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
+| `src/Jatayu.AssetFormats/AssetGuid.cs` | **DONE** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
+| `src/Jatayu.AssetFormats/CookedFormats.cs` | **DONE** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
 | `src/Jatayu.AssetFormats/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **DONE** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
-| `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **PLANNED** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
-| `src/Assets/PackReader.cs` | **PLANNED** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
-| `src/Assets/AssetManager.cs` | **PLANNED** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
+| `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **DONE** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
+| `src/Assets/PackReader.cs` | **DONE** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
+| `src/Assets/AssetManager.cs` | **DONE** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
 | `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
 | `src/Assets/Textures/MipResidency.cs` | **PLANNED** | Tracks loaded mip ranges per texture and manages step-of-2 reallocations and bindless swaps. (Sprint 6b). |
 | `src/Assets/Loaders/ShaderLoader.cs` | **DONE** | Runtime shader file watcher for live editing and hot-reloading during development. (Sprint 3a). |
@@ -250,11 +250,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.6 Offline Asset Cooker & World Generator (`tools/Jatayu.Cooker/` & `tools/Jatayu.WorldGen/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `tools/Jatayu.Cooker/Program.cs` | **PLANNED** | CLI asset cooker entry point (commands: cook-all, cook-models, cook-textures, cook-world). (Sprint 4). |
-| `tools/Jatayu.Cooker/MeshCooker.cs` | **PLANNED** | Optimizes vertices with `Ahwoo.BRUTAL.MeshOptimizer` (cache, overdraw, fetch), builds LOD chain, quantizes. (Sprint 4). |
-| `tools/Jatayu.Cooker/TextureCooker.cs` | **PLANNED** | Compresses textures to BC7/BC5/BC4 with full mipmaps; splits resident mip tail ($\le 64\times 64$) from streamable mips. (Sprint 4). |
-| `tools/Jatayu.Cooker/MaterialCooker.cs` | **PLANNED** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
-| `tools/Jatayu.Cooker/PackWriter.cs` | **PLANNED** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
+| `tools/Jatayu.Cooker/Program.cs` | **DONE** | CLI asset cooker entry point (commands: cook-all, cook-models, cook-textures, cook-world). (Sprint 4). |
+| `tools/Jatayu.Cooker/MeshCooker.cs` | **DONE** | Optimizes vertices with `Ahwoo.BRUTAL.MeshOptimizer` (cache, overdraw, fetch), builds LOD chain, quantizes. (Sprint 4). |
+| `tools/Jatayu.Cooker/TextureCooker.cs` | **DONE** | Compresses textures to BC7/BC5/BC4 with full mipmaps; splits resident mip tail ($\le 64\times 64$) from streamable mips. (Sprint 4). |
+| `tools/Jatayu.Cooker/MaterialCooker.cs` | **DONE** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
+| `tools/Jatayu.Cooker/PackWriter.cs` | **DONE** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
 | `tools/Jatayu.Cooker/CellCooker.cs` | **PLANNED** | Bakes world cells into binary chunk records inside `.jpak`: static instance arrays, physics colliders, audio points. (Sprint 6a). |
 | `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **PLANNED** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
 | `tools/Jatayu.Cooker/HlodCooker.cs` | **PLANNED** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |
@@ -293,10 +293,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.9 Render Graph & Frame Scheduling (`src/Renderer/Graph/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Renderer/Graph/RenderGraph.cs` | **PLANNED** | Frame render graph DAG. Passes declare read/write dependencies; compiles barriers, layout transitions, and aliases memory. (Sprint 4). |
-| `src/Renderer/Graph/RenderPass.cs` | **PLANNED** | Execution node in the render graph with setup and execute callbacks receiving command buffers. (Sprint 4). |
-| `src/Renderer/Graph/RenderGraphResource.cs` | **PLANNED** | Virtual handle for transient/imported textures and buffers tracked by the graph for synchronization. (Sprint 4). |
-| `src/Renderer/Graph/BarrierBuilder.cs` | **PLANNED** | Automatic `VkDependencyInfo` and `VkImageMemoryBarrier2` generator using Vulkan 1.3 `synchronization2`. (Sprint 4). |
+| `src/Renderer/Graph/RenderGraph.cs` | **DONE** | Frame render graph DAG. Passes declare read/write dependencies; compiles barriers, layout transitions, and aliases memory. (Sprint 4). |
+| `src/Renderer/Graph/RenderPass.cs` | **DONE** | Execution node in the render graph with setup and execute callbacks receiving command buffers. (Sprint 4). |
+| `src/Renderer/Graph/RenderGraphResource.cs` | **DONE** | Virtual handle for transient/imported textures and buffers tracked by the graph for synchronization. (Sprint 4). |
+| `src/Renderer/Graph/BarrierBuilder.cs` | **DONE** | Automatic `VkDependencyInfo` and `VkImageMemoryBarrier2` generator using Vulkan 1.3 `synchronization2`. (Sprint 4). |
 
 ### 2.10 GPU-Driven Rendering (`src/Renderer/GpuDriven/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -316,8 +316,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Renderer/Camera/Frustum.cs` | **PLANNED** | Extracts 5 bounding planes (Left, Right, Bottom, Top, Near) plus configurable max draw distance for CPU-side coarse culling. (Sprint 5b). |
 | `src/Renderer/Camera/DepthConvention.cs` | **DONE** | Canonical depth settings and matrices (Reverse-Z flag, infinite projection builder, clear depth constants). (Sprint 3b). |
 | `src/Renderer/Mesh/Vertex3D.cs` | **DONE** | Standard 3D PBR vertex struct: Position (`float3`), Normal (`float3`), Tangent (`float4`), UV (`float2`), and Color (`float4`). |
-| `src/Renderer/Mesh/Mesh.cs` | **PLANNED** | GPU geometry container holding vertex/index buffer slices, triangle count, and bounding box. (Sprint 4). |
-| `src/Renderer/Mesh/Model.cs` | **PLANNED** | Multi-mesh 3D model container containing sub-meshes, materials, and local node hierarchies. (Sprint 4). |
+| `src/Renderer/Mesh/Mesh.cs` | **DONE** | GPU geometry container holding vertex/index buffer slices, triangle count, and bounding box. (Sprint 4). |
+| `src/Renderer/Mesh/Model.cs` | **DONE** | Multi-mesh 3D model container containing sub-meshes, materials, and local node hierarchies. (Sprint 4). |
 | `src/Renderer/Material/Material.cs` | **PLANNED** | PBR material binding albedo, normal, metallic-roughness, AO, emissive textures and scalar factors. (Sprint 5b). |
 | `src/Renderer/Material/MaterialTable.cs` | **PLANNED** | GPU storage buffer containing all active material parameters indexed by material ID for bindless draws. (Sprint 5b). |
 | `src/Renderer/Lighting/DirectionalLight.cs` | **PLANNED** | Sunlight parameters: Direction, Color, Intensity, Cascaded shadow configuration. (Sprint 5b). |
@@ -474,22 +474,22 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 46
-- **Current Completion:** **21.4% (Sprint 3b Complete, Sprint 4 Ready)**
+- **Total Completed Files:** 67
+- **Current Completion:** **31.2% (Sprint 4 Complete, Sprint 5a Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
 | **Core Platform, Memory & Config** | 4 / 16 | **NativeArena & NativePool Added** |
-| **Multithreading & Jobs** | 0 / 5 | Planned (Sprint 4) |
+| **Multithreading & Jobs** | 5 / 5 | **COMPLETE (JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher)** |
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
 | **Modern Vulkan 1.3 RHI** | 21 / 23 | **Async Uploads, Timeline, DeletionQueue & VramBudget Added** |
-| **Shared Formats & Runtime Assets** | 2 / 12 | **TextureLoader & ShaderLoader Complete** |
-| **Cooker & World Generator** | 0 / 13 | Planned (Sprint 4-10) |
+| **Shared Formats & Runtime Assets** | 7 / 12 | **AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager Complete** |
+| **Cooker & World Generator** | 5 / 13 | **Program, MeshCooker, TextureCooker, MaterialCooker, PackWriter Complete** |
 | **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
-| **Render Graph** | 0 / 4 | Planned (Sprint 4) |
+| **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
 | **GPU-Driven Rendering** | 0 / 6 | Planned (Sprint 5b, 7a) |
-| **3D Graphics, Lighting & Environment** | 4 / 28 | **Camera3D, Vertex3D & DepthConvention Complete** |
+| **3D Graphics, Lighting & Environment** | 6 / 28 | **Mesh & Model Added (Camera3D, Vertex3D, DepthConvention)** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 0 / 7 | Planned (Sprint 5a) |
 | **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
@@ -679,7 +679,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 4: Jobs, Cooking & Render Graph [NEXT]                                    │
+│ SPRINT 4: Jobs, Cooking & Render Graph [DONE]                                    │
 │  - JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher                  │
 │  - Cooker (Program, MeshCooker, TextureCooker with D27 encoder & mip tail, etc.)  │
 │  - AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager               │
@@ -690,7 +690,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 5a: Engine Runtime and ECS                                                │
+│ SPRINT 5a: Engine Runtime and ECS [NEXT]                                         │
 │  - ECS spike (100k entity query benchmark, zero allocations) & decision D2/D26   │
 │  - Scene, Entity, Transform, MeshRenderer, CameraComponent, RigidBodyComponent   │
 │  - Engine & EngineConfig, Settings, EventBus, Log, Input, KeyCodes, Gamepad      │

@@ -16,11 +16,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan" Version="2026.10.3" />
+    <PackageReference Include="Ahwoo.BRUTAL.Vulkan.Abstractions" Version="2026.10.3" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Jatayu.csproj" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\..\src\Jatayu.AssetFormats\Jatayu.AssetFormats.csproj" />
+    <ProjectReference Include="..\..\tools\Jatayu.Cooker\Jatayu.Cooker.csproj" />
   </ItemGroup>
 
 </Project>

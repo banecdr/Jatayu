@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: VulkanSwapchain.cs
  * LOCATION: src/RHI/Vulkan/Swapchain/VulkanSwapchain.cs
  * 
@@ -208,12 +208,23 @@ public sealed class VulkanSwapchain : IDisposable
         ];
         var compositeAlpha = alphaModes.First(mode => (capabilities.SupportedCompositeAlpha & mode) != 0);
 
-        // 4. Select surface format (first supported is standard sRGB)
+        // 4. Select surface format (simple sRGB: B8G8R8A8UNorm or R8G8B8A8UNorm with SRGBNonlinearKHR)
         Span<VkSurfaceFormatKHR> surfaceFormats = stackalloc VkSurfaceFormatKHR[physicalDevice.GetSurfaceFormatsKHR_Count(surface)];
         physicalDevice.GetSurfaceFormatsKHR_Write(surface, surfaceFormats);
 
-        ColorFormat = surfaceFormats[0].Format;
-        ColorSpace = surfaceFormats[0].ColorSpace;
+        var chosenFormat = surfaceFormats[0];
+        foreach (var format in surfaceFormats)
+        {
+            if ((format.Format is VkFormat.B8G8R8A8UNorm or VkFormat.R8G8B8A8UNorm) &&
+                format.ColorSpace == VkColorSpaceKHR.SRGBNonlinearKHR)
+            {
+                chosenFormat = format;
+                break;
+            }
+        }
+
+        ColorFormat = chosenFormat.Format;
+        ColorSpace = chosenFormat.ColorSpace;
 
         // 5. Select present mode based on VSync setting
         var presentMode = Window.VSync ? VkPresentModeKHR.FifoKHR : VkPresentModeKHR.ImmediateKHR;

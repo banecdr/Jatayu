@@ -51,6 +51,7 @@ using Jatayu.Core.Profiling;
 using Jatayu.Core.Time;
 using Jatayu.DebugUI;
 using Jatayu.Renderer.Camera;
+using Jatayu.Renderer.Graph;
 using Jatayu.Renderer.Mesh;
 using Jatayu.RHI.Vulkan.Commands;
 using Jatayu.RHI.Vulkan.Context;
@@ -294,45 +295,27 @@ public static class Program
     using var imguiBackend = new ImGuiVulkanBackend(context, allocator, uploadManager, window, swapchain.ColorFormat);
     var debugOverlay = new DebugOverlay();
 
-    var colorRange = new VkImageSubresourceRange
-    {
-        AspectMask = VkImageAspectFlags.ColorBit,
-        LevelCount = 1,
-        LayerCount = 1,
-    };
+    using var cubeMesh = new Mesh(
+        vertexBuffer,
+        indexBuffer,
+        (uint)cubeVertices.Length,
+        (uint)cubeIndices.Length,
+        ownsBuffers: false
+    );
 
-    void TransitionColorImage(
-        CommandBuffer cmd,
-        VkImage img,
-        VkImageLayout from,
-        VkImageLayout to,
-        VkPipelineStageFlags srcStage,
-        VkPipelineStageFlags dstStage,
-        VkAccessFlags srcAccess,
-        VkAccessFlags dstAccess
-    )
-    {
-        cmd.PipelineBarrier(
-            srcStage,
-            dstStage,
-            VkDependencyFlags.None,
-            [],
-            [],
-            [
-                new VkImageMemoryBarrier
-                {
-                    SrcAccessMask = srcAccess,
-                    DstAccessMask = dstAccess,
-                    OldLayout = from,
-                    NewLayout = to,
-                    SrcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-                    DstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-                    Image = img,
-                    SubresourceRange = colorRange,
-                },
-            ]
-        );
-    }
+    // Modern Vulkan 1.3 Render Graph for DAG pass scheduling and automated sync2 synchronization
+    using var renderGraph = new RenderGraph();
+
+    // Preallocated submission arrays to guarantee 0 heap allocations per frame
+    var waitSemaphores = new VkSemaphore[1];
+    var waitStages = new VkPipelineStageFlags[] { VkPipelineStageFlags.ColorAttachmentOutputBit };
+    var submitCmds = new CommandBuffer[1];
+    var signalSemaphores = new VkSemaphore[1];
+
+    // Preallocated viewport, scissor, and descriptor bindings
+    var viewports = new VkViewport[] { new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 } };
+    var scissors = new VkRect2D[] { new VkRect2D(swapchain.Extent) };
+    var descriptorSets = new VkDescriptorSet[] { descriptorSet };
 
     // ---------------------------------------------------------------------------------------------
     // INTERACTIVE HOTKEY EVENT HOOKS
@@ -541,6 +524,8 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            viewports[0] = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
+            scissors[0] = new VkRect2D(swapchain.Extent);
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
             continue;
@@ -559,6 +544,8 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            viewports[0] = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
+            scissors[0] = new VkRect2D(swapchain.Extent);
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
             continue;
@@ -578,51 +565,32 @@ public static class Program
 
             gpuTimer.BeginFrame(cmd, frameSync.CurrentFrame);
 
-            // Transition swapchain image: Undefined -> ColorAttachmentOptimal
-            TransitionColorImage(
-                cmd,
+            renderGraph.Reset();
+
+            // Import swapchain presentation target and depth buffer into render graph
+            var swapchainTarget = renderGraph.ImportTexture(
+                "SwapchainColor",
                 image,
+                imageView,
+                swapchain.ColorFormat,
+                (uint)swapchain.Width,
+                (uint)swapchain.Height,
                 VkImageLayout.Undefined,
-                VkImageLayout.ColorAttachmentOptimal,
-                VkPipelineStageFlags.ColorAttachmentOutputBit,
-                VkPipelineStageFlags.ColorAttachmentOutputBit,
-                VkAccessFlags.None,
-                VkAccessFlags.ColorAttachmentWriteBit
+                VkPipelineStageFlags2.ColorAttachmentOutputBit,
+                VkAccessFlags2.None
             );
 
-            var colorAttachment = new VkRenderingAttachmentInfo
-            {
-                ImageView = imageView,
-                ImageLayout = VkImageLayout.ColorAttachmentOptimal,
-                LoadOp = VkAttachmentLoadOp.Clear,
-                StoreOp = VkAttachmentStoreOp.Store,
-                ClearValue = new VkClearColorValue { Float32 = clearColors[clearColorIndex] },
-            };
-
-            // Depth Attachment: Reverse-Z clears to DepthConvention.ClearDepth (0.0f)
-            var depthAttachment = depthBuffer.GetAttachmentInfo(
-                loadOp: VkAttachmentLoadOp.Clear,
-                storeOp: VkAttachmentStoreOp.DontCare,
-                clearDepth: DepthConvention.ClearDepth
+            var depthTarget = renderGraph.ImportTexture(
+                "SceneDepth",
+                depthBuffer.Image,
+                depthBuffer.ImageView,
+                depthBuffer.Format,
+                (uint)swapchain.Width,
+                (uint)swapchain.Height,
+                VkImageLayout.Undefined,
+                VkPipelineStageFlags2.EarlyFragmentTestsBit | VkPipelineStageFlags2.LateFragmentTestsBit,
+                VkAccessFlags2.None
             );
-
-            // Begin Modern Vulkan 1.3 Dynamic Rendering with Depth Buffer!
-            cmd.BeginRendering(
-                new VkRenderingInfo
-                {
-                    RenderArea = new VkRect2D(swapchain.Extent),
-                    LayerCount = 1,
-                    ColorAttachmentCount = 1,
-                    ColorAttachments = &colorAttachment,
-                    DepthAttachment = &depthAttachment,
-                }
-            );
-
-            // 1. Draw 3D Cube pass
-            gpuTimer.BeginPass(cmd, "3D Cube");
-            pipeline.Bind(cmd);
-            cmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
-            cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
 
             // Calculate Model-View-Projection Matrix:
             var rotTime = (float)time.TotalTime;
@@ -630,54 +598,79 @@ public static class Program
                         Matrix4x4.CreateRotationX(rotTime * 0f);
             var mvp = model * camera.ViewProjection;
 
-            // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
-            var pushData = new PushConstantData
-            {
-                Mvp = mvp,
-                PaniniDistance = camera.EffectivePaniniDistance,
-                PaniniScale = camera.PaniniScale,
-                AspectRatio = camera.AspectRatio,
-                Padding = 0f,
-            };
+            // 1. Main 3D Scene Rendering Pass (Dynamic Rendering with Reverse-Z Depth)
+            renderGraph.AddPass(
+                "MainScenePass",
+                setup =>
+                {
+                    setup.SetColorAttachment(
+                        swapchainTarget,
+                        loadOp: VkAttachmentLoadOp.Clear,
+                        storeOp: VkAttachmentStoreOp.Store,
+                        clearValue: new VkClearColorValue { Float32 = clearColors[clearColorIndex] }
+                    );
+                    setup.SetDepthAttachment(
+                        depthTarget,
+                        loadOp: VkAttachmentLoadOp.Clear,
+                        storeOp: VkAttachmentStoreOp.DontCare,
+                        clearDepth: DepthConvention.ClearDepth
+                    );
+                },
+                ctx =>
+                {
+                    var pCmd = ctx.CommandBuffer;
+                    pipeline.Bind(pCmd);
+                    pCmd.SetViewport(0, viewports);
+                    pCmd.SetScissor(0, scissors);
 
-            // Push MVP Matrix & Panini parameters to GPU via Push Constants (80 bytes)
-            cmd.PushConstants(
-                pipeline.Layout,
-                VkShaderStageFlags.VertexBit,
-                0,
-                new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
+                    // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
+                    var pushData = new PushConstantData
+                    {
+                        Mvp = mvp,
+                        PaniniDistance = camera.EffectivePaniniDistance,
+                        PaniniScale = camera.PaniniScale,
+                        AspectRatio = camera.AspectRatio,
+                        Padding = 0f,
+                    };
+
+                    pCmd.PushConstants(
+                        pipeline.Layout,
+                        VkShaderStageFlags.VertexBit,
+                        0,
+                        new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
+                    );
+
+                    pCmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, descriptorSets, []);
+                    cubeMesh.Bind(pCmd);
+                    cubeMesh.Draw(pCmd);
+
+                    // Render Diagnostics Overlay (Dear ImGui)
+                    if (debugOverlay.IsVisible)
+                    {
+                        imguiBackend.Render(pCmd);
+                    }
+                }
             );
 
-            // Bind Combined Image Sampler Descriptor Set (Set 0)
-            cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, [descriptorSet], []);
-
-            // Bind vertex and index buffers and draw the 36 indices (12 triangles)
-            cmd.BindVertexBuffers(0, [vertexBuffer.Handle], [new ByteSize64(0)]);
-            cmd.BindIndexBuffer(indexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt16);
-            cmd.DrawIndexed(36, 1, 0, 0, 0);
-            gpuTimer.EndPass(cmd, "3D Cube");
-
-            // 2. Draw Diagnostics Overlay (Dear ImGui)
-            if (debugOverlay.IsVisible)
-            {
-                gpuTimer.BeginPass(cmd, "DebugOverlay");
-                imguiBackend.Render(cmd);
-                gpuTimer.EndPass(cmd, "DebugOverlay");
-            }
-
-            cmd.EndRendering();
-
-            // Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
-            TransitionColorImage(
-                cmd,
-                image,
-                VkImageLayout.ColorAttachmentOptimal,
-                VkImageLayout.PresentSrcKHR,
-                VkPipelineStageFlags.ColorAttachmentOutputBit,
-                VkPipelineStageFlags.BottomOfPipeBit,
-                VkAccessFlags.ColorAttachmentWriteBit,
-                VkAccessFlags.None
+            // 2. Presentation Transition Pass (ensures swapchain image is transitioned to PresentSrcKHR)
+            renderGraph.AddPass(
+                "PresentTransition",
+                setup =>
+                {
+                    setup.ReadTexture(
+                        swapchainTarget,
+                        VkPipelineStageFlags2.ColorAttachmentOutputBit,
+                        VkAccessFlags2.None,
+                        VkImageLayout.PresentSrcKHR
+                    );
+                    setup.HasSideEffects(true);
+                },
+                ctx => { }
             );
+
+            // Compile & Execute Render Graph DAG (sync2 barriers + Dynamic Rendering + GPU timer queries)
+            renderGraph.Compile();
+            renderGraph.Execute(cmd, gpuTimer);
 
             cmd.End();
         }
@@ -687,11 +680,15 @@ public static class Program
         using (Profiler.Scope("QueueSubmit"))
         {
             var waitSemaphore = frameSync.CurrentImageAvailable;
+            waitSemaphores[0] = waitSemaphore;
+            submitCmds[0] = cmd;
+            signalSemaphores[0] = signalSemaphore;
+
             queue.Submit(
-                [waitSemaphore],
-                [VkPipelineStageFlags.ColorAttachmentOutputBit],
-                [cmd],
-                [signalSemaphore],
+                waitSemaphores,
+                waitStages,
+                submitCmds,
+                signalSemaphores,
                 frameSync.CurrentFence
             );
         }
