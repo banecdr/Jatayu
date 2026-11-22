@@ -112,6 +112,11 @@ public sealed class VulkanContext : IDisposable
     public Queue ComputeQueue { get; }
 
     /// <summary>
+    /// Gets the human-readable hardware name of the selected GPU.
+    /// </summary>
+    public string DeviceName { get; }
+
+    /// <summary>
     /// Initializes Vulkan 1.3, binds to the window surface, selects the best GPU, and builds the logical device.
     /// </summary>
     /// <param name="window">The desktop window to render into.</param>
@@ -188,7 +193,8 @@ public sealed class VulkanContext : IDisposable
         var selectedProps = new VkPhysicalDeviceProperties();
         Instance.PInvoke.vkGetPhysicalDeviceProperties.Invoke(PhysicalDevice.Handle, &selectedProps);
         byte* pDeviceName = selectedProps.DeviceName;
-        Console.WriteLine($"[Vulkan] Selected GPU: {Utf8.GetString(pDeviceName)} ({selectedProps.DeviceType})");
+        DeviceName = Utf8.GetString(pDeviceName);
+        Console.WriteLine($"[Vulkan] Selected GPU: {DeviceName} ({selectedProps.DeviceType})");
 
         // 7. Gather device extensions (Swapchain extension is mandatory for window rendering)
         var deviceExtensions = new HashSet<string>();
@@ -321,7 +327,9 @@ public sealed class VulkanContext : IDisposable
 
         if (missing.Count > 0)
         {
-            var deviceName = VulkanDeviceInfo.GetDeviceName(physicalDevice);
+            var devProps = new VkPhysicalDeviceProperties();
+            instance.PInvoke.vkGetPhysicalDeviceProperties.Invoke(physicalDevice.Handle, &devProps);
+            var deviceName = Utf8.GetString(devProps.DeviceName);
             throw new InvalidOperationException(
                 $"Selected Vulkan GPU '{deviceName}' does not meet the Jatayu D10 hardware floor!\n" +
                 $"Missing required features ({missing.Count}):\n  - " +

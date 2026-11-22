@@ -82,5 +82,17 @@ public class ApiInspectionTests
         foreach (var p in typeof(Brutal.VulkanApi.VkImageMemoryBarrier2).GetProperties())
             _output.WriteLine($"  prop: {p.PropertyType.Name} {p.Name}");
     }
+
+    [Fact]
+    public void InspectGlfwWindowEvents()
+    {
+        _output.WriteLine("=== GlfwWindow Events ===");
+        foreach (var ev in typeof(Brutal.GlfwApi.GlfwWindow).GetEvents())
+        {
+            var invoke = ev.EventHandlerType?.GetMethod("Invoke");
+            string paramsStr = invoke != null ? string.Join(", ", invoke.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) : "";
+            _output.WriteLine($"  Event: {ev.Name}({paramsStr})");
+        }
+    }
 }
 

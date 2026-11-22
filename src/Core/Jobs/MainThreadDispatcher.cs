@@ -19,6 +19,11 @@ namespace Jatayu.Core.Jobs;
 /// </summary>
 public sealed class MainThreadDispatcher
 {
+    /// <summary>
+    /// Global default main thread dispatcher.
+    /// </summary>
+    public static MainThreadDispatcher Default { get; } = new();
+
     private readonly ConcurrentQueue<Action> _queue = new();
 
     /// <summary>
