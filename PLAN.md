@@ -114,7 +114,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 1. **Trigger Window:** Executes at a **frame boundary**, strictly after the physics step and before any queries, raycasts, or rendering commands for the next frame are recorded.
 2. **Offset Snapping:** The shift offset is computed in double precision and snapped to a multiple of **256 m** (the terrain tile dimension covering $2\times 2$ cells), ensuring terrain tile data and cell-local coordinates remain invariant.
 3. **Subsystem Batch Updates:**
-   - Jolt physics: Active, sleeping, kinematic, and character bodies are translated by the negative offset using batched updates; raycast caches are updated.
+   - Jolt physics: Active, sleeping, kinematic, character bodies, and Ring A static cell collider bodies are translated by the negative offset using batched updates (consistent with D16). If the physics origin-shift spike exceeds 3.0 ms during Sprint 8 testing, fallback to rebuilding Ring A static colliders from cell cooked data in the new origin; raycast caches are updated.
    - Spatial audio: AudioListener position and all active AudioSource emitter coordinates are translated.
    - ECS & Scene: Root entity transforms and active Camera `WorldPosition` are updated.
 4. **Event Dispatch:** An `OriginShifted` event is broadcast through `EventBus` so any custom gameplay listeners can synchronize.
@@ -505,9 +505,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 4. Architectural Decisions Log & Resolutions
 
 * **D1 (Texture Compression in Cooker):**
-  * *Verification & Choice:* Inspected `Brutal.Texture.dll` and `Brutal.Ktx.dll` (v2026.10.2). They expose KTX2 containers and Basis Universal (UASTC/ETC1S) transcoders, but do not provide direct high-quality standalone offline BC7/BC5 block encoders. For direct raw BC7/BC5/BC4 block output into `.jpak` archives, `tools/Jatayu.Cooker/` will wrap a native `bc7enc` (MIT/Apache-2.0) or `ispc_texcomp` compressor via P/Invoke. Provides fast low-quality iteration mode and high-quality production mode.
+  * *Specification:* For direct raw BC7/BC5/BC4 block output into `.jpak` archives, `tools/Jatayu.Cooker/` will evaluate Basis Universal UASTC transcoding vs native `bc7enc` (see D27).
+  * *Status:* Pending: verify in Sprint 3a.
 * **D2 (ECS Implementation):**
-  * *Verification & Choice:* Candidate: **Arch** (verified Apache-2.0 license). Provides struct component archetype storage, zero-allocation queries (`QueryDescription`), parallel query execution, and runs on .NET 10. Compatibility, license constraints, and allocation behavior will be strictly validated in the Sprint 5a 100k-entity query benchmark spike. Fallback candidate: **Friflo.Engine.ECS** (verified MIT license) or a minimal custom archetype store.
+  * *Specification:* Candidate: **Arch**; Fallback candidate: **Friflo.Engine.ECS** or a minimal custom archetype store. A 100k-entity query benchmark with allocation checks will be run during the Sprint 5a ECS spike.
+  * *Status:* Pending: verify in Sprint 3a.
 * **D3 (Cell Sizing):**
   * *Choice:* **128 m** world cells; terrain tiles cover $2 \times 2$ cells (256 m). Stays configurable in `WorldConfig`.
 * **D4 (Distance Streaming Rings):**
@@ -523,21 +525,24 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 * **D7 (Automated Testing Framework):**
   * *Choice:* **xUnit** in `tests/Jatayu.Tests/` targeting .NET 10 for all non-GPU engine logic, combined with `tests/Jatayu.RenderSmoke/` for headless/offscreen Vulkan validation smoke tests.
 * **D8 (Meshoptimizer Binding):**
-  * *Verification:* `Ahwoo.BRUTAL.MeshOptimizer` (v2026.10.2) is referenced in `Jatayu.csproj` and confirmed to export: `meshopt_optimizeVertexCache`, `meshopt_optimizeVertexFetch`, `meshopt_optimizeOverdraw`, `meshopt_simplify`, `meshopt_buildMeshlets`, and `meshopt_generateVertexRemap`. Directly usable without extra dependencies.
+  * *Specification:* `Ahwoo.BRUTAL.MeshOptimizer` (v2026.10.2) is referenced in `Jatayu.csproj`.
+  * *Status:* Pending: verify in Sprint 3a (MeshOptimizer function exports: cache, fetch, overdraw, simplify, remap).
 * **D9 (Physics Precision):**
-  * *Verification:* `Ahwoo.BRUTAL.Jolt` (v2026.10.4) is compiled with single-precision floats (`Vec3`, `Float3`). Floating-origin rebasing (`OriginShift`) is therefore mandatory.
+  * *Specification:* `Ahwoo.BRUTAL.Jolt` (v2026.10.4) is referenced in `Jatayu.csproj`.
+  * *Status:* Pending: verify in Sprint 3a (Jolt single vs double precision).
 * **D10 (Final Hardware Floor):**
-  * *Choice:* Vulkan 1.3 discrete GPU with at least 4 GB VRAM and all of the following:
+  * *Specification:* Vulkan 1.3 discrete GPU, at least 4 GB VRAM, with all of the following:
     - Core 1.3: `dynamicRendering`, `synchronization2`, `maintenance4`
-    - Core 1.2: `timelineSemaphore`, `bufferDeviceAddress`, `drawIndirectCount`, `samplerFilterMinmax`, `descriptorIndexing` (`runtimeDescriptorArray`, `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`, `descriptorBindingUpdateUnusedWhilePending`, `descriptorBindingVariableDescriptorCount`, `shaderSampledImageArrayNonUniformIndexing`, `shaderStorageBufferArrayNonUniformIndexing`)
+    - Core 1.2: `timelineSemaphore`, `bufferDeviceAddress`, `drawIndirectCount`, `samplerFilterMinmax`, `descriptorIndexing` with `runtimeDescriptorArray`, `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`, `descriptorBindingUpdateUnusedWhilePending`, `descriptorBindingVariableDescriptorCount`, `shaderSampledImageArrayNonUniformIndexing`, `shaderStorageBufferArrayNonUniformIndexing`
     - Core 1.1: `shaderDrawParameters`
     - Core 1.0: `samplerAnisotropy`, `multiDrawIndirect`, `textureCompressionBC`, `shaderInt64`, `fragmentStoresAndAtomics`
     - Extensions: `VK_EXT_memory_budget`; optional: `VK_EXT_debug_utils` (debug builds)
-    `VulkanContext` will explicitly request all of these in Sprint 3a and fail with a clear exception naming any missing feature.
+    `VulkanContext` will explicitly request all of these in Sprint 3a and fail with a clear message naming each missing feature.
+  * *Status:* Pending: verify in Sprint 3a (GPU device feature support check).
 * **D11 (Platform Target):**
   * *Choice:* Windows x64 primary, Linux x64 secondary (GLFW, Vulkan, OpenAL are cross-platform).
 * **D12 (Reference GPU Tier):**
-  * *Choice:* Discrete GPU of NVIDIA GeForce RTX 3060 (12 GB) or AMD Radeon RX 6600 XT (8 GB) class at $1920\times 1080$. Development GPU is NVIDIA GeForce RTX 5060 Ti (Vulkan 1.4.351, Driver 617.42). Every measurement report will explicitly declare the physical GPU, driver version, and CPU model used.
+  * *Choice:* Discrete GPU of NVIDIA GeForce RTX 3060 (12 GB) or AMD Radeon RX 6600 XT (8 GB) class at $1920\times 1080$. Every measurement report will explicitly declare the physical GPU, driver version, and CPU model used.
 * **D13 (Debug UI Location):**
   * *Choice:* `ImGuiVulkanBackend.cs` and `DebugOverlay.cs` are placed in `src/DebugUI/`, not `src/Editor/`. The engine depends on `DebugUI`, while the optional editor depends on the engine.
 * **D14 (Sprint 3a Temporary Paths):**
@@ -553,27 +558,68 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 * **D19 (Velocity-Scaled Streaming Radius):**
   * *Choice:* At 100 m/s, 600 m gives only 6 s lead time. `WorldConfig` adds `LeadSeconds` (default: 6 s): effective load radius = base radius + speed $\times$ LeadSeconds, capped, prioritized along player velocity.
 * **D20 (CI and Hardware Floor Strategy):**
-  * *Choice:* The render smoke test first executes a feature probe. On a physical GPU meeting the D10 floor, it runs the full verification suite. On a runner lacking advanced features (e.g. software rasterizer/lavapipe), it runs a reduced validation-only suite (instance, device, swapchain-less clear) and reports skipped checks explicitly as `SKIPPED`. Full-suite passing results on a D10-compliant machine are mandatory before declaring any sprint complete.
-* **D21 (MipResidency Dynamic Allocation):**
-  * *Choice:* Replaces descriptor min-LOD clamps. Each streamed texture holds a contiguous range of top-mips-missing levels (always including the resident mip tail $\le 64\times 64$). To adjust residency, `TextureStreamer` allocates a new `GpuTexture` with the target mip range, copies resident mips via GPU blit, uploads missing mips via `UploadManager`, atomically updates the bindless slot, and retires the old image via `DeferredDeletionQueue`. Churn is limited by stepping in 2-mip increments; target mips are chosen via CPU distance and texel-density heuristics.
-* **D22 (Unified Clipmap Terrain Renderer):**
-  * *Choice:* `TerrainClipmap` is the sole terrain renderer for all rings. `TerrainTile` supplies streamed tile data (height, normals, splat weights, Jolt shape); `TerrainHeightPyramid` supplies coarse far-field geometry. The clipmap samples tile data where resident and the pyramid elsewhere, blending over a 16 m edge transition. Tiles never submit draw calls directly.
-* **D23 (Streaming Radius Prefetch Cap):**
-  * *Choice:* The velocity-scaled radius from D19 is capped at 900 m and applies strictly to prefetch loading (~155 cells maximum). Activation of colliders, audio, and dynamic entity ticking remains strictly bounded to the 600 m Ring A radius. `StreamingManager` defers prefetch under `VramBudget` pressure.
-* **D24 (GPU Culling Across 5 Views and LOD Selection):**
-  * *Choice:* `cull.comp` evaluates instance bounding spheres and selects mesh LOD from the mesh record's LOD error table, applying `lod_dither.glsl` screen-door cross-fade. Culling executes for 5 views per frame (main camera + 4 shadow cascades). Main-camera culling is budgeted at 0.30 ms; cascade culling is accounted within the 0.80 ms shadow budget.
-* **D25 (Previous-Frame Transforms for Motion Vectors):**
-  * *Choice:* `DynamicInstanceRing` and `InstanceBuffer` store current and previous camera-relative transforms for dynamic entities (static instances use previous = current). The previous-frame view-projection matrix is corrected using the double-precision camera delta and snapped origin shifts, ensuring TAA velocity remains continuous across rebases.
-* **D26 (ECS Fallback License Verification):**
-  * *Verification & Choice:* Verified `Arch` is licensed under **Apache-2.0** and `Friflo.Engine.ECS` is licensed under **MIT**. Both licenses are permissive and acceptable for production. A minimal custom archetype store is retained as an emergency secondary fallback.
-* **D27 (BC7 Encoder Evaluation Route):**
-  * *Choice:* Before committing to native `bc7enc`, a quick evaluation on 3 test textures (albedo, normal, roughness) will compare Basis Universal UASTC transcoding to BC7 via `Ahwoo.BRUTAL.Ktx` vs native `bc7enc`. If UASTC shows no perceptible fidelity loss, it will be adopted to avoid native binary dependencies; otherwise native `bc7enc` will be linked via P/Invoke.
+  * *Choice:* The render smoke test first runs a feature probe. On a device that meets the D10 floor it runs the full suite. On a device that does not (for example a software Vulkan driver such as lavapipe on a CI runner), it runs a reduced validation-only suite (instance, device, swapchain-less offscreen clear and triangle) and reports the skipped checks explicitly as SKIPPED, not as passed or failed. Full-suite results are required before any sprint is marked done, produced on a developer machine that meets the floor.
+* **D21 (MipResidency Design):**
+  * *Choice:* Replaces the "min-LOD clamp in descriptor table" concept. Vulkan fixes an image's mip count at creation and sparse residency is not in the hardware floor. Therefore: each streamed texture is a `GpuTexture` holding a contiguous range of top-mips-missing levels (always including the resident mip tail of $64\times 64$ and below). To change residency the streamer allocates a new image with the new mip range, GPU-copies the already resident mips, uploads the new ones through `UploadManager`, atomically swaps the bindless slot, and retires the old image via `DeferredDeletionQueue`. Residency changes in steps of 2 mip levels to limit churn. Target mip selection uses a CPU heuristic (distance and texel density from instance bounds of materials using the texture), not GPU feedback. GPU feedback is an optional later improvement.
+* **D22 (One Terrain Renderer):**
+  * *Choice:* `TerrainClipmap` is the only terrain renderer for all rings. `TerrainTile` supplies streamed data (height, normals, splat weights, collider) and `TerrainHeightPyramid` supplies the coarse far field. The clipmap samples tile data where a tile is resident and the pyramid elsewhere, with a blend over the last 16 m of a tile edge. Tiles never draw geometry themselves.
+* **D23 (Streaming Radius Cap):**
+  * *Choice:* The velocity-scaled radius from D19 is capped at 900 m and applies to prefetch only (load data early, around 155 cells maximum). Activation of colliders, audio, and dynamic-entity interaction still happens only inside the 600 m Ring A radius. `StreamingManager` must consult `VramBudget` and refuse or defer prefetch requests under memory pressure.
+* **D24 (GPU Culling Views and LOD Selection):**
+  * *Choice:* `cull.comp` selects the mesh LOD per instance from a LOD table stored in the mesh record (screen-space error threshold, with the cross-fade from `lod_dither.glsl`). Culling runs for five views per frame: the main camera and the 4 shadow cascades. The main-view cost counts in the 0.30 ms culling budget, and cascade culling counts inside the 0.80 ms shadow budget.
+* **D25 (Previous-Frame Transforms for Velocity):**
+  * *Choice:* `DynamicInstanceRing` and `InstanceBuffer` store the current and previous camera-relative transform for dynamic instances (static instances use previous equals current). The previous-frame view-projection is corrected using the double-precision camera delta, including origin shifts, so TAA velocity stays continuous across shifts.
+* **D26 (ECS Fallback License):**
+  * *Specification:* In D2, `Friflo.Engine.ECS` is listed as MIT; `Arch` is expected Apache-2.0. If Friflo is LGPL, remove it as a fallback and name a minimal custom archetype store as the fallback instead.
+  * *Status:* Pending: verify in Sprint 3a.
+* **D27 (BC7 Encoder Evaluation):**
+  * *Specification:* Before committing to native `bc7enc`, run a quick comparison on three sample textures (albedo, normal, roughness): Basis UASTC encoded and transcoded to BC7 through the Ktx binding versus `bc7enc`. If the UASTC route has no visible quality loss, prefer it (no native dependency). Otherwise use `bc7enc`. Record the result and the chosen route. BC5 and BC4 follow the same choice.
+  * *Status:* Pending: verify in Sprint 3a.
 * **D28 (Meshlet Scope Removal):**
-  * *Choice:* Mesh shaders and meshlets are fully removed from the engine plan and catalog to maintain disciplined scope. They remain an optional post-Sprint-10 consideration.
-* **D29 (Sprint 5b Scope Clarification):**
-  * *Choice:* Sprint 5b includes the basic `ForwardRenderer3D` path, `Skybox`, `DebugRenderer`, `ShadowMap`, `LightEnvironment`, and their shaders (`skybox.*`, `shadow.*`, `debug_line.*`), which are listed explicitly in the roadmap and catalog.
-* **D30 (Shared Formats Dependency Direction):**
-  * *Choice:* `tools/Jatayu.Cooker/` and `tools/Jatayu.WorldGen/` reference only `src/Jatayu.AssetFormats/` and BRUTAL import libraries. They never reference runtime engine projects or Vulkan graphics types.
+  * *Choice:* Mesh shaders and meshlets are fully removed from the engine plan and catalog to maintain disciplined scope. (Optional post-Sprint-10 item).
+* **D29 (Sprint 5b Scope):**
+  * *Choice:* `ForwardRenderer3D` basic path, `Skybox`, `DebugRenderer`, `ShadowMap`, `LightEnvironment` and their shaders (`skybox.*`, `shadow.*`, `debug_line.*`) are in Sprint 5b.
+* **D30 (Runtime Asset Dependency Direction):**
+  * *Choice:* `tools/Jatayu.Cooker/` and `tools/Jatayu.WorldGen/` reference only `src/Jatayu.AssetFormats/` and, where needed, `Ahwoo.BRUTAL.*` import libraries. They never reference `src/` runtime projects or Vulkan.
+
+### 4.1 VERIFY Checklist
+* [x] **Installed Ahwoo.BRUTAL.* package names and versions:** Verified by reading `Jatayu.csproj` (all 50 packages referenced):
+
+| Category | Package Name | Version | Category | Package Name | Version |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Core** | `Ahwoo.BRUTAL.Core` | 2026.10.4 | **Assets** | `Ahwoo.BRUTAL.Texture` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Collections` | 2026.10.2 | | `Ahwoo.BRUTAL.Texture.Abstractions` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Concurrency` | 2026.10.2 | | `Ahwoo.BRUTAL.Stb` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Interop` | 2026.10.2 | | `Ahwoo.BRUTAL.Gli` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Localization` | 2026.10.3 | | `Ahwoo.BRUTAL.Ktx` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Logging` | 2026.10.3 | | `Ahwoo.BRUTAL.Gltf` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Maths` | 2026.10.3 | | `Ahwoo.BRUTAL.MeshOptimizer` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Memory` | 2026.10.2 | | `Ahwoo.BRUTAL.FreeType` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Numerics` | 2026.10.2 | | `Ahwoo.BRUTAL.ZLib` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Strings` | 2026.10.2 | **UI** | `Ahwoo.BRUTAL.ImGui` | 2026.10.3 |
+| **Window/Input** | `Ahwoo.BRUTAL.Glfw` | 2026.10.5 | | `Ahwoo.BRUTAL.ImGui.Abstractions` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Sdl` | 2026.10.3 | | `Ahwoo.BRUTAL.ImGui.Backends` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Sdl.Image` | 2026.10.3 | | `Ahwoo.BRUTAL.ImGui.Extensions` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Sdl.Mixer` | 2026.10.3 | | `Ahwoo.BRUTAL.ImGui.FreeType` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Sdl.Ttf` | 2026.10.3 | | `Ahwoo.BRUTAL.ImPlot` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.NativeFileDialog`| 2026.10.3 | | `Ahwoo.BRUTAL.NotCurses` | 2026.10.1 |
+| **Graphics** | `Ahwoo.BRUTAL.Vulkan` | 2026.10.3 | **Physics** | `Ahwoo.BRUTAL.Jolt` | 2026.10.4 |
+| | `Ahwoo.BRUTAL.Vulkan.Abstractions`| 2026.10.3 | | `Ahwoo.BRUTAL.Box2D` | 2026.10.2 |
+| | `Ahwoo.BRUTAL.Vulkan.Vma` | 2026.10.3 | **Audio** | `Ahwoo.BRUTAL.OpenAl` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.OpenGl` | 2026.10.2 | | `Ahwoo.BRUTAL.Fmod` | 2026.10.4 |
+| | `Ahwoo.BRUTAL.ShaderC` | 2026.10.3 | **Network** | `Ahwoo.BRUTAL.RakNet` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Slang` | 2026.10.3 | **Monitor** | `Ahwoo.BRUTAL.Monitor.Common` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Render.Common` | 2026.10.2 | | `Ahwoo.BRUTAL.Monitor.Host` | 2026.10.3 |
+| | `Ahwoo.BRUTAL.Render.Mesh` | 2026.10.2 | | | |
+| | `Ahwoo.BRUTAL.Render.Debug` | 2026.10.2 | | | |
+| | `Ahwoo.BRUTAL.RenderDoc` | 2026.10.3 | | | |
+| | `Ahwoo.BRUTAL.RenderDoc.ImGui` | 2026.10.3 | | | |
+
+* [ ] **D1/D27:** Ktx binding Basis Universal support; BC7 comparison result; chosen encoder route. Status: *Pending: verify in Sprint 3a*.
+* [ ] **D2/D26:** Arch license; Friflo license; .NET 10 compatibility of Arch. Status: *Pending: verify in Sprint 3a*.
+* [ ] **D8:** MeshOptimizer function exports (cache, fetch, overdraw, simplify, remap). Status: *Pending: verify in Sprint 3a*.
+* [ ] **D9:** Jolt single versus double precision. Status: *Pending: verify in Sprint 3a*.
+* [ ] **D10:** Which of the listed device features the development GPU actually supports against the D10 hardware floor. Status: *Pending: verify in Sprint 3a*.
 
 ---
 
@@ -612,10 +658,10 @@ To maintain rigorous, objective performance validation across sprints, all frame
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 3a: Textures, Pipelines, Tests and CI [NEXT]                              │
 │  - Create src/Jatayu.AssetFormats/; add TextureLoader as importer there          │
-│  - GpuTexture, VulkanSampler (with min-reduction mode), ShaderCompiler, Shaders  │
+│  - GpuTexture, VulkanSampler, ShaderCompiler, ShaderLoader, Shaders              │
 │  - VulkanPipeline & PipelineBuilder, CommandPoolManager, Descriptors             │
 │  - D14 temporary synchronous upload helper                                       │
-│  - Directory.Build.props, tests/Jatayu.Tests, tests/Jatayu.RenderSmoke (D20 probe│
+│  - Directory.Build.props, tests/Jatayu.Tests, tests/Jatayu.RenderSmoke (D20 probe)│
 │  - docs/RENDER_CONVENTIONS.md; VulkanContext requests full D10 feature set       │
 │  - Result: Textured cube through new pipeline abstraction, validation clean, CI  │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
@@ -656,7 +702,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
 │ SPRINT 5b: Large-World Rendering Foundations                                     │
 │  - WorldPosition (double), Camera-Relative Rendering, OriginShift (256m snap)    │
 │  - Frustum culling (5 planes + max draw distance clamp)                          │
-│  - BindlessTable, basic GeometryPool, DynamicInstanceRing, Material, MaterialTab │
+│  - BindlessTable, basic GeometryPool, DynamicInstanceRing, Material, MaterialTable│
 │  - PBR shaders, DirectionalLight, ShadowMap with shadow.*, LightEnvironment      │
 │  - Skybox with skybox.*, DebugRenderer with debug_line.*, basic ForwardRenderer3D│
 │  - Result: PBR scene rendered at 50,000m from origin with zero vertex jitter     │
@@ -667,8 +713,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 │ SPRINT 6a: World Grid and Streaming                                              │
 │  - WorldConfig (D18 rings, D19 lead time, D23 900m cap), WorldCell, WorldGrid    │
 │  - StreamingManager, CellLoader, CellCooker, StreamingDebugOverlay (adds map)   │
-│  - CellCoord, CellFormat, WorldConstants from Jatayu.AssetFormats (P4)           │
-│  - tools/Jatayu.WorldGen/ procedural generator with placeholder meshes (P6)      │
+│  - CellCoord, CellFormat, WorldConstants from Jatayu.AssetFormats                │
+│  - tools/Jatayu.WorldGen/ procedural generator with placeholder meshes           │
 │  - Temporary non-GPU instanced draw path for cell instances (replaced in 7a)     │
 │  - Result: Traverse 16 km x 16 km world at 100 m/s without hitch > 2ms           │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
@@ -769,8 +815,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-14** | Dashboard | Recounted all catalog files across 20 subsystem tables: 215 total planned files, 16 completed files (7.4% completion). |
 | **CL-15** | Cross-Refs | Fixed broken cross-reference in Section 1.4 pointing to Reference Scene (Section 5) and OriginShift (Section 1.3). Removed all legacy document tags. |
 | **CL-16** | Sprint 5b | Resolved bindless sequencing bug by moving `BindlessTable.cs` and basic `GeometryPool.cs` into Sprint 5b to support `MaterialTable` and `MipResidency`. Added `DynamicInstanceRing.cs`. |
-| **CL-17** | Decisions | Recorded verified D8 (`Ahwoo.BRUTAL.MeshOptimizer` v2026.10.2 functions), D9 (Jolt single-precision floats), D10 (Vulkan 1.3 hardware floor requirements), D11 (Platform targets), and D12 (Reference GPU tier). |
-| **CL-18** | Decisions | Recorded verified findings for D1 (native `bc7enc` P/Invoke in cooker) and D2 (Arch candidate Apache-2.0 license, Sprint 5a spike). |
+| **CL-17** | Decisions | Recorded decisions D8 to D12 (MeshOptimizer binding, Jolt physics precision, Vulkan 1.3 hardware floor, platform targets, and reference GPU tier) with runtime verification marked "Pending: verify in Sprint 3a" where applicable. |
+| **CL-18** | Decisions | Recorded decisions D1 (texture compression route) and D2 (ECS implementation candidate) with runtime verification marked "Pending: verify in Sprint 3a". |
 | **CL-19** | Sprint 3b | Moved `ImGuiVulkanBackend.cs` and `DebugOverlay.cs` to `src/DebugUI/` (D13) to ensure engine never depends on editor folder. |
 | **CL-20** | Sprint 3a, 4 | Formally permitted temporary synchronous upload and runtime PNG exception for Sprint 3a (D14), marked `// TEMPORARY(Sprint 3b/4)`. |
 | **CL-21** | Sprint 6a, 6b | Added `tools/Jatayu.WorldGen/` (Sprint 6a), `TerrainHeightPyramid.cs` (Sprint 6b), `HlodCooker.cs`, and `ImpostorCooker.cs`. Formalized terrain tile 256m ownership and collider rules (D15). |
@@ -779,14 +825,26 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-24** | Sprint 5a, 5b | Split Sprint 5 into **Sprint 5a** (ECS & Engine Runtime) and **Sprint 5b** (Large-World Rendering Foundations, Bindless, Origin Shift). |
 | **CL-25** | Sprint 6a, 6b | Split Sprint 6 into **Sprint 6a** (World Grid & Streaming) and **Sprint 6b** (Terrain, HLOD & Texture Streaming). |
 | **CL-26** | World | Added `LeadSeconds` (default: 6 s) velocity-scaled streaming radius calculation to `WorldConfig` (D19) and foliage Ring A-only rule (D18). |
-| **CL-27** | Vulkan RHI | Replaced D10 with the exhaustive Vulkan 1.3 hardware floor specification (P1). |
-| **CL-28** | Testing & CI | Added decision D20: hardware probe in `tests/Jatayu.RenderSmoke` running full test suite on D10 hardware or reduced validation suite on CI/software drivers (P2). |
-| **CL-29** | Header | Removed "meshlet-ready" and all references to meshlets from PLAN.md (P3, D28). |
-| **CL-30** | Shared Formats | Moved `CellFormat.cs` and `CellCoord.cs` to `src/Jatayu.AssetFormats/World/`, added `WorldConstants.cs`, and removed duplicate `CookedCellRecord` from `CookedFormats.cs` (P4). |
-| **CL-31** | Core Math | Updated floating-origin shift snap from 128m to 256m (terrain tile multiple) in Section 1.3 and `OriginShift.cs` (P5). |
-| **CL-32** | WorldGen | Updated `tools/Jatayu.WorldGen/Program.cs` catalog row to generate procedural placeholder glTF meshes into `assets/generated/` (P6). |
-| **CL-33** | DebugUI | Clarified `DebugOverlay.cs` scope for Sprint 3b to frame time, pass times, allocations, and VRAM only (P7). |
-| **CL-34** | Renderer | Specified `ForwardRenderer3D.cs` role as basic forward in Sprint 5b, converted to GPU-driven indirect in Sprint 7a (P8, D29). |
-| **CL-35** | Streaming & Mips | Added decisions D21 (MipResidency dynamic allocation and bindless swap), D22 (unified `TerrainClipmap` renderer), and D23 (900m streaming prefetch cap). |
-| **CL-36** | GPU-Driven | Added decisions D24 (culling across 5 views and LOD selection), D25 (previous-frame transforms for TAA motion vectors continuous across origin shifts), and D30 (shared formats dependency direction). |
-| **CL-37** | Decisions | Added decisions D26 (ECS licenses: Arch Apache-2.0, Friflo MIT), and D27 (BC7 encoder evaluation route). |
+| **CL-27** | Sprint 3a | Replaced D10 with the exhaustive Vulkan 1.3 hardware floor specification. |
+| **CL-28** | Sprint 3a | Added decision D20: hardware probe in `tests/Jatayu.RenderSmoke` running full test suite on D10 hardware or reduced validation suite on CI/software drivers. |
+| **CL-29** | Sprint 10+ | Removed "meshlet-ready" and all references to meshlets from PLAN.md (D28). |
+| **CL-30** | Sprint 6a | Moved `CellFormat.cs` and `CellCoord.cs` to `src/Jatayu.AssetFormats/World/`, added `WorldConstants.cs`, and removed duplicate `CookedCellRecord` from `CookedFormats.cs`. |
+| **CL-31** | Sprint 5b | Updated floating-origin shift snap from 128m to 256m (terrain tile multiple) in Section 1.3 and `OriginShift.cs`. |
+| **CL-32** | Sprint 6a | Updated `tools/Jatayu.WorldGen/Program.cs` catalog row to generate procedural placeholder glTF meshes into `assets/generated/`. |
+| **CL-33** | Sprint 3b | Clarified `DebugOverlay.cs` scope for Sprint 3b to frame time, pass times, allocations, and VRAM only. |
+| **CL-34** | Sprint 5b, 7a | Specified `ForwardRenderer3D.cs` role as basic forward in Sprint 5b, converted to GPU-driven indirect in Sprint 7a (D29). |
+| **CL-35** | Sprint 6b | Added decision D21 (MipResidency dynamic allocation and bindless swap). |
+| **CL-36** | Sprint 6b | Added decision D22 (unified `TerrainClipmap` renderer for all rings). |
+| **CL-37** | Sprint 6a | Added decision D23 (900m streaming prefetch cap with Ring A 600m activation boundary). |
+| **CL-38** | Sprint 7a | Added decision D24 (GPU culling across 5 views and LOD error table selection with dithering). |
+| **CL-39** | Sprint 7a | Added decision D25 (previous-frame transforms for TAA motion vectors continuous across origin shifts). |
+| **CL-40** | Sprint 5a | Added decision D26 (ECS fallback license; status: Pending: verify in Sprint 3a). |
+| **CL-41** | Sprint 4 | Added decision D27 (BC7 encoder evaluation route; status: Pending: verify in Sprint 3a). |
+| **CL-42** | Sprint 5b | Added decision D29 (Sprint 5b scope: ForwardRenderer3D basic, Skybox, DebugRenderer, ShadowMap, LightEnvironment). |
+| **CL-43** | Sprint 4, 6a | Added decision D30 (shared formats dependency direction: `tools/` only reference `src/Jatayu.AssetFormats/`). |
+| **CL-44** | Sprint 3a | Added Section 4.1 VERIFY checklist with file-reading package inspection and pending Sprint 3a verification markers. |
+| **CL-45** | Decisions | Reworded CL-17 and CL-18 to state decisions D8-D12 and D1/D2 verification statuses are marked "Pending: verify in Sprint 3a", removing unverified claims. |
+| **CL-46** | Physics, Core | Updated Section 1.3 step 3 to include Ring A static cell colliders in batched updates with D16 3.0 ms fallback. |
+| **CL-47** | Cleanup | Removed leftover brief tags (P1-P8, P4, P6) from Sprint 6a box and Change Log entries CL-27 to CL-34. |
+| **CL-48** | Roadmap | Fixed cosmetic typos in Sprint 3a box (closed parenthesis, added ShaderLoader) and Sprint 5b box (MaterialTable). |
+| **CL-49** | Verification | Populated Section 4.1 with compact table of installed Ahwoo.BRUTAL.* packages read from Jatayu.csproj. |
