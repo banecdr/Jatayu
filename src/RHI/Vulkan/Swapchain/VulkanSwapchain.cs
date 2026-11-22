@@ -208,14 +208,14 @@ public sealed class VulkanSwapchain : IDisposable
         ];
         var compositeAlpha = alphaModes.First(mode => (capabilities.SupportedCompositeAlpha & mode) != 0);
 
-        // 4. Select surface format (prefer standard 32-bit sRGB: B8G8R8A8_SRGB or R8G8B8A8_SRGB with SrgbNonlinearKHR)
+        // 4. Select surface format (simple sRGB: B8G8R8A8UNorm or R8G8B8A8UNorm with SRGBNonlinearKHR)
         Span<VkSurfaceFormatKHR> surfaceFormats = stackalloc VkSurfaceFormatKHR[physicalDevice.GetSurfaceFormatsKHR_Count(surface)];
         physicalDevice.GetSurfaceFormatsKHR_Write(surface, surfaceFormats);
 
         var chosenFormat = surfaceFormats[0];
         foreach (var format in surfaceFormats)
         {
-            if ((format.Format is VkFormat.B8G8R8A8SRGB or VkFormat.R8G8B8A8SRGB) &&
+            if ((format.Format is VkFormat.B8G8R8A8UNorm or VkFormat.R8G8B8A8UNorm) &&
                 format.ColorSpace == VkColorSpaceKHR.SRGBNonlinearKHR)
             {
                 chosenFormat = format;
