@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: VulkanContext.cs
  * LOCATION: src/RHI/Vulkan/Context/VulkanContext.cs
  * 
@@ -130,7 +130,39 @@ public sealed class VulkanContext : IDisposable
             instanceExtensions.Add(Utf8.GetString(glfwExtensions[i]));
         }
 
-        // 3. Create Vulkan 1.3 Instance
+        // 3. Check for validation layer support in DEBUG builds
+        var instanceLayers = new HashSet<string>();
+#if DEBUG
+        const string validationLayer = "VK_LAYER_KHRONOS_validation";
+        int layerCount = Brutal.VulkanApi.Vulkan.EnumerateInstanceLayerProperties_Count();
+        if (layerCount > 0)
+        {
+            var availableLayers = stackalloc VkLayerProperties[layerCount];
+            Brutal.VulkanApi.Vulkan.EnumerateInstanceLayerProperties_Write(new Span<VkLayerProperties>(availableLayers, layerCount));
+            bool hasValidation = false;
+            for (int i = 0; i < layerCount; i++)
+            {
+                byte* pName = availableLayers[i].LayerName;
+                if (Utf8.GetString(pName) == validationLayer)
+                {
+                    hasValidation = true;
+                    break;
+                }
+            }
+
+            if (hasValidation)
+            {
+                instanceLayers.Add(validationLayer);
+                Console.WriteLine($"[Vulkan] Enabled Validation Layer: {validationLayer}");
+            }
+            else
+            {
+                Console.WriteLine($"[Vulkan] {validationLayer} not present on system. Running without validation layer.");
+            }
+        }
+#endif
+
+        // 4. Create Vulkan 1.3 Instance
         Instance = Brutal.VulkanApi.Vulkan.CreateInstance(new Instance.CreateInfo
         {
             AppInfo = new VkApplicationInfo
@@ -139,21 +171,26 @@ public sealed class VulkanContext : IDisposable
             },
             Flags = VulkanHelpers.GetPlatformRequiredInstanceCreateFlags(),
             EnabledExtensions = instanceExtensions,
-            EnabledLayers = [],
+            EnabledLayers = instanceLayers,
         });
 
-        // 4. Create Window Surface
+        // 5. Create Window Surface
         if (Glfw.CreateWindowSurface(Instance.VkHandle, window.GlfwHandle, out var surfaceHandle) != (int)VkResult.Success)
             throw new InvalidOperationException("Failed to create a Vulkan window surface.");
 
         Surface = new VkSurfaceKHR((nint)surfaceHandle);
 
-        // 5. Select the best Physical GPU (supporting graphics and presentation)
+        // 6. Select the best Physical GPU (scored by type, queues, and VRAM)
         var (bestGpu, bestFamilies) = PickBestGpu(Instance, Surface);
         PhysicalDevice = bestGpu;
         QueueFamilies = bestFamilies;
 
-        // 6. Gather device extensions (Swapchain extension is mandatory for window rendering)
+        var selectedProps = new VkPhysicalDeviceProperties();
+        Instance.PInvoke.vkGetPhysicalDeviceProperties.Invoke(PhysicalDevice.Handle, &selectedProps);
+        byte* pDeviceName = selectedProps.DeviceName;
+        Console.WriteLine($"[Vulkan] Selected GPU: {Utf8.GetString(pDeviceName)} ({selectedProps.DeviceType})");
+
+        // 7. Gather device extensions (Swapchain extension is mandatory for window rendering)
         var deviceExtensions = new HashSet<string>();
         VulkanHelpers.AddSwapchainExtensions(deviceExtensions);
         VulkanHelpers.AddMandatoryIfSupportedDeviceExtensions(deviceExtensions, PhysicalDevice);
@@ -293,10 +330,11 @@ public sealed class VulkanContext : IDisposable
         }
     }
 
-    private static (PhysicalDevice, QueueFamilies) PickBestGpu(Instance instance, VkSurfaceKHR surface)
+    private static unsafe (PhysicalDevice, QueueFamilies) PickBestGpu(Instance instance, VkSurfaceKHR surface)
     {
         PhysicalDevice? selectedDevice = null;
         QueueFamilies? selectedFamilies = null;
+        int highestScore = -1;
 
         foreach (var candidate in instance.PhysicalDevices)
         {
@@ -306,12 +344,44 @@ public sealed class VulkanContext : IDisposable
             if (!families.IsComplete)
                 continue;
 
-            selectedDevice = candidate;
-            selectedFamilies = families;
+            var props = new VkPhysicalDeviceProperties();
+            instance.PInvoke.vkGetPhysicalDeviceProperties.Invoke(candidate.Handle, &props);
 
-            // If unified (graphics and presentation share the same queue), pick it immediately
+            var memProps = new VkPhysicalDeviceMemoryProperties();
+            instance.PInvoke.vkGetPhysicalDeviceMemoryProperties.Invoke(candidate.Handle, &memProps);
+
+            ulong deviceLocalBytes = 0;
+            for (uint i = 0; i < memProps.MemoryHeapCount; i++)
+            {
+                if ((memProps.MemoryHeaps[(int)i].Flags & VkMemoryHeapFlags.DeviceLocalBit) != 0)
+                {
+                    deviceLocalBytes += memProps.MemoryHeaps[(int)i].Size.Value;
+                }
+            }
+
+            // Score hardware category: Discrete GPU is strongly preferred over Integrated/Virtual/CPU
+            int score = props.DeviceType switch
+            {
+                VkPhysicalDeviceType.DiscreteGpu => 100_000,
+                VkPhysicalDeviceType.IntegratedGpu => 10_000,
+                VkPhysicalDeviceType.VirtualGpu => 5_000,
+                VkPhysicalDeviceType.Cpu => 1_000,
+                _ => 100,
+            };
+
+            // Bonus for unified graphics and presentation queue (avoids cross-queue barriers)
             if (families.IsUnified)
-                break;
+                score += 500;
+
+            // Bonus proportional to local VRAM amount (1 point per 10 MB)
+            score += (int)(deviceLocalBytes / (10 * 1024 * 1024));
+
+            if (score > highestScore)
+            {
+                highestScore = score;
+                selectedDevice = candidate;
+                selectedFamilies = families;
+            }
         }
 
         if (selectedDevice is null || selectedFamilies is null)
