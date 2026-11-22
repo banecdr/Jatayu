@@ -343,7 +343,6 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetPipelineLayout(_shadowPipelineLayout)
                 .Build(_context);
         }
-        device.DestroyShaderModule(shadowVert, null);
 
         // 2. Build Skybox Pipeline
         var skyboxVert = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/skybox.vert"), ShaderKind.VertexShader);
@@ -360,8 +359,6 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetPipelineLayout(_skyboxPipelineLayout)
                 .Build(_context);
         }
-        device.DestroyShaderModule(skyboxVert, null);
-        device.DestroyShaderModule(skyboxFrag, null);
 
         // 3. Build PBR Opaque Pipeline
         var pbrVert = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/pbr.vert"), ShaderKind.VertexShader);
@@ -386,8 +383,6 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetPipelineLayout(_pbrPipelineLayout)
                 .Build(_context);
         }
-        device.DestroyShaderModule(pbrVert, null);
-        device.DestroyShaderModule(pbrFrag, null);
 
         // 4. Build Debug Line Pipeline
         var debugVert = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/debug_line.vert"), ShaderKind.VertexShader);
@@ -411,8 +406,6 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetPipelineLayout(_debugPipelineLayout)
                 .Build(_context);
         }
-        device.DestroyShaderModule(debugVert, null);
-        device.DestroyShaderModule(debugFrag, null);
     }
 
     private unsafe void UpdateLightBuffer(in GpuLightEnvironmentData data)
