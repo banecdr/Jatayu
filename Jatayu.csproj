@@ -77,6 +77,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="tests\**" />
+    <Compile Remove="tools\**" />
+    <Compile Remove="src\Jatayu.AssetFormats\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="src\Jatayu.AssetFormats\Jatayu.AssetFormats.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="assets\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

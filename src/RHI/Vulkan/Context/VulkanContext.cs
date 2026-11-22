@@ -147,8 +147,12 @@ public sealed class VulkanContext : IDisposable
         var deviceExtensions = new HashSet<string>();
         VulkanHelpers.AddSwapchainExtensions(deviceExtensions);
         VulkanHelpers.AddMandatoryIfSupportedDeviceExtensions(deviceExtensions, PhysicalDevice);
+        deviceExtensions.Add("VK_EXT_memory_budget");
 
-        // 7. Prepare Queue Create Infos for all unique queue family indices
+        // 7. Verify full D10 hardware floor compliance
+        VerifyD10HardwareFloor(Instance, PhysicalDevice, deviceExtensions);
+
+        // 8. Prepare Queue Create Infos for all unique queue family indices
         var uniqueIndices = QueueFamilies.GetUniqueIndices();
         var queueCreateInfos = new VkDeviceQueueCreateInfo[uniqueIndices.Length];
         var priority = 1.0f;
@@ -163,23 +167,118 @@ public sealed class VulkanContext : IDisposable
             };
         }
 
-        // 8. Enable Vulkan 1.3 Dynamic Rendering (removes old VkRenderPass / VkFramebuffer requirements!)
-        var vulkan13Features = new VkPhysicalDeviceVulkan13Features
+        // 9. Enable complete D10 Vulkan 1.3 core hardware features
+        var vulkan11Features = new VkPhysicalDeviceVulkan11Features
         {
-            DynamicRendering = true,
+            ShaderDrawParameters = true,
         };
 
-        // 9. Create Logical Device
+        var vulkan12Features = new VkPhysicalDeviceVulkan12Features
+        {
+            Next = &vulkan11Features,
+            TimelineSemaphore = true,
+            BufferDeviceAddress = true,
+            DrawIndirectCount = true,
+            SamplerFilterMinmax = true,
+            RuntimeDescriptorArray = true,
+            DescriptorBindingPartiallyBound = true,
+            DescriptorBindingSampledImageUpdateAfterBind = true,
+            DescriptorBindingUpdateUnusedWhilePending = true,
+            DescriptorBindingVariableDescriptorCount = true,
+            ShaderSampledImageArrayNonUniformIndexing = true,
+            ShaderStorageBufferArrayNonUniformIndexing = true,
+        };
+
+        var vulkan13Features = new VkPhysicalDeviceVulkan13Features
+        {
+            Next = &vulkan12Features,
+            DynamicRendering = true,
+            Synchronization2 = true,
+            Maintenance4 = true,
+        };
+
+        var core10Features = new VkPhysicalDeviceFeatures
+        {
+            SamplerAnisotropy = true,
+            MultiDrawIndirect = true,
+            TextureCompressionBC = true,
+            ShaderInt64 = true,
+            FragmentStoresAndAtomics = true,
+        };
+
+        // 10. Create Logical Device with fully chained features
         Device = PhysicalDevice.CreateDevice(new DeviceEx.CreateInfo
         {
             Extensions = deviceExtensions,
             QueueCreateInfos = queueCreateInfos,
+            Features = &core10Features,
             Next = &vulkan13Features,
         });
 
-        // 10. Retrieve Queue handles
+        // 11. Retrieve Queue handles
         GraphicsQueue = Device.GetQueue(QueueFamilies.GraphicsFamily!.Value, 0);
         PresentQueue = Device.GetQueue(QueueFamilies.PresentFamily!.Value, 0);
+    }
+
+    /// <summary>
+    /// Validates that the selected physical device satisfies the mandatory D10 hardware floor.
+    /// Throws an InvalidOperationException explicitly enumerating any missing features.
+    /// </summary>
+    public static unsafe void VerifyD10HardwareFloor(Instance instance, PhysicalDevice physicalDevice, HashSet<string>? deviceExtensions = null)
+    {
+        var missing = new List<string>();
+
+        var vk11 = new VkPhysicalDeviceVulkan11Features();
+        var vk12 = new VkPhysicalDeviceVulkan12Features();
+        var vk13 = new VkPhysicalDeviceVulkan13Features();
+
+        vk13.Next = &vk12;
+        vk12.Next = &vk11;
+
+        var features2 = new VkPhysicalDeviceFeatures2
+        {
+            Next = &vk13
+        };
+
+        instance.PInvoke.vkGetPhysicalDeviceFeatures2.Invoke(physicalDevice.Handle, &features2);
+
+        // Core 1.3 features
+        if (!vk13.DynamicRendering) missing.Add("Vulkan 1.3: DynamicRendering");
+        if (!vk13.Synchronization2) missing.Add("Vulkan 1.3: Synchronization2");
+        if (!vk13.Maintenance4) missing.Add("Vulkan 1.3: Maintenance4");
+
+        // Core 1.2 features
+        if (!vk12.TimelineSemaphore) missing.Add("Vulkan 1.2: TimelineSemaphore");
+        if (!vk12.BufferDeviceAddress) missing.Add("Vulkan 1.2: BufferDeviceAddress");
+        if (!vk12.DrawIndirectCount) missing.Add("Vulkan 1.2: DrawIndirectCount");
+        if (!vk12.SamplerFilterMinmax) missing.Add("Vulkan 1.2: SamplerFilterMinmax");
+        if (!vk12.RuntimeDescriptorArray) missing.Add("Vulkan 1.2: RuntimeDescriptorArray");
+        if (!vk12.DescriptorBindingPartiallyBound) missing.Add("Vulkan 1.2: DescriptorBindingPartiallyBound");
+        if (!vk12.DescriptorBindingSampledImageUpdateAfterBind) missing.Add("Vulkan 1.2: DescriptorBindingSampledImageUpdateAfterBind");
+        if (!vk12.DescriptorBindingUpdateUnusedWhilePending) missing.Add("Vulkan 1.2: DescriptorBindingUpdateUnusedWhilePending");
+        if (!vk12.DescriptorBindingVariableDescriptorCount) missing.Add("Vulkan 1.2: DescriptorBindingVariableDescriptorCount");
+        if (!vk12.ShaderSampledImageArrayNonUniformIndexing) missing.Add("Vulkan 1.2: ShaderSampledImageArrayNonUniformIndexing");
+        if (!vk12.ShaderStorageBufferArrayNonUniformIndexing) missing.Add("Vulkan 1.2: ShaderStorageBufferArrayNonUniformIndexing");
+
+        // Core 1.1 features
+        if (!vk11.ShaderDrawParameters) missing.Add("Vulkan 1.1: ShaderDrawParameters");
+
+        // Core 1.0 features
+        if (!features2.Features.SamplerAnisotropy) missing.Add("Vulkan 1.0: SamplerAnisotropy");
+        if (!features2.Features.MultiDrawIndirect) missing.Add("Vulkan 1.0: MultiDrawIndirect");
+        if (!features2.Features.TextureCompressionBC) missing.Add("Vulkan 1.0: TextureCompressionBC");
+        if (!features2.Features.ShaderInt64) missing.Add("Vulkan 1.0: ShaderInt64");
+        if (!features2.Features.FragmentStoresAndAtomics) missing.Add("Vulkan 1.0: FragmentStoresAndAtomics");
+
+        if (missing.Count > 0)
+        {
+            var deviceName = VulkanDeviceInfo.GetDeviceName(physicalDevice);
+            throw new InvalidOperationException(
+                $"Selected Vulkan GPU '{deviceName}' does not meet the Jatayu D10 hardware floor!\n" +
+                $"Missing required features ({missing.Count}):\n  - " +
+                string.Join("\n  - ", missing)
+            );
+        }
     }
 
     private static (PhysicalDevice, QueueFamilies) PickBestGpu(Instance instance, VkSurfaceKHR surface)

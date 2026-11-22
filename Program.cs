@@ -55,15 +55,24 @@ using Jatayu.RHI.Vulkan.Swapchain;
 using Jatayu.RHI.Vulkan.Sync;
 using Jatayu.RHI.Vulkan.Textures;
 
-// -------------------------------------------------------------------------------------------------
-// NATIVE VULKAN LOADER & RUNTIME INITIALIZATION
-// -------------------------------------------------------------------------------------------------
-_ = Vulkan.GetInstanceProcAddr;
+namespace Jatayu;
 
-RunEngineDemo();
-
-static unsafe void RunEngineDemo()
+/// <summary>
+/// Main application entry point for Jatayu Engine.
+/// </summary>
+public static class Program
 {
+    // -------------------------------------------------------------------------------------------------
+    // NATIVE VULKAN LOADER & RUNTIME INITIALIZATION
+    // -------------------------------------------------------------------------------------------------
+    public static unsafe void Main(string[] args)
+    {
+        _ = Vulkan.GetInstanceProcAddr;
+        RunEngineDemo();
+    }
+
+    private static unsafe void RunEngineDemo()
+    {
     const int InitialWidth = 1280;
     const int InitialHeight = 720;
 
@@ -681,6 +690,7 @@ static unsafe void RunEngineDemo()
     // C# 'using' automatically disposes indexBuffer, vertexBuffer, depthBuffer,
     // frameSync, swapchain, allocator, context, and window.
     Console.WriteLine("[Shutdown] All 3D resources released cleanly. Goodbye!");
+    }
 }
 
 /// <summary>
