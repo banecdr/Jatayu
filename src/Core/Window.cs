@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: Window.cs
  * LOCATION: src/Core/Window.cs
  * 
@@ -68,6 +68,8 @@
 
 using Brutal.GlfwApi;
 using Brutal.Numerics;
+using Jatayu.Core.Events;
+using EngineInput = Jatayu.Core.Input.Input;
 
 namespace Jatayu.Core;
 
@@ -243,11 +245,30 @@ public sealed class Window : IDisposable
         _window.OnFocus += HandleFocus;
         _window.OnIconify += HandleIconify;
         _window.OnKey += HandleKey;
+        _window.OnMouseButton += HandleMouseButton;
+        _window.OnCursorPos += HandleCursorPos;
+        _window.OnScroll += HandleScroll;
     }
 
     private void HandleKey(GlfwWindow window, GlfwKey key, int scancode, GlfwKeyAction action, GlfwModifier mods)
     {
+        EngineInput.RecordKeyEvent((int)key, action != GlfwKeyAction.Release);
         KeyAction?.Invoke(key, action);
+    }
+
+    private void HandleMouseButton(GlfwWindow window, GlfwMouseButton button, GlfwButtonAction action, GlfwModifier mods)
+    {
+        EngineInput.RecordMouseButton((int)button, action == GlfwButtonAction.Press);
+    }
+
+    private void HandleCursorPos(GlfwWindow window, double2 pos)
+    {
+        EngineInput.RecordMouseMove((float)pos.X, (float)pos.Y);
+    }
+
+    private void HandleScroll(GlfwWindow window, double2 offset)
+    {
+        EngineInput.RecordScroll((float)offset.X, (float)offset.Y);
     }
 
     private static void EnsureGlfwInitialized()
@@ -272,6 +293,7 @@ public sealed class Window : IDisposable
             Width = window.Width;
             Height = window.Height;
             Resized?.Invoke(newSize.X, newSize.Y);
+            EventBus.Publish(new WindowResizedEvent(newSize.X, newSize.Y));
         }
     }
 
@@ -321,6 +343,9 @@ public sealed class Window : IDisposable
                 _window.OnFocus -= HandleFocus;
                 _window.OnIconify -= HandleIconify;
                 _window.OnKey -= HandleKey;
+                _window.OnMouseButton -= HandleMouseButton;
+                _window.OnCursorPos -= HandleCursorPos;
+                _window.OnScroll -= HandleScroll;
                 _window.Dispose();
             }
 

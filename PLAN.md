@@ -175,15 +175,15 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Core/Math/OriginShift.cs` | **PLANNED** | Floating-origin coordinator. Snaps shift offset to 256m terrain tile multiples and broadcasts rebase events at frame boundaries. (Sprint 5b). |
 | `src/Core/Memory/NativeArena.cs` | **DONE** | High-speed linear frame allocator allocating native memory with zero GC impact; reset once per frame. (Sprint 3b). |
 | `src/Core/Memory/NativePool.cs` | **DONE** | Pooled unmanaged buffer blocks recycling memory across streaming decodes and render passes. (Sprint 3b). |
-| `src/Core/Input/KeyCodes.cs` | **PLANNED** | Strongly typed C# enum mapping GLFW key and mouse codes into clean, game-ready names (`Key.W`, `Key.Space`, `MouseButton.Left`). (Sprint 5a). |
-| `src/Core/Input/Input.cs` | **PLANNED** | Central input polling system. Tracks current/previous button states, mouse delta, and scroll wheel. (Sprint 5a). |
-| `src/Core/Input/InputActions.cs` | **PLANNED** | Action/axis mapping abstraction with rebinding support ("MoveForward", "Jump", "LookX"). (Sprint 5a). |
-| `src/Core/Input/Gamepad.cs` | **PLANNED** | Gamepad/controller state reader (sticks, triggers, buttons) with deadzone normalization. (Sprint 5a). |
-| `src/Core/Events/EventBus.cs` | **PLANNED** | High-speed, allocation-free publish/subscribe event dispatcher for engine events (`WindowResized`, `OriginShifted`, `CellLoaded`). (Sprint 5a). |
-| `src/Core/Logging/Log.cs` | **PLANNED** | Formatted console & file logger wrapping `Ahwoo.BRUTAL.Logging` with colors and severity levels (`Info`, `Warn`, `Error`). (Sprint 5a). |
-| `src/Core/EngineConfig.cs` | **PLANNED** | Engine startup configuration record (Resolution, VSync, VRAM budget, CellSize, StreamingRadii, StagingRingMB, Cascades). (Sprint 5a). |
-| `src/Core/Config/Settings.cs` | **PLANNED** | User-facing graphics settings (shadow quality, draw distance, texture budget) stored in JSON. (Sprint 5a). |
-| `src/Core/Engine.cs` | **PLANNED** | Master engine coordinator. Initializes all subsystems, coordinates job threads, and runs the tick loop. (Sprint 5a). |
+| `src/Core/Input/KeyCodes.cs` | **DONE** | Strongly typed C# enum mapping GLFW key and mouse codes into clean, game-ready names (`Key.W`, `Key.Space`, `MouseButton.Left`). (Sprint 5a). |
+| `src/Core/Input/Input.cs` | **DONE** | Central input polling system. Tracks current/previous button states, mouse delta, and scroll wheel. (Sprint 5a). |
+| `src/Core/Input/InputActions.cs` | **DONE** | Action/axis mapping abstraction with rebinding support ("MoveForward", "Jump", "LookX"). (Sprint 5a). |
+| `src/Core/Input/Gamepad.cs` | **DONE** | Gamepad/controller state reader (sticks, triggers, buttons) with deadzone normalization. (Sprint 5a). |
+| `src/Core/Events/EventBus.cs` | **DONE** | High-speed, allocation-free publish/subscribe event dispatcher for engine events (`WindowResized`, `OriginShifted`, `CellLoaded`). (Sprint 5a). |
+| `src/Core/Logging/Log.cs` | **DONE** | Formatted console & file logger wrapping `Ahwoo.BRUTAL.Logging` with colors and severity levels (`Info`, `Warn`, `Error`). (Sprint 5a). |
+| `src/Core/EngineConfig.cs` | **DONE** | Engine startup configuration record (Resolution, VSync, VRAM budget, CellSize, StreamingRadii, StagingRingMB, Cascades). (Sprint 5a). |
+| `src/Core/Config/Settings.cs` | **DONE** | User-facing graphics settings (shadow quality, draw distance, texture budget) stored in JSON. (Sprint 5a). |
+| `src/Core/Engine.cs` | **DONE** | Master engine coordinator. Initializes all subsystems, coordinates job threads, and runs the tick loop. (Sprint 5a). |
 | `src/Core/Save/SaveSystem.cs` | **PLANNED** | Serializes dynamic world state (player state, modified cell entities) separately from static cooked assets. (Sprint 10). |
 
 ### 2.2 Multithreading & Job System (`src/Core/Jobs/`)
@@ -353,13 +353,13 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.13 Scene & Entity Architecture / ECS (`src/Scene/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Scene/Transform.cs` | **PLANNED** | Local float transform (Position, Rotation, Scale) + `WorldPosition` reference for root entities. (Sprint 5a). |
-| `src/Scene/Entity.cs` | **PLANNED** | Lightweight numeric entity ID handle indexing into archetype component storage. (Sprint 5a). |
-| `src/Scene/Scene.cs` | **PLANNED** | Container managing active ECS world, dynamic entities, spatial hierarchy, and render submission. (Sprint 5a). |
-| `src/Scene/Components/MeshRenderer.cs` | **PLANNED** | Struct component referencing mesh ID and material ID for dynamic entities. (Sprint 5a). |
-| `src/Scene/Components/LightComponent.cs` | **PLANNED** | Struct component attaching directional, point, or spot light properties to an entity. (Sprint 5a). |
-| `src/Scene/Components/CameraComponent.cs` | **PLANNED** | Struct component marking the active viewport camera entity. (Sprint 5a). |
-| `src/Scene/Components/RigidBodyComponent.cs` | **PLANNED** | Struct component binding an entity to a Jolt simulation body handle. (Sprint 5a). |
+| `src/Scene/Transform.cs` | **DONE** | Local float transform (Position, Rotation, Scale) + `WorldPosition` reference for root entities. (Sprint 5a). |
+| `src/Scene/Entity.cs` | **DONE** | Lightweight numeric entity ID handle indexing into archetype component storage. (Sprint 5a). |
+| `src/Scene/Scene.cs` | **DONE** | Container managing active ECS world, dynamic entities, spatial hierarchy, and render submission. (Sprint 5a). |
+| `src/Scene/Components/MeshRenderer.cs` | **DONE** | Struct component referencing mesh ID and material ID for dynamic entities. (Sprint 5a). |
+| `src/Scene/Components/LightComponent.cs` | **DONE** | Struct component attaching directional, point, or spot light properties to an entity. (Sprint 5a). |
+| `src/Scene/Components/CameraComponent.cs` | **DONE** | Struct component marking the active viewport camera entity. (Sprint 5a). |
+| `src/Scene/Components/RigidBodyComponent.cs` | **DONE** | Struct component binding an entity to a Jolt simulation body handle. (Sprint 5a). |
 
 ### 2.14 Physics Engine (`src/Physics/` via BRUTAL.Jolt)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -474,12 +474,12 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 67
-- **Current Completion:** **31.2% (Sprint 4 Complete, Sprint 5a Ready)**
+- **Total Completed Files:** 83
+- **Current Completion:** **38.6% (Sprint 5a Complete, Sprint 5b Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
-| **Core Platform, Memory & Config** | 4 / 16 | **NativeArena & NativePool Added** |
+| **Core Platform, Memory & Config** | 13 / 16 | **Engine, EngineConfig, Settings, Input, EventBus, Log Added** |
 | **Multithreading & Jobs** | 5 / 5 | **COMPLETE (JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher)** |
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
 | **Modern Vulkan 1.3 RHI** | 21 / 23 | **Async Uploads, Timeline, DeletionQueue & VramBudget Added** |
@@ -491,7 +491,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **GPU-Driven Rendering** | 0 / 6 | Planned (Sprint 5b, 7a) |
 | **3D Graphics, Lighting & Environment** | 6 / 28 | **Mesh & Model Added (Camera3D, Vertex3D, DepthConvention)** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
-| **Scene & ECS Architecture** | 0 / 7 | Planned (Sprint 5a) |
+| **Scene & ECS Architecture** | 7 / 7 | **COMPLETE (Scene, Entity, Transform, MeshRenderer, Camera, Light, RigidBody)** |
 | **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
 | **Audio (BRUTAL.OpenAL)** | 0 / 4 | Planned (Sprint 8) |
 | **AI, Navigation & Animation** | 0 / 8 | Planned (Sprint 10) |
@@ -508,8 +508,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
   * *Specification:* For direct raw BC7/BC5/BC4 block output into `.jpak` archives, `tools/Jatayu.Cooker/` will evaluate Basis Universal UASTC transcoding vs native `bc7enc` (see D27).
   * *Status:* Pending: verify in Sprint 3a.
 * **D2 (ECS Implementation):**
-  * *Specification:* Candidate: **Arch**; Fallback candidate: **Friflo.Engine.ECS** or a minimal custom archetype store. A 100k-entity query benchmark with allocation checks will be run during the Sprint 5a ECS spike.
-  * *Status:* Pending: verify in Sprint 3a.
+  * *Choice:* **Arch** (v1.2.8, Apache-2.0). Benchmark spike in Sprint 5a verified 100,000 entities query throughput at **0.25 ms/frame** with **0 bytes GC heap allocation** via struct `IForEach` queries (`world.InlineQuery`). Fallback Friflo.Engine.ECS was evaluated but rejected due to persistent 64-byte delegate heap allocation per query invocation.
+  * *Status:* **Resolved & Adopted in Sprint 5a**.
 * **D3 (Cell Sizing):**
   * *Choice:* **128 m** world cells; terrain tiles cover $2 \times 2$ cells (256 m). Stays configurable in `WorldConfig`.
 * **D4 (Distance Streaming Rings):**
@@ -570,8 +570,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 * **D25 (Previous-Frame Transforms for Velocity):**
   * *Choice:* `DynamicInstanceRing` and `InstanceBuffer` store the current and previous camera-relative transform for dynamic instances (static instances use previous equals current). The previous-frame view-projection is corrected using the double-precision camera delta, including origin shifts, so TAA velocity stays continuous across shifts.
 * **D26 (ECS Fallback License):**
-  * *Specification:* In D2, `Friflo.Engine.ECS` is listed as MIT; `Arch` is expected Apache-2.0. If Friflo is LGPL, remove it as a fallback and name a minimal custom archetype store as the fallback instead.
-  * *Status:* Pending: verify in Sprint 3a.
+  * *Choice:* Verified in nuspec inspection: `Arch` is **Apache-2.0** and `Friflo.Engine.ECS` is **MIT**. Arch selected based on zero heap allocations and 0.25 ms query time per 100k entities.
+  * *Status:* **Resolved in Sprint 5a**.
 * **D27 (BC7 Encoder Evaluation):**
   * *Specification:* Before committing to native `bc7enc`, run a quick comparison on three sample textures (albedo, normal, roughness): Basis UASTC encoded and transcoded to BC7 through the Ktx binding versus `bc7enc`. If the UASTC route has no visible quality loss, prefer it (no native dependency). Otherwise use `bc7enc`. Record the result and the chosen route. BC5 and BC4 follow the same choice.
   * *Status:* Pending: verify in Sprint 3a.
@@ -690,7 +690,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 5a: Engine Runtime and ECS [NEXT]                                         │
+│ SPRINT 5a: Engine Runtime and ECS [DONE]                                         │
 │  - ECS spike (100k entity query benchmark, zero allocations) & decision D2/D26   │
 │  - Scene, Entity, Transform, MeshRenderer, CameraComponent, RigidBodyComponent   │
 │  - Engine & EngineConfig, Settings, EventBus, Log, Input, KeyCodes, Gamepad      │
@@ -699,7 +699,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 5b: Large-World Rendering Foundations                                     │
+│ SPRINT 5b: Large-World Rendering Foundations [NEXT]                              │
 │  - WorldPosition (double), Camera-Relative Rendering, OriginShift (256m snap)    │
 │  - Frustum culling (5 planes + max draw distance clamp)                          │
 │  - BindlessTable, basic GeometryPool, DynamicInstanceRing, Material, MaterialTable│

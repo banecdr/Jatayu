@@ -74,6 +74,7 @@
     <PackageReference Include="Ahwoo.BRUTAL.RakNet" Version="2026.10.3" />
     <PackageReference Include="Ahwoo.BRUTAL.Monitor.Common" Version="2026.10.3" />
     <PackageReference Include="Ahwoo.BRUTAL.Monitor.Host" Version="2026.10.3" />
+    <PackageReference Include="Arch" Version="1.2.8" />
   </ItemGroup>
 
   <ItemGroup>
