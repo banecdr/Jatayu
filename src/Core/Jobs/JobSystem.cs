@@ -20,7 +20,7 @@ namespace Jatayu.Core.Jobs;
 /// </summary>
 public sealed class JobSystem : IDisposable
 {
-    private const int DefaultCapacity = 4096;
+    private const int DefaultCapacity = 512;
 
     private readonly struct JobSlot
     {
@@ -197,7 +197,11 @@ public sealed class JobSystem : IDisposable
         {
             var dep = handles[i];
             if (!dep.IsValid || dep.IsCompleted)
+            {
+                // Dependency was completed before or during counting
+                OnPrerequisiteCompleted(slotIndex);
                 continue;
+            }
 
             RegisterDependent(dep.SlotIndex, dep.Version, slotIndex);
         }
@@ -337,6 +341,7 @@ public sealed class JobSystem : IDisposable
         var state = _slotStates[index];
         state.Action = null;
         state.StructJob = null;
+        state.IsCompleted = true;
         Interlocked.Increment(ref state.Version);
 
         _freeSlots.Enqueue(index);
