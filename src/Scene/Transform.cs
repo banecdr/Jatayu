@@ -65,6 +65,19 @@ public struct Transform
     }
 
     /// <summary>
+    /// Constructs a transform with double precision coordinates, rotation, and scale.
+    /// </summary>
+    public Transform(double worldX, double worldY, double worldZ, Quaternion rotation, Vector3 scale)
+    {
+        WorldX = worldX;
+        WorldY = worldY;
+        WorldZ = worldZ;
+        Position = new Vector3((float)worldX, (float)worldY, (float)worldZ);
+        Rotation = rotation;
+        Scale = scale;
+    }
+
+    /// <summary>
     /// Computes the 4x4 affine local transformation matrix.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

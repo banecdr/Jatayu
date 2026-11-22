@@ -109,6 +109,7 @@ public sealed class ForwardRenderer3D : IDisposable
     // Reusable culling lists to eliminate GC allocations
     private readonly List<RenderItem> _visibleItems = new(1024);
     private readonly List<RenderItem> _shadowCasters = new(1024);
+    private static readonly Arch.Core.QueryDescription CullQuery = new Arch.Core.QueryDescription().WithAll<Transform, MeshRenderer>();
 
     private bool _disposed;
 
@@ -123,6 +124,47 @@ public sealed class ForwardRenderer3D : IDisposable
             Mesh = mesh;
             CameraRelativeModel = cameraRelativeModel;
             MaterialId = materialId;
+        }
+    }
+
+    private struct CullJob : Arch.Core.IForEach<Transform, MeshRenderer>
+    {
+        public double CamX;
+        public double CamY;
+        public double CamZ;
+        public Frustum Frustum;
+        public List<RenderItem> VisibleItems;
+        public List<RenderItem> ShadowCasters;
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Update(ref Transform t, ref MeshRenderer mr)
+        {
+            if (!mr.IsVisible || mr.Mesh == null)
+                return;
+
+            Vector3 relPos = new(
+                (float)(t.WorldX - CamX),
+                (float)(t.WorldY - CamY),
+                (float)(t.WorldZ - CamZ)
+            );
+
+            Matrix4x4 cameraRelativeModel =
+                Matrix4x4.CreateScale(t.Scale) *
+                Matrix4x4.CreateFromQuaternion(t.Rotation) *
+                Matrix4x4.CreateTranslation(relPos);
+
+            float maxScale = MathF.Max(t.Scale.X, MathF.Max(t.Scale.Y, t.Scale.Z));
+            float radius = mr.Mesh.BoundingRadius * maxScale;
+
+            if (Frustum.IsSphereVisible(relPos, radius))
+            {
+                VisibleItems.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId));
+            }
+
+            if (mr.CastShadows)
+            {
+                ShadowCasters.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId));
+            }
         }
     }
 
@@ -408,8 +450,8 @@ public sealed class ForwardRenderer3D : IDisposable
         ArgumentNullException.ThrowIfNull(materialTable);
         ArgumentNullException.ThrowIfNull(geometryPool);
 
-        // 1. Update LightEnvironment GPU buffer
-        var lightGpuData = lightEnv.ToGpuData(camera.Position);
+        // 1. Update LightEnvironment GPU buffer (centered around camera-relative origin Vector3.Zero)
+        var lightGpuData = lightEnv.ToGpuData(Vector3.Zero);
         UpdateLightBuffer(in lightGpuData);
 
         Matrix4x4 shadowLightVp = lightGpuData.LightViewProj;
@@ -474,39 +516,17 @@ public sealed class ForwardRenderer3D : IDisposable
         double camY = camPos.Y;
         double camZ = camPos.Z;
 
-        // Query ECS world for renderable entities
-        var query = new Arch.Core.QueryDescription().WithAll<Transform, MeshRenderer>();
-        scene.World.Query(in query, (ref Transform t, ref MeshRenderer mr) =>
+        // Query ECS world for renderable entities with zero allocations
+        var cullJob = new CullJob
         {
-            if (!mr.IsVisible || mr.Mesh == null)
-                return;
-
-            // Camera-relative position translation maintains zero vertex jitter at large coordinates (CL-02)
-            Vector3 relPos = new(
-                (float)(t.WorldX - camX),
-                (float)(t.WorldY - camY),
-                (float)(t.WorldZ - camZ)
-            );
-
-            Matrix4x4 cameraRelativeModel =
-                Matrix4x4.CreateScale(t.Scale) *
-                Matrix4x4.CreateFromQuaternion(t.Rotation) *
-                Matrix4x4.CreateTranslation(relPos);
-
-            // Bounding sphere culling against 5-plane Reverse-Z frustum
-            float maxScale = MathF.Max(t.Scale.X, MathF.Max(t.Scale.Y, t.Scale.Z));
-            float radius = mr.Mesh.BoundingRadius * maxScale;
-
-            if (frustum.IsSphereVisible(relPos, radius))
-            {
-                _visibleItems.Add(new RenderItem(mr.Mesh, cameraRelativeModel, 0u));
-            }
-
-            if (mr.CastShadows)
-            {
-                _shadowCasters.Add(new RenderItem(mr.Mesh, cameraRelativeModel, 0u));
-            }
-        });
+            CamX = camX,
+            CamY = camY,
+            CamZ = camZ,
+            Frustum = frustum,
+            VisibleItems = _visibleItems,
+            ShadowCasters = _shadowCasters,
+        };
+        scene.World.InlineQuery<CullJob, Transform, MeshRenderer>(in CullQuery, ref cullJob);
 
         // 4. Import Shadow Map depth target into RenderGraph
         var shadowDepthHandle = graph.ImportTexture(
@@ -656,7 +676,12 @@ public sealed class ForwardRenderer3D : IDisposable
                     []
                 );
 
-                Matrix4x4 vp = camera.ViewProjection;
+                // Camera-relative View-Projection matrix (camera is at 0, 0, 0 in camera-relative coordinates)
+                Matrix4x4 cameraRelativeView = camera.ViewMatrix;
+                cameraRelativeView.M41 = 0;
+                cameraRelativeView.M42 = 0;
+                cameraRelativeView.M43 = 0;
+                Matrix4x4 vp = cameraRelativeView * camera.ProjectionMatrix;
 
                 for (int i = 0; i < _visibleItems.Count; i++)
                 {

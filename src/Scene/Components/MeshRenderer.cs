@@ -31,6 +31,11 @@ public struct MeshRenderer
     public Mesh? Mesh;
 
     /// <summary>
+    /// Runtime material table slot index.
+    /// </summary>
+    public uint MaterialId;
+
+    /// <summary>
     /// Whether this renderer casts shadows into cascaded shadow maps.
     /// </summary>
     public bool CastShadows;
@@ -48,11 +53,12 @@ public struct MeshRenderer
     /// <summary>
     /// Constructs a mesh renderer component.
     /// </summary>
-    public MeshRenderer(Mesh mesh, bool castShadows = true, bool depthPrePass = true)
+    public MeshRenderer(Mesh mesh, uint materialId = 0, bool castShadows = true, bool depthPrePass = true)
     {
         MeshGuid = AssetGuid.Empty;
         MaterialGuid = AssetGuid.Empty;
         Mesh = mesh;
+        MaterialId = materialId;
         CastShadows = castShadows;
         DepthPrePass = depthPrePass;
         IsVisible = true;
