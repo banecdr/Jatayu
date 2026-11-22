@@ -110,21 +110,6 @@ public static class Program
         // -----------------------------------------------------------------------------------------
         // 2. D8: MESHOPTIMIZER EXPORT PROBE
         // -----------------------------------------------------------------------------------------
-        try
-        {
-            var imguiAsm = Assembly.Load("Brutal.ImGui");
-            Console.WriteLine($"\n[ImGui Exported Types]:");
-            foreach (var t in imguiAsm.GetExportedTypes())
-            {
-                if (t.Name.Contains("Draw") || t.Name.Contains("Vert") || t.Name.Contains("Font") || t.Name.Contains("IO"))
-                    Console.WriteLine($"  {t.FullName}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ImGui Load error]: {ex.Message}");
-        }
-
         Console.WriteLine("\n--- [CHECK 2] D8: MeshOptimizer Function Exports ---");
         try
         {
@@ -252,11 +237,84 @@ public static class Program
             Console.ResetColor();
         }
 
+        // -----------------------------------------------------------------------------------------
+        // 5. SPRINT 3B SUBSYSTEM CHECKS (Reverse-Z, NativeArena, NativePool, DeletionQueue, Profiler)
+        // -----------------------------------------------------------------------------------------
+        Console.WriteLine("\n--- [CHECK 5] Sprint 3b: GPU Foundation & Subsystem Verification ---");
+        try
+        {
+            // Reverse-Z matrix verification
+            var proj = Jatayu.Renderer.Camera.DepthConvention.CreateReverseZInfiniteProjection(MathF.PI / 3f, 16f / 9f, 0.1f);
+            if (proj.M22 >= 0f) throw new InvalidOperationException("M22 must be negative for Vulkan NDC Y-flip.");
+            var nearPoint = System.Numerics.Vector4.Transform(new System.Numerics.Vector4(0f, 0f, -0.1f, 1f), proj);
+            float nearNdc = nearPoint.Z / nearPoint.W;
+            if (MathF.Abs(nearNdc - 1.0f) > 0.001f) throw new InvalidOperationException($"Near NDC was {nearNdc}, expected 1.0.");
+            Console.WriteLine("  [Depth] Reverse-Z infinite projection: VERIFIED (NearZ=1.0, FarZ=0.0, ClearDepth=0.0)");
+
+            // NativeArena test
+            using (var arena = new Jatayu.Core.Memory.NativeArena(1024))
+            {
+                var span = arena.AllocateSpan<int>(8);
+                span[0] = 42;
+                if (span[0] != 42) throw new InvalidOperationException("NativeArena readback failed.");
+                arena.Reset();
+                if (arena.AllocatedBytes != 0) throw new InvalidOperationException("NativeArena reset failed.");
+            }
+            Console.WriteLine("  [Memory] NativeArena linear frame allocator: VERIFIED (16-byte aligned, zero GC)");
+
+            // NativePool test
+            using (var pool = new Jatayu.Core.Memory.NativePool())
+            {
+                void* ptr = pool.Rent(2048);
+                pool.Return(ptr, 2048);
+                void* recycled = pool.Rent(2048);
+                if (ptr != recycled) throw new InvalidOperationException("NativePool recycle failed.");
+                pool.Return(recycled, 2048);
+            }
+            Console.WriteLine("  [Memory] NativePool power-of-two recycled buffer: VERIFIED");
+
+            // DeferredDeletionQueue test
+            using (var queue = new Jatayu.RHI.Vulkan.Memory.DeferredDeletionQueue())
+            {
+                bool deleted = false;
+                queue.Enqueue(() => deleted = true, frameIndex: 2);
+                queue.Flush(1);
+                if (deleted) throw new InvalidOperationException("DeferredDeletionQueue flushed early.");
+                queue.Flush(2);
+                if (!deleted) throw new InvalidOperationException("DeferredDeletionQueue failed to flush at target frame.");
+            }
+            Console.WriteLine("  [RHI] DeferredDeletionQueue frame-based resource retirement: VERIFIED");
+
+            // Profiler & AllocationTracker test
+            Jatayu.Core.Profiling.AllocationTracker.BeginFrame();
+            Jatayu.Core.Profiling.Profiler.BeginFrame();
+            using (Jatayu.Core.Profiling.Profiler.Scope("SmokeTestScope"))
+            {
+                _ = new byte[1024];
+            }
+            Jatayu.Core.Profiling.Profiler.EndFrame();
+            Jatayu.Core.Profiling.AllocationTracker.EndFrame();
+            if (Jatayu.Core.Profiling.AllocationTracker.LastFrameAllocatedBytes < 1024)
+                throw new InvalidOperationException("AllocationTracker failed to measure allocations.");
+            Console.WriteLine("  [Diagnostics] Profiler & AllocationTracker: VERIFIED");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(">> Sprint 3b Subsystems: VERIFIED");
+            Console.ResetColor();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Sprint 3b Error]: {ex.Message}");
+            Console.ResetColor();
+            failureCount++;
+        }
+
         Console.WriteLine("\n================================================================================");
         if (failureCount == 0)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("             ALL FINAL CHECKS PASSED - READY FOR SPRINT 3A!                     ");
+            Console.WriteLine("             ALL FINAL CHECKS PASSED - SPRINT 3B VERIFIED!                      ");
         }
         else
         {

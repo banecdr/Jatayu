@@ -32,7 +32,7 @@ public sealed class DeferredDeletionQueue : IDisposable
         public IDisposable? Disposable;
     }
 
-    private readonly VulkanContext _context;
+    private readonly VulkanContext? _context;
     private readonly Queue<DeletionItem> _queue = new(256);
     private bool _disposed;
 
@@ -41,9 +41,9 @@ public sealed class DeferredDeletionQueue : IDisposable
     /// </summary>
     public int PendingCount => _queue.Count;
 
-    public DeferredDeletionQueue(VulkanContext context)
+    public DeferredDeletionQueue(VulkanContext? context = null)
     {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        _context = context;
     }
 
     /// <summary>
@@ -87,7 +87,10 @@ public sealed class DeferredDeletionQueue : IDisposable
         Enqueue(() =>
         {
             if (imageView.VkHandle != 0)
+            {
+                if (_context == null) throw new InvalidOperationException("VulkanContext is required for raw Vulkan handle destruction.");
                 _context.Device.DestroyImageView(imageView, null);
+            }
         }, frameIndex);
     }
 
@@ -102,7 +105,10 @@ public sealed class DeferredDeletionQueue : IDisposable
         Enqueue(() =>
         {
             if (sampler.VkHandle != 0)
+            {
+                if (_context == null) throw new InvalidOperationException("VulkanContext is required for raw Vulkan handle destruction.");
                 _context.Device.DestroySampler(sampler, null);
+            }
         }, frameIndex);
     }
 
