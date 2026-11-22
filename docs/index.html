@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jatayu – Plan Dashboard</title>
+<style>
+:root{--bg:#f4f5f8;--card:#fff;--ink:#12151b;--mut:#667085;--line:#e4e7ec;--done:#16a34a;--donebg:#dcfce7;--next:#d97706;--nextbg:#fef3c7;--plan:#64748b;--planbg:#eef1f5;--acc:#6366f1;--acc2:#a855f7;--code:#f1f3f6;--shadow:0 1px 2px rgba(16,24,40,.05),0 4px 14px rgba(16,24,40,.05);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0e13;--card:#151a21;--ink:#e8ebf0;--mut:#9aa4b2;--line:#252c36;--done:#4ade80;--donebg:#12301f;--next:#fbbf24;--nextbg:#3a2c0a;--plan:#94a3b8;--planbg:#212733;--acc:#818cf8;--acc2:#c084fc;--code:#212733;--shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0b0e13;--card:#151a21;--ink:#e8ebf0;--mut:#9aa4b2;--line:#252c36;--done:#4ade80;--donebg:#12301f;--next:#fbbf24;--nextbg:#3a2c0a;--plan:#94a3b8;--planbg:#212733;--acc:#818cf8;--acc2:#c084fc;--code:#212733;--shadow:0 1px 2px rgba(0,0,0,.4);color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 70px}
+.hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:22px;border-radius:16px;margin-bottom:16px;color:#fff;background:linear-gradient(135deg,#4338ca,#7c3aed 60%,#c026d3);box-shadow:var(--shadow)}
+.hero h1{font-size:26px;margin:0;letter-spacing:-.02em}.hero small{display:block;font-size:13px;font-weight:400;opacity:.85;margin-top:2px}
+.hero .btns{display:flex;gap:8px;flex-wrap:wrap}
+.hero button,.hero a{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:9px;padding:6px 12px;cursor:pointer;text-decoration:none;font-size:14px;backdrop-filter:blur(4px)}
+.hero button:hover,.hero a:hover{background:rgba(255,255,255,.28)}
+button,input{font:inherit;color:inherit}
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;gap:4px;overflow-x:auto;margin:0 0 16px;padding:6px;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.tabs button{border:0;border-radius:8px;background:none;padding:7px 16px;color:var(--mut);white-space:nowrap;cursor:pointer;transition:.15s}
+.tabs button:hover{color:var(--ink)}.tabs button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;font-weight:600}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:14px}
+.grid .card{margin:0}.stat b{display:block;font-size:28px;letter-spacing:-.02em}.stat span{color:var(--mut);font-size:13px}
+.top{display:flex;gap:22px;align-items:center;flex-wrap:wrap}.ring{position:relative;width:130px;height:130px;flex:none}
+.ring svg{transform:rotate(-90deg)}.ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:28px}
+.ring circle{fill:none;stroke-width:10}.ring .bg{stroke:var(--planbg)}.ring .fg{stroke:url(#g);stroke-linecap:round;transition:stroke-dashoffset 1s ease}
+.bar{height:8px;background:var(--planbg);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--done),#34d399);border-radius:99px;transition:width .8s ease}
+.row{display:grid;grid-template-columns:minmax(120px,1.6fr) 3fr 64px;gap:10px;align-items:center;padding:6px 0;font-size:14px}
+.row em{font-style:normal;color:var(--mut);text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 10px;letter-spacing:.04em;white-space:nowrap}
+.done{background:var(--donebg);color:var(--done)}.next{background:var(--nextbg);color:var(--next)}.plan{background:var(--planbg);color:var(--plan)}
+h2{font-size:16px;margin:0 0 12px}
+.sprint{border-left:4px solid var(--plan);transition:transform .15s}.sprint:hover{transform:translateX(2px)}.sprint.done{border-left-color:var(--done)}.sprint.next{border-left-color:var(--next)}
+.sprint header{display:flex;justify-content:space-between;gap:8px;margin:0 0 6px}.sprint h3{margin:0;font-size:15px}
+.sprint ul{margin:8px 0 0;padding-left:18px;color:var(--mut);font-size:13.5px}.res{margin-top:10px;font-size:13.5px;padding:8px 10px;background:var(--planbg);border-radius:8px}
+code{background:var(--code);border-radius:5px;padding:1px 6px;font:12.5px ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
+.file{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px}.file p{grid-column:2;margin:0;color:var(--mut)}
+details summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:8px}details summary::-webkit-details-marker{display:none}
+details summary::before{content:"▸";color:var(--mut);margin-right:6px;transition:.15s}details[open] summary::before{transform:rotate(90deg)}details summary span:first-child{flex:1}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tools input[type=search]{flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 12px}
+.tools button,.card button{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 14px;cursor:pointer}
+.tools button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.mut{color:var(--mut);font-size:13px}.err{border-color:var(--next)}
+textarea{width:100%;min-height:120px;background:var(--code);border:1px solid var(--line);border-radius:9px;padding:8px;color:var(--ink);font:12px ui-monospace,monospace}
+.dec{padding:11px 0;border-top:1px solid var(--line)}.dec:first-child{border-top:0}.dec b{margin-right:6px}.dec p{margin:4px 0 0;color:var(--mut);font-size:13.5px}
+.sk{height:90px;border-radius:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--planbg) 25%,var(--card) 50%,var(--planbg) 75%);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (max-width:560px){.row{grid-template-columns:1fr 56px}.row .bar{grid-column:1/-1;order:3}.hero h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>🦅 Jatayu <small id="meta">Loading plan…</small></h1>
+  <div class="btns"><button id="reload">↻ Refresh</button><button id="theme" title="Toggle theme">◐ Theme</button><a href="https://github.com/banecdr/Jatayu/blob/main/PLAN.md" target="_blank" rel="noopener">PLAN.md ↗</a></div>
+</header>
+<div id="loadbox"></div>
+<nav class="tabs" id="tabs"></nav>
+<main id="view"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
+</div>
+<script>
+const URL_ = "https://raw.githubusercontent.com/banecdr/Jatayu/refs/heads/main/PLAN.md";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inline = s => esc(s.replace(/\$/g,"").replace(/\\(text|le|times|cdot|,)\{?/g,"").replace(/\*\*/g,"").replace(/\*/g,"")).replace(/`([^`]+)`/g,"<code>$1</code>");
+const sprintKey = id => { const m = /^(\d+)([ab]?)$/.exec(id)||[0,99,""]; return +m[1]*10 + (m[2]==="b"?2:m[2]==="a"?1:0); };
+let D = null, tab = "overview", filt = "all", q = "";
+
+function parse(md){
+  const lines = md.split(/\r?\n/), files = [], sprints = [], decs = [], log = [];
+  let head = "", inCode = false, cur = null, dec = null, i = 0;
+  const stated = {};
+  for (const k of ["Planned","Completed"]){ const m = new RegExp("Total "+k+" Files:\\*\\*\\s*(\\d+)").exec(md); if(m) stated[k]=+m[1]; }
+  for (i = 0; i < lines.length; i++){
+    const l = lines[i];
+    if (/^```/.test(l)){ inCode = !inCode; continue; }
+    if (inCode){
+      if (!l.includes("│")) continue;
+      const t = l.replace(/^\s*│/,"").replace(/│\s*$/,"").trim();
+      const m = /^SPRINT\s+(\d+[ab]?)\s*(\(OPTIONAL\))?\s*:\s*(.*?)\s*(?:\[([^\]]+)\])?$/.exec(t);
+      if (m){ const s=(m[4]||"").toUpperCase(); cur = {id:m[1],title:m[3],opt:!!m[2],status:/DONE|COMPLETE/.test(s)?"done":/NEXT/.test(s)?"next":"plan",items:[],result:""}; sprints.push(cur); }
+      else if (cur && t.startsWith("- ")){ const b=t.slice(2); if(/^Result:/i.test(b)) cur.result=b.replace(/^Result:\s*/i,""); else cur.items.push(b); }
+      else if (cur && /^Note:/.test(t)) cur.note = t;
+      continue;
+    }
+    if (/^#{2,4}\s/.test(l)){ head = l.replace(/^#+\s*/,""); dec = null; }
+    if (/^---/.test(l)) dec = null;
+    // tables
+    if (l.startsWith("|") && /^\|[\s:|-]+\|$/.test(lines[i+1]||"")){
+      const hdr = l.split("|").slice(1,-1).map(s=>s.trim().toLowerCase());
+      const si = hdr.findIndex(h=>h.includes("status"));
+      const isLog = hdr[0]==="entry";
+      i += 2;
+      for (; i < lines.length && lines[i].startsWith("|"); i++){
+        const c = lines[i].split("|").slice(1,-1).map(s=>s.trim());
+        if (isLog) log.push({id:c[0].replace(/\*/g,""),sprint:c[1],text:c[2]});
+        else if (si>0){
+          const st = c[si].replace(/\*/g,"").toUpperCase();
+          if (st!=="DONE" && st!=="PLANNED") continue;
+          const sp = /Sprint\s+(\d+[ab]?)/i.exec(c.join(" "));
+          files.push({path:c[0].replace(/`/g,""),done:st==="DONE",role:c[c.length-1],sprint:sp?sp[1]:"",group:head.replace(/\s*\(.*$/,"").replace(/^\d+(\.\d+)*\s*/,"")});
+        }
+      }
+      i--; continue;
+    }
+    const dm = /^\* \*\*(D\d+) \((.+?)\):\*\*/.exec(l);
+    if (dm){ dec = {id:dm[1],title:dm[2],status:"",text:""}; decs.push(dec); continue; }
+    if (dec){
+      const sm = /\*Status:\*\s*(.+)/.exec(l), cm = /\*(?:Choice|Specification):\*\s*(.+)/.exec(l);
+      if (sm) dec.status = sm[1].replace(/\*/g,"");
+      else if (cm && !dec.text) dec.text = cm[1];
+    }
+  }
+  return {files,sprints,decs,log,stated};
+}
+
+function stats(list){ const d=list.filter(f=>f.done).length; return {d,t:list.length,p:list.length?Math.round(d/list.length*100):0}; }
+const bar = p => `<div class="bar"><i style="width:${p}%"></i></div>`;
+const chip = (c,t) => `<span class="chip ${c}">${t}</span>`;
+
+function overview(){
+  const all = stats(D.files), groups = {};
+  D.files.forEach(f=>(groups[f.group] ||= []).push(f));
+  const next = D.sprints.find(s=>s.status==="next");
+  const doneSp = D.sprints.filter(s=>s.status==="done").length;
+  const C=2*Math.PI*54;
+  let h = `<div class="card"><div class="top"><div class="ring"><svg width="130" height="130" viewBox="0 0 130 130"><defs><linearGradient id="g"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/></linearGradient></defs><circle class="bg" cx="65" cy="65" r="54"/><circle class="fg" cx="65" cy="65" r="54" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-all.p/100)}"/></svg><b>${all.p}%</b></div><div style="flex:1;min-width:200px"><h2 style="margin-bottom:4px">Overall progress</h2><div class="mut" style="margin-bottom:10px">${all.d} of ${all.t} catalogued files done</div>${bar(all.p)}</div></div>`;
+  if (D.stated.Completed) h += `<p class="mut" style="margin:8px 0 0">The plan’s own dashboard says ${D.stated.Completed} / ${D.stated.Planned} — figures above are counted live from the file tables.</p>`;
+  h += `</div><div class="grid">
+   <div class="card stat"><b style="color:var(--done)">${all.d}</b><span>Files done</span></div>
+   <div class="card stat"><b>${all.t-all.d}</b><span>Files remaining</span></div>
+   <div class="card stat"><b>${doneSp}/${D.sprints.length}</b><span>Sprints complete</span></div>
+   <div class="card stat"><b>${D.decs.length}</b><span>Decisions logged</span></div></div>`;
+  if (next) h += `<div class="card sprint next"><header><h3>Up next · Sprint ${esc(next.id)}: ${inline(next.title)}</h3>${chip("next","NEXT")}</header><ul>${next.items.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>${next.result?`<div class="res"><b>Goal:</b> ${inline(next.result)}</div>`:""}</div>`;
+  h += `<div class="card"><h2>By subsystem</h2>` + Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<div class="row"><span>${inline(g)}</span>${bar(s.p)}<em>${s.d}/${s.t}</em></div>`}).join("") + `</div>`;
+  if (D.log.length) h += `<div class="card"><h2>Latest changes</h2>${D.log.slice(-5).reverse().map(c=>`<div class="dec"><b>${esc(c.id)}</b>${chip("plan","Sprint "+esc(c.sprint))}<p>${inline(c.text)}</p></div>`).join("")}</div>`;
+  return h;
+}
+
+function sprintsView(){
+  return D.sprints.map(s=>{
+    const fs = stats(D.files.filter(f=>f.sprint===s.id)), lab = {done:"DONE",next:"NEXT",plan:"PLANNED"}[s.status];
+    return `<div class="card sprint ${s.status}"><header><h3>Sprint ${esc(s.id)}: ${inline(s.title)} ${s.opt?chip("plan","OPTIONAL"):""}</h3>${chip(s.status,lab)}</header>
+     ${fs.t?`<div class="mut" style="margin-bottom:6px">${fs.d}/${fs.t} files tagged to this sprint are done</div>${bar(fs.p)}`:""}
+     <ul>${s.items.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>${s.result?`<div class="res"><b>Result:</b> ${inline(s.result)}</div>`:""}</div>`;
+  }).join("");
+}
+
+function filesView(){
+  const f = D.files.filter(x=>(filt==="all"||(filt==="done")===x.done)&&(!q||(x.path+x.role).toLowerCase().includes(q)));
+  const groups = {}; f.forEach(x=>(groups[x.group] ||= []).push(x));
+  let h = `<div class="tools"><input type="search" id="q" placeholder="Search files…" value="${esc(q)}">${["all","done","planned"].map(k=>`<button data-f="${k}" class="${filt===k?"on":""}">${k[0].toUpperCase()+k.slice(1)}</button>`).join("")}</div>`;
+  if (!f.length) return h + `<p class="mut">No files match.</p>`;
+  return h + Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<details class="card" ${q||filt!=="all"?"open":""}><summary><span>${inline(g)}</span><span class="mut">${s.d}/${s.t}</span></summary>${l.map(x=>`<div class="file">${chip(x.done?"done":"plan",x.done?"DONE":"TODO")}<span><code>${esc(x.path)}</code>${x.sprint?` <span class="mut">· S${esc(x.sprint)}</span>`:""}</span><p>${inline(x.role)}</p></div>`).join("")}</details>`}).join("");
+}
+
+function decView(){
+  return `<div class="card">` + D.decs.map(d=>{const c=/resolved|adopted/i.test(d.status)?"done":/pending/i.test(d.status)?"next":"plan";
+    return `<div class="dec"><b>${esc(d.id)}</b>${inline(d.title)} ${d.status?chip(c,esc(d.status.split(/[:.]/)[0].toUpperCase().slice(0,22))):""}<p>${inline(d.text)}</p></div>`}).join("") + `</div>`;
+}
+
+function render(){
+  const tabs = {overview:"Overview",sprints:"Sprints",files:"Files",decisions:"Decisions"};
+  $("#tabs").innerHTML = Object.entries(tabs).map(([k,v])=>`<button data-t="${k}" class="${tab===k?"on":""}">${v}</button>`).join("");
+  if (!D) return;
+  $("#view").innerHTML = {overview,sprints:sprintsView,files:filesView,decisions:decView}[tab]();
+}
+
+function load(md, src){
+  try{
+    D = parse(md);
+    if (!D.files.length && !D.sprints.length) throw new Error("No plan data found in this text");
+    $("#meta").textContent = `${src} · ${new Date().toLocaleTimeString()}`;
+    $("#loadbox").innerHTML = ""; render();
+  }catch(e){ showErr(e.message); }
+}
+
+function showErr(msg){
+  $("#meta").textContent = "Couldn’t load";
+  $("#loadbox").innerHTML = `<div class="card err"><h2>Couldn’t fetch PLAN.md live</h2><p class="mut">${esc(msg)}. Check your connection or that the repo is public, then hit Refresh. You can also paste the file’s text below or pick the file.</p><textarea id="ta" placeholder="Paste PLAN.md here…"></textarea><div class="tools" style="margin-top:8px"><button id="go">Build dashboard</button><input type="file" id="fi" accept=".md,.txt"></div></div>`;
+}
+
+async function fetchPlan(){
+  $("#meta").textContent = "Fetching latest plan…";
+  try{
+    const r = await fetch(URL_, {cache:"no-store"});
+    if (!r.ok) throw new Error("HTTP "+r.status);
+    load(await r.text(), "Live from GitHub");
+  }catch(e){ showErr(e.message || "Network error"); }
+}
+
+document.addEventListener("click", e=>{
+  const t = e.target.closest("[data-t]"), f = e.target.closest("[data-f]");
+  if (t){ tab = t.dataset.t; render(); }
+  if (f){ filt = f.dataset.f; render(); }
+  if (e.target.id==="go") load($("#ta").value, "Pasted text");
+});
+document.addEventListener("input", e=>{ if(e.target.id==="q"){ q=e.target.value.toLowerCase(); const p=e.target.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(p,p); } });
+document.addEventListener("change", async e=>{ if(e.target.id==="fi" && e.target.files[0]) load(await e.target.files[0].text(), e.target.files[0].name); });
+$("#reload").onclick = fetchPlan;
+const setTheme=t=>{document.documentElement.dataset.theme=t;try{localStorage.setItem("jt",t)}catch(e){}};
+try{const t=localStorage.getItem("jt");if(t)setTheme(t)}catch(e){}
+$("#theme").onclick=()=>setTheme((document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"))==="dark"?"light":"dark");
+render(); fetchPlan();
+</script>
+</body>
+</html>
