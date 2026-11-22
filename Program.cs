@@ -252,10 +252,10 @@ public static class Program
         // 1. Ground Plane geometry (200m x 200m quad at Y = -1.0)
         Vertex3D[] groundVertices =
         [
-            new(new float3(-100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
-            new(new float3( 100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 0f)),
-            new(new float3( 100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 20f)),
-            new(new float3(-100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 20f)),
+            new(new float3(-100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
+            new(new float3( 100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 0f)),
+            new(new float3( 100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 20f)),
+            new(new float3(-100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 20f)),
         ];
         ushort[] groundIndices = [0, 1, 2, 2, 3, 0];
 
@@ -745,7 +745,22 @@ public static class Program
                 using (Profiler.Scope("ImGuiNewFrame"))
                 {
                     imguiBackend.NewFrame();
-                    debugOverlay.Draw(time, camera, window.VSync, vramBudget, Profiler.LatestSnapshot, gpuTimer.LatestSnapshot);
+                    debugOverlay.Draw(
+                        time,
+                        camera,
+                        window.VSync,
+                        vramBudget,
+                        Profiler.LatestSnapshot,
+                        gpuTimer.LatestSnapshot,
+                        originShift: originShift,
+                        lightEnv: lightEnv,
+                        visibleEntities: forwardRenderer.VisibleItemCount,
+                        totalEntities: 10,
+                        shadowCasters: forwardRenderer.ShadowCasterCount,
+                        atLargeWorld: atLargeWorldCluster,
+                        debugWireframe: debugWireframeEnabled,
+                        sunOrbiting: sunOrbitEnabled
+                    );
                 }
             }
 

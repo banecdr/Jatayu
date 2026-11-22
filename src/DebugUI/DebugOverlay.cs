@@ -4,16 +4,25 @@
  * 
  * WHAT THIS FILE DOES:
  *   Real-time telemetry HUD overlay rendered on top of the 3D scene using Dear ImGui.
- *   Visualizes engine frame times, CPU/GPU pass profiles, 0-byte GC allocations, and VRAM budget.
+ *   Provides comprehensive diagnostic visualization for Sprint 5b:
+ *     - Frame rates, DeltaTime, V-Sync, and VRAM memory telemetry.
+ *     - 64-bit Large-World precision and 256m tile-snapped OriginShift tracking.
+ *     - PBR Material parameters and active Bindless descriptor indexing slots.
+ *     - Directional sunlight vector, illuminance, and 16-tap PCF soft shadows.
+ *     - Reverse-Z infinite depth conventions and Panini projection parameters.
+ *     - Live CPU and GPU pass profile timers.
  * ================================================================================================= */
 
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Brutal.ImGuiApi;
 using Brutal.Numerics;
+using Jatayu.Core.Mathematics;
 using Jatayu.Core.Profiling;
 using Jatayu.Core.Time;
 using Jatayu.Renderer.Camera;
+using Jatayu.Renderer.Lighting;
 using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Profiling;
 
@@ -29,6 +38,8 @@ public sealed class DebugOverlay
     private readonly float4 _yellow = new(0.95f, 0.85f, 0.2f, 1.0f);
     private readonly float4 _red = new(0.95f, 0.3f, 0.2f, 1.0f);
     private readonly float4 _cyan = new(0.2f, 0.8f, 0.95f, 1.0f);
+    private readonly float4 _orange = new(1.0f, 0.6f, 0.2f, 1.0f);
+    private readonly float4 _gold = new(1.0f, 0.84f, 0.0f, 1.0f);
 
     /// <summary>
     /// Gets or sets whether the diagnostic HUD is visible.
@@ -48,61 +59,45 @@ public sealed class DebugOverlay
         bool vsync,
         VramBudget? vramBudget,
         IReadOnlyList<Profiler.ZoneTiming> cpuZones,
-        IReadOnlyList<GpuTimer.GpuPassTiming> gpuPasses)
+        IReadOnlyList<GpuTimer.GpuPassTiming> gpuPasses,
+        OriginShift? originShift = null,
+        LightEnvironment? lightEnv = null,
+        int visibleEntities = 0,
+        int totalEntities = 0,
+        int shadowCasters = 0,
+        bool atLargeWorld = false,
+        bool debugWireframe = false,
+        bool sunOrbiting = false)
     {
         if (!_isOpen) return;
 
         // Position HUD in top-left with slight transparency
         ImGui.SetNextWindowPos(new float2(12f, 12f), ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowBgAlpha(0.75f);
+        ImGui.SetNextWindowBgAlpha(0.80f);
 
-        if (ImGui.Begin("Jatayu Engine Diagnostics (Sprint 3b)"u8, ref _isOpen, ImGuiWindowFlags.AlwaysAutoResize))
+        if (ImGui.Begin("Jatayu Engine Diagnostics - Sprint 5b (Large-World & PBR)"u8, ref _isOpen, ImGuiWindowFlags.AlwaysAutoResize))
         {
             // -------------------------------------------------------------------------------------
-            // 1. ENGINE PERFORMANCE & FRAME RATE
+            // 1. ENGINE PERFORMANCE & VRAM TELEMETRY
             // -------------------------------------------------------------------------------------
             float fps = gameTime.Fps;
             float dtMs = gameTime.AverageFrameTimeMs > 0 ? gameTime.AverageFrameTimeMs : gameTime.DeltaTime * 1000f;
             var frameColor = dtMs <= 6.94f ? _green : (dtMs <= 16.67f ? _yellow : _red);
 
             ImGui.TextColored(frameColor, $"FPS: {fps:F1} ({dtMs:F2} ms)");
+            ImGui.SameLine(180f);
             ImGui.Text($"Frame: #{gameTime.FrameCount}");
-            ImGui.Text("Target: 144 FPS / 6.94 ms Budget"u8);
-            ImGui.TextColored(vsync ? _green : _yellow, $"V-Sync: {(vsync ? "ON (Locked to display)" : "OFF (Uncapped)")}");
-            ImGui.Separator();
 
-            // -------------------------------------------------------------------------------------
-            // 2. CAMERA & PANINI PROJECTION
-            // -------------------------------------------------------------------------------------
-            if (camera != null)
-            {
-                ImGui.Text($"Camera FOV: {camera.FovDegrees:F0}° (Toggle: [F])");
-                if (camera.PaniniEnabled)
-                {
-                    ImGui.TextColored(_cyan, $"Panini: ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2})");
-                }
-                else
-                {
-                    ImGui.Text("Panini: OFF (Rectilinear, [P] to toggle)"u8);
-                }
-                ImGui.Separator();
-            }
+            ImGui.TextColored(vsync ? _green : _yellow, $"V-Sync: {(vsync ? "ON (Locked to display)" : "OFF (Uncapped FPS)")} [V]");
 
-            // -------------------------------------------------------------------------------------
-            // 2. ZERO-ALLOCATION DISCIPLINE
-            // -------------------------------------------------------------------------------------
             long gcAllocated = AllocationTracker.LastFrameAllocatedBytes;
             var allocColor = gcAllocated == 0 ? _green : _red;
-
             ImGui.Text("Steady-State GC Allocations:"u8);
             ImGui.SameLine();
             ImGui.TextColored(allocColor, $"{gcAllocated} B");
-            ImGui.Text($"Zero-Alloc Frame Rate: {AllocationTracker.ZeroAllocationPercent:F1}%");
-            ImGui.Separator();
+            ImGui.SameLine(240f);
+            ImGui.Text($"Zero-Alloc: {AllocationTracker.ZeroAllocationPercent:F1}%");
 
-            // -------------------------------------------------------------------------------------
-            // 3. VRAM BUDGET & TELEMETRY
-            // -------------------------------------------------------------------------------------
             if (vramBudget != null)
             {
                 var stats = vramBudget.QueryStats();
@@ -111,14 +106,97 @@ public sealed class DebugOverlay
                 float fraction = stats.BudgetUsagePercent;
 
                 ImGui.Text($"VRAM: {usedMb:F0} MB / {budgetMb:F0} MB ({fraction * 100f:F1}%)");
-                ImGui.ProgressBar(fraction, new float2(280f, 0f), ""u8);
-                ImGui.Separator();
+                ImGui.ProgressBar(fraction, new float2(320f, 0f), ""u8);
+            }
+            ImGui.Separator();
+
+            // -------------------------------------------------------------------------------------
+            // 2. 64-BIT LARGE-WORLD & FLOATING-ORIGIN REBASE
+            // -------------------------------------------------------------------------------------
+            if (ImGui.CollapsingHeader("Large-World Precision (50,000m) & OriginShift"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                if (atLargeWorld)
+                {
+                    ImGui.TextColored(_gold, "Location: [50,000m Monolith Cluster] (Toggle: [T])"u8);
+                }
+                else
+                {
+                    ImGui.TextColored(_cyan, "Location: [World Origin Scene (0m)] (Toggle: [T])"u8);
+                }
+
+                if (camera != null)
+                {
+                    var pos = camera.Position;
+                    var tgt = camera.Target;
+                    float dist = Vector3.Distance(pos, tgt);
+                    ImGui.Text($"Camera Pos:   ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) m");
+                    ImGui.Text($"Camera Target:({tgt.X:F1}, {tgt.Y:F1}, {tgt.Z:F1}) m | Dist: {dist:F1} m");
+                    ImGui.Text($"Camera FOV:   {camera.FovDegrees:F0}° (Toggle: [F])");
+
+                    if (camera.PaniniEnabled)
+                    {
+                        ImGui.TextColored(_cyan, $"Panini Proj:  ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2}) (Cycle: [P], [-]/[=])");
+                    }
+                    else
+                    {
+                        ImGui.Text("Panini Proj:  OFF (Rectilinear perspective) (Cycle: [P])"u8);
+                    }
+                }
+
+                if (originShift != null)
+                {
+                    var orig = originShift.CurrentOrigin;
+                    ImGui.Text($"Floating Origin: ({orig.X:F1}, {orig.Y:F1}, {orig.Z:F1}) m");
+                    ImGui.Text($"Shift Threshold: {originShift.ThresholdDistance:F0} m (Snapped to 256m tiles)");
+                }
             }
 
             // -------------------------------------------------------------------------------------
-            // 4. CPU PASS TIMINGS (PROFILER)
+            // 3. SCENE ENTITIES & PBR MATERIALS
             // -------------------------------------------------------------------------------------
-            if (cpuZones.Count > 0 && ImGui.CollapsingHeader("CPU Pass Timings"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            if (ImGui.CollapsingHeader("Scene ECS & PBR Materials"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                ImGui.Text($"Entities: {totalEntities} Total | {visibleEntities} In Frustum | {shadowCasters} Shadow Casters");
+                ImGui.Text("Active PBR Materials:"u8);
+                ImGui.TextColored(_gold, "  #1 Gold:          Metallic 1.00, Roughness 0.15"u8);
+                ImGui.TextColored(_orange, "  #2 Copper:        Metallic 0.95, Roughness 0.25"u8);
+                ImGui.TextColored(new float4(0.9f, 0.9f, 0.95f, 1.0f), "  #3 Chrome:        Metallic 1.00, Roughness 0.05"u8);
+                ImGui.TextColored(new float4(0.85f, 0.4f, 0.2f, 1.0f), "  #4 Terracotta:    Metallic 0.00, Roughness 0.85"u8);
+                ImGui.TextColored(_cyan, "  #5 Neon Blue:     Emissive 4.0 lux, Glow (0.2, 0.8, 1.0)"u8);
+                ImGui.TextColored(_green, "  #6 Checkerboard:  Bindless Slot #0 (Anisotropic 16x)"u8);
+                ImGui.TextColored(new float4(0.5f, 0.55f, 0.6f, 1.0f), "  #7 Ground Slate:  Roughness 0.90 (200m x 200m Plane)"u8);
+            }
+
+            // -------------------------------------------------------------------------------------
+            // 4. LIGHTING, SOFT SHADOWS & SKYBOX
+            // -------------------------------------------------------------------------------------
+            if (ImGui.CollapsingHeader("Lighting & Shadows"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                if (lightEnv != null)
+                {
+                    var dir = lightEnv.Sun.Direction;
+                    ImGui.Text($"Sun Direction: ({dir.X:F2}, {dir.Y:F2}, {dir.Z:F2})");
+                    ImGui.TextColored(sunOrbiting ? _green : _yellow, $"Sun Light Orbit: {(sunOrbiting ? "ANIMATING" : "PAUSED")} (Toggle: [L])");
+                    ImGui.Text($"Sun Illuminance: {lightEnv.Sun.Intensity:F0} Lux");
+                    ImGui.Text("Shadow Map:    2048x2048 D32_SFLOAT (Reverse-Z Comparison, 16-tap PCF)"u8);
+                    ImGui.Text("Skybox:        Reverse-Z Procedural Atmosphere (Z = 0.0 Infinity)"u8);
+                }
+            }
+
+            // -------------------------------------------------------------------------------------
+            // 5. 3D DEBUG DIAGNOSTICS
+            // -------------------------------------------------------------------------------------
+            if (ImGui.CollapsingHeader("3D Wireframe Diagnostics"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                ImGui.TextColored(debugWireframe ? _green : _yellow, $"3D Wireframes: {(debugWireframe ? "VISIBLE" : "HIDDEN")} (Toggle: [B])");
+                ImGui.Text("  Axes:   Red = +X, Green = +Y, Blue = +Z (3m origin gizmo)"u8);
+                ImGui.Text("  Bounds: Yellow/Orange/Cyan AABB wireframe bounding boxes"u8);
+            }
+
+            // -------------------------------------------------------------------------------------
+            // 6. CPU & GPU PASS TIMINGS
+            // -------------------------------------------------------------------------------------
+            if (cpuZones.Count > 0 && ImGui.CollapsingHeader("CPU Pass Timings"u8))
             {
                 for (int i = 0; i < cpuZones.Count; i++)
                 {
@@ -129,9 +207,6 @@ public sealed class DebugOverlay
                 }
             }
 
-            // -------------------------------------------------------------------------------------
-            // 5. GPU PASS TIMINGS (GPU TIMER)
-            // -------------------------------------------------------------------------------------
             if (gpuPasses.Count > 0 && ImGui.CollapsingHeader("GPU Pass Timings"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
                 for (int i = 0; i < gpuPasses.Count; i++)
@@ -144,15 +219,23 @@ public sealed class DebugOverlay
             }
 
             // -------------------------------------------------------------------------------------
-            // 6. RENDER CONVENTIONS
+            // 7. KEYBOARD CONTROLS CHEATSHEET
             // -------------------------------------------------------------------------------------
-            if (ImGui.CollapsingHeader("Active Pipeline Features"u8))
+            if (ImGui.CollapsingHeader("Interactive Controls Cheatsheet"u8))
             {
-                ImGui.Text("  Vulkan: 1.3 Dynamic Rendering"u8);
-                ImGui.Text("  Depth: Reverse-Z (Infinite Far)"u8);
-                ImGui.Text("  Clear Depth: 0.0f (GreaterOrEqual)"u8);
-                ImGui.Text("  Uploads: Async Dedicated Transfer"u8);
-                ImGui.Text("  Staging: Circular Persistently Mapped"u8);
+                ImGui.Text("  [T]           : Teleport between 0m Origin and 50,000m Cluster"u8);
+                ImGui.Text("  [L]           : Toggle Sun Light Orbit animation"u8);
+                ImGui.Text("  [B]           : Toggle 3D Wireframe Debug bounds & axes"u8);
+                ImGui.Text("  [Space]       : Toggle Camera Auto-Orbit"u8);
+                ImGui.Text("  [P]           : Cycle Panini (OFF -> Moderate d=0.5 -> Full d=1.0)"u8);
+                ImGui.Text("  [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)"u8);
+                ImGui.Text("  [-] / [=]     : Fine-tune Panini distance 'd' (-0.1 / +0.1)"u8);
+                ImGui.Text("  [Left/Right]  : Manual horizontal orbit (Yaw)"u8);
+                ImGui.Text("  [Up/Down]     : Manual vertical orbit (Pitch)"u8);
+                ImGui.Text("  [W / S]       : Zoom camera in / out"u8);
+                ImGui.Text("  [V]           : Toggle V-Sync live"u8);
+                ImGui.Text("  [F1]          : Toggle this Telemetry HUD"u8);
+                ImGui.Text("  [ESC]         : Graceful shutdown"u8);
             }
         }
         ImGui.End();

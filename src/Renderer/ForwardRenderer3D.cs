@@ -109,7 +109,18 @@ public sealed class ForwardRenderer3D : IDisposable
     // Reusable culling lists to eliminate GC allocations
     private readonly List<RenderItem> _visibleItems = new(1024);
     private readonly List<RenderItem> _shadowCasters = new(1024);
+
+    public int VisibleItemCount => _visibleItems.Count;
+    public int ShadowCasterCount => _shadowCasters.Count;
+
     private static readonly Arch.Core.QueryDescription CullQuery = new Arch.Core.QueryDescription().WithAll<Transform, MeshRenderer>();
+
+    // Preallocated Vulkan command recording arrays (0 allocations per frame)
+    private readonly VkViewport[] _viewports = new VkViewport[1];
+    private readonly VkRect2D[] _scissors = new VkRect2D[1];
+    private readonly VkDescriptorSet[] _pbrDescriptorSets = new VkDescriptorSet[2];
+    private readonly VkBuffer[] _vertexBufferArray = new VkBuffer[1];
+    private readonly ByteSize64[] _vertexOffsetArray = new ByteSize64[1];
 
     private bool _disposed;
 
@@ -353,7 +364,7 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetShaderStages(skyboxStages)
                 .SetColorAttachmentFormat(colorFormat)
                 .SetDepthAttachmentFormat(DepthConvention.DepthFormat)
-                .SetDepthTest(depthTestEnable: true, depthWriteEnable: false, compareOp: DepthConvention.DepthCompareOp)
+                .SetDepthTest(depthTestEnable: false, depthWriteEnable: false)
                 .SetRasterization(Presets.Rasterization.Fill.CullNone)
                 .SetColorBlend(Presets.BlendState.BlendNone)
                 .SetPipelineLayout(_skyboxPipelineLayout)
@@ -499,11 +510,19 @@ public sealed class ForwardRenderer3D : IDisposable
 
         _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 3, writes, 0, null);
 
-        // 3. Frustum Culling & Camera-Relative Matrix Extraction
+        // 3. Camera-Relative Frustum Culling & Matrix Extraction
         _visibleItems.Clear();
         _shadowCasters.Clear();
 
-        var frustum = Frustum.FromCamera(camera);
+        Matrix4x4 cameraRelativeView = camera.ViewMatrix;
+        cameraRelativeView.M41 = 0;
+        cameraRelativeView.M42 = 0;
+        cameraRelativeView.M43 = 0;
+        Matrix4x4 vp = cameraRelativeView * camera.ProjectionMatrix;
+
+        var frustum = new Frustum { MaxDrawDistance = 100000.0f };
+        frustum.Update(vp, Vector3.Zero);
+
         Vector3 camPos = camera.Position;
         double camX = camPos.X;
         double camY = camPos.Y;
@@ -551,7 +570,7 @@ public sealed class ForwardRenderer3D : IDisposable
                     var cmd = ctx.CommandBuffer;
                     cmd.BindPipeline(VkPipelineBindPoint.Graphics, _shadowPipeline.Handle);
 
-                    var viewport = new VkViewport
+                    _viewports[0] = new VkViewport
                     {
                         X = 0f,
                         Y = 0f,
@@ -560,9 +579,9 @@ public sealed class ForwardRenderer3D : IDisposable
                         MinDepth = 0f,
                         MaxDepth = 1f,
                     };
-                    cmd.SetViewport(0, [viewport]);
-                    var scissor = new VkRect2D(new VkExtent2D(shadowMap.Resolution, shadowMap.Resolution));
-                    cmd.SetScissor(0, [scissor]);
+                    cmd.SetViewport(0, _viewports);
+                    _scissors[0] = new VkRect2D(new VkExtent2D(shadowMap.Resolution, shadowMap.Resolution));
+                    cmd.SetScissor(0, _scissors);
 
                     for (int i = 0; i < _shadowCasters.Count; i++)
                     {
@@ -581,7 +600,9 @@ public sealed class ForwardRenderer3D : IDisposable
                             new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
                         );
 
-                        cmd.BindVertexBuffers(0, [item.Mesh.VertexBuffer.Handle], [new ByteSize64(item.Mesh.VertexOffset)]);
+                        _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                        _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                        cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
                         cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
                         cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
                     }
@@ -603,7 +624,7 @@ public sealed class ForwardRenderer3D : IDisposable
                 var cmd = ctx.CommandBuffer;
                 cmd.BindPipeline(VkPipelineBindPoint.Graphics, _skyboxPipeline.Handle);
 
-                var viewport = new VkViewport
+                _viewports[0] = new VkViewport
                 {
                     X = 0f,
                     Y = 0f,
@@ -612,9 +633,9 @@ public sealed class ForwardRenderer3D : IDisposable
                     MinDepth = 0f,
                     MaxDepth = 1f,
                 };
-                cmd.SetViewport(0, [viewport]);
-                var scissor = new VkRect2D(ctx.RenderArea);
-                cmd.SetScissor(0, [scissor]);
+                cmd.SetViewport(0, _viewports);
+                _scissors[0] = new VkRect2D(ctx.RenderArea);
+                cmd.SetScissor(0, _scissors);
 
                 var skybox = new Skybox.Skybox();
                 var invVp = skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
@@ -647,7 +668,7 @@ public sealed class ForwardRenderer3D : IDisposable
                 var cmd = ctx.CommandBuffer;
                 cmd.BindPipeline(VkPipelineBindPoint.Graphics, _pbrPipeline.Handle);
 
-                var viewport = new VkViewport
+                _viewports[0] = new VkViewport
                 {
                     X = 0f,
                     Y = 0f,
@@ -656,25 +677,20 @@ public sealed class ForwardRenderer3D : IDisposable
                     MinDepth = 0f,
                     MaxDepth = 1f,
                 };
-                cmd.SetViewport(0, [viewport]);
-                var scissor = new VkRect2D(ctx.RenderArea);
-                cmd.SetScissor(0, [scissor]);
+                cmd.SetViewport(0, _viewports);
+                _scissors[0] = new VkRect2D(ctx.RenderArea);
+                cmd.SetScissor(0, _scissors);
 
                 // Bind Set 0 (Frame) and Set 1 (Bindless Textures)
+                _pbrDescriptorSets[0] = _frameDescriptorSet;
+                _pbrDescriptorSets[1] = bindlessTable.DescriptorSet;
                 cmd.BindDescriptorSets(
                     VkPipelineBindPoint.Graphics,
                     _pbrPipelineLayout,
                     0,
-                    [_frameDescriptorSet, bindlessTable.DescriptorSet],
-                    []
+                    _pbrDescriptorSets,
+                    Span<ByteSize32>.Empty
                 );
-
-                // Camera-relative View-Projection matrix (camera is at 0, 0, 0 in camera-relative coordinates)
-                Matrix4x4 cameraRelativeView = camera.ViewMatrix;
-                cameraRelativeView.M41 = 0;
-                cameraRelativeView.M42 = 0;
-                cameraRelativeView.M43 = 0;
-                Matrix4x4 vp = cameraRelativeView * camera.ProjectionMatrix;
 
                 for (int i = 0; i < _visibleItems.Count; i++)
                 {
@@ -695,7 +711,9 @@ public sealed class ForwardRenderer3D : IDisposable
                         new ReadOnlySpan<PbrPushConstants>(&pc, 1)
                     );
 
-                    cmd.BindVertexBuffers(0, [item.Mesh.VertexBuffer.Handle], [new ByteSize64(item.Mesh.VertexOffset)]);
+                    _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                    _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                    cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
                     cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
                     cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
                 }
@@ -721,7 +739,7 @@ public sealed class ForwardRenderer3D : IDisposable
                         var cmd = ctx.CommandBuffer;
                         cmd.BindPipeline(VkPipelineBindPoint.Graphics, _debugPipeline.Handle);
 
-                        var viewport = new VkViewport
+                        _viewports[0] = new VkViewport
                         {
                             X = 0f,
                             Y = 0f,
@@ -730,9 +748,9 @@ public sealed class ForwardRenderer3D : IDisposable
                             MinDepth = 0f,
                             MaxDepth = 1f,
                         };
-                        cmd.SetViewport(0, [viewport]);
-                        var scissor = new VkRect2D(ctx.RenderArea);
-                        cmd.SetScissor(0, [scissor]);
+                        cmd.SetViewport(0, _viewports);
+                        _scissors[0] = new VkRect2D(ctx.RenderArea);
+                        cmd.SetScissor(0, _scissors);
 
                         var pc = new DebugLinePushConstants
                         {
@@ -747,7 +765,9 @@ public sealed class ForwardRenderer3D : IDisposable
                             new ReadOnlySpan<DebugLinePushConstants>(&pc, 1)
                         );
 
-                        cmd.BindVertexBuffers(0, [debugBuffer.Handle], [new ByteSize64(0)]);
+                        _vertexBufferArray[0] = debugBuffer.Handle;
+                        _vertexOffsetArray[0] = new ByteSize64(0);
+                        cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
                         cmd.Draw((int)vertexCount, 1, 0, 0);
                     }
                 );
