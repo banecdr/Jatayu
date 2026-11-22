@@ -53,6 +53,10 @@ public sealed class VramBudget
 {
     private readonly VulkanContext _context;
 
+    private VramStats _cachedStats;
+    private long _lastQueryTimestamp;
+    private static readonly long QueryIntervalTicks = System.Diagnostics.Stopwatch.Frequency / 10; // 100ms throttle (10Hz)
+
     public VramBudget(VulkanContext context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
@@ -60,9 +64,17 @@ public sealed class VramBudget
 
     /// <summary>
     /// Queries the current VRAM budget and usage stats from the Vulkan driver.
+    /// Throttled to 10 Hz to prevent driver syscall stalls on high frame rate loops.
     /// </summary>
     public unsafe VramStats QueryStats()
     {
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_lastQueryTimestamp != 0 && now - _lastQueryTimestamp < QueryIntervalTicks)
+        {
+            return _cachedStats;
+        }
+        _lastQueryTimestamp = now;
+
         var budgetProps = new VkPhysicalDeviceMemoryBudgetPropertiesEXT();
         var memProps2 = new VkPhysicalDeviceMemoryProperties2
         {
@@ -88,16 +100,27 @@ public sealed class VramBudget
 
             if (isDeviceLocal)
             {
-                totalDeviceLocal += (ulong)(long)heap.Size;
-                totalUsage += (ulong)(long)budgetProps.HeapUsage[(int)i];
-                totalBudget += (ulong)(long)budgetProps.HeapBudget[(int)i];
+                ulong heapSize = heap.Size.Value;
+                ulong heapUsage = budgetProps.HeapUsage[(int)i].Value;
+                ulong heapBudget = budgetProps.HeapBudget[(int)i].Value;
+
+                totalDeviceLocal += heapSize;
+                totalUsage += heapUsage;
+
+                // Driver may report VK_WHOLE_SIZE (~0ULL) or 0 if unconstrained
+                if (heapBudget == 0 || heapBudget > heapSize)
+                {
+                    heapBudget = heapSize;
+                }
+                totalBudget += heapBudget;
             }
         }
 
-        // Fallback if budget extension returned zero
-        if (totalBudget == 0)
+        // Fallback if budget extension returned zero or exceeded physical device memory
+        if (totalBudget == 0 || totalBudget > totalDeviceLocal)
             totalBudget = totalDeviceLocal;
 
-        return new VramStats(totalUsage, totalBudget, totalDeviceLocal);
+        _cachedStats = new VramStats(totalUsage, totalBudget, totalDeviceLocal);
+        return _cachedStats;
     }
 }

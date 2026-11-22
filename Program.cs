@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: Program.cs
  * LOCATION: Program.cs
  * 
@@ -88,7 +88,7 @@ public static class Program
     // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
     // ---------------------------------------------------------------------------------------------
     using var window = new Window(
-        title: "Jatayu Engine | Phase 2: 3D Geometry + Panini Projection",
+        title: "Jatayu Vulkan 1.3 3D Engine",
         width: InitialWidth,
         height: InitialHeight,
         resizable: true,
@@ -525,17 +525,13 @@ public static class Program
             cameraController.Update(dt);
         }
 
-        // Update live telemetry in the window title
-        var paniniStatus = camera.PaniniEnabled ? $"Panini: ON (d={camera.PaniniDistance:F2})" : "Panini: OFF (Rectilinear)";
-        window.Title = $"Jatayu 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | FOV: {camera.FovDegrees:F0}° | {paniniStatus} | VSync: {(window.VSync ? "ON" : "OFF")} | Frame #{time.FrameCount}";
-
         // Prepare ImGui HUD frame
         if (debugOverlay.IsVisible)
         {
             using (Profiler.Scope("ImGuiNewFrame"))
             {
                 imguiBackend.NewFrame();
-                debugOverlay.Draw(time, vramBudget, Profiler.LatestSnapshot, gpuTimer.LatestSnapshot);
+                debugOverlay.Draw(time, camera, window.VSync, vramBudget, Profiler.LatestSnapshot, gpuTimer.LatestSnapshot);
             }
         }
 

@@ -40,7 +40,7 @@ public sealed class GpuTimer : IDisposable
     private readonly float _timestampPeriod; // nanoseconds per tick
     private readonly Dictionary<string, (uint StartIdx, uint EndIdx)>[] _passQueries;
     private readonly List<GpuPassTiming> _publishedTimings = new(32);
-
+    private readonly ulong[] _resultsBuffer;
     private int _currentFrame;
     private uint _queryCounter;
     private bool _disposed;
@@ -66,6 +66,7 @@ public sealed class GpuTimer : IDisposable
 
         _queryPools = new VkQueryPool[_framesInFlight];
         _passQueries = new Dictionary<string, (uint, uint)>[_framesInFlight];
+        _resultsBuffer = new ulong[_maxQueriesPerFrame];
 
         for (int i = 0; i < _framesInFlight; i++)
         {
@@ -97,7 +98,7 @@ public sealed class GpuTimer : IDisposable
         var passes = _passQueries[_currentFrame];
         if (passes.Count > 0)
         {
-            var results = new ulong[_maxQueriesPerFrame];
+            var results = _resultsBuffer;
             fixed (ulong* pResults = results)
             {
                 var res = _context.Device.PInvoke.vkGetQueryPoolResults.Invoke(

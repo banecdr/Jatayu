@@ -44,6 +44,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
 
     private readonly VulkanContext _context;
     private readonly GpuAllocator _allocator;
+    private readonly UploadManager _uploadManager;
     private readonly GlfwBackend _glfwBackend;
     private readonly DescriptorLayout _descriptorLayout;
     private readonly DescriptorAllocator _descriptorAllocator;
@@ -71,7 +72,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _allocator = allocator ?? throw new ArgumentNullException(nameof(allocator));
-        ArgumentNullException.ThrowIfNull(uploadManager);
+        _uploadManager = uploadManager ?? throw new ArgumentNullException(nameof(uploadManager));
         ArgumentNullException.ThrowIfNull(window);
 
         // 1. Initialize ImGui Context & GLFW input backend
@@ -82,6 +83,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
 
         var io = ImGui.GetIO();
         io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
+        io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures;
 
         // Ensure default font is added so the font atlas is initialized
         if (io.Fonts.Fonts.Count == 0)
@@ -117,7 +119,8 @@ public sealed class ImGuiVulkanBackend : IDisposable
             VkImageLayout.ShaderReadOnlyOptimal
         );
 
-        texData.TexID = new ImTextureID((nint)_fontDescriptorSet.VkHandle);
+        texData.SetTexID(new ImTextureID((nint)_fontDescriptorSet.VkHandle));
+        texData.SetStatus(ImTextureStatus.OK);
 
         // 4. Compile ImGui shaders
         using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
@@ -167,6 +170,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
     public void NewFrame()
     {
         ThrowIfDisposed();
+        ImString.SharedStorage.Clear();
         _glfwBackend.NewFrame();
         ImGui.NewFrame();
     }
@@ -180,6 +184,9 @@ public sealed class ImGuiVulkanBackend : IDisposable
 
         ImGui.Render();
         var drawData = ImGui.GetDrawData();
+
+        // Process any pending texture uploads (e.g. font atlas rasterization)
+        UpdateTextures(drawData);
 
         if (drawData.CmdListsCount == 0 || drawData.TotalVtxCount == 0)
             return;
@@ -208,13 +215,13 @@ public sealed class ImGuiVulkanBackend : IDisposable
                 Buffer.MemoryCopy(
                     pVtx,
                     vtxDst,
-                    (long)_vertexBuffer.SizeInBytes,
+                    (long)(_vertexBuffer.SizeInBytes - (ulong)((byte*)vtxDst - (byte*)_vertexBuffer.MappedData)),
                     (long)(vtxSpan.Length * sizeof(ImDrawVert))
                 );
                 Buffer.MemoryCopy(
                     pIdx,
                     idxDst,
-                    (long)_indexBuffer.SizeInBytes,
+                    (long)(_indexBuffer.SizeInBytes - (ulong)((byte*)idxDst - (byte*)_indexBuffer.MappedData)),
                     (long)(idxSpan.Length * sizeof(ushort))
                 );
             }
@@ -257,20 +264,12 @@ public sealed class ImGuiVulkanBackend : IDisposable
             new ReadOnlySpan<byte>(&pushConstants, sizeof(ImGuiPushConstants))
         );
 
-        // 7. Bind font descriptor set (Set 0)
-        cmd.BindDescriptorSets(
-            VkPipelineBindPoint.Graphics,
-            _pipelineLayout,
-            0,
-            [_fontDescriptorSet],
-            []
-        );
-
-        // 8. Render Draw Lists
+        // 7. Render Draw Lists
         int globalVtxOffset = 0;
         int globalIdxOffset = 0;
         var clipOff = drawData.DisplayPos;
         var clipScale = drawData.FramebufferScale;
+        VkDescriptorSet currentDescriptorSet = default;
 
         for (int n = 0; n < drawData.CmdListsCount; n++)
         {
@@ -292,6 +291,22 @@ public sealed class ImGuiVulkanBackend : IDisposable
                 if (clipMax.X <= clipMin.X || clipMax.Y <= clipMin.Y)
                     continue;
 
+                // Bind texture descriptor set for this draw command
+                var texHandle = (ulong)pcmd.GetTexID().Value;
+                var descriptorSet = texHandle != 0 ? new VkDescriptorSet((nint)texHandle) : _fontDescriptorSet;
+
+                if (descriptorSet.VkHandle != currentDescriptorSet.VkHandle)
+                {
+                    currentDescriptorSet = descriptorSet;
+                    cmd.BindDescriptorSets(
+                        VkPipelineBindPoint.Graphics,
+                        _pipelineLayout,
+                        0,
+                        [descriptorSet],
+                        []
+                    );
+                }
+
                 var scissor = new VkRect2D
                 {
                     Offset = new VkOffset2D((int)clipMin.X, (int)clipMin.Y),
@@ -310,6 +325,26 @@ public sealed class ImGuiVulkanBackend : IDisposable
 
             globalIdxOffset += cmdList.IdxBuffer.Count;
             globalVtxOffset += cmdList.VtxBuffer.Count;
+        }
+    }
+
+    private unsafe void UpdateTextures(ImDrawDataPtr drawData)
+    {
+        var texListPtr = drawData.Textures;
+        if (texListPtr.IsNull()) return;
+
+        var textures = texListPtr.Value;
+        for (int i = 0; i < textures.Count; i++)
+        {
+            var tex = textures[i];
+            if (tex.Status == ImTextureStatus.WantCreate || tex.Status == ImTextureStatus.WantUpdates)
+            {
+                var span = new ReadOnlySpan<byte>((byte*)tex.Pixels.Pointer, tex.Width * tex.Height * 4);
+                var val = _uploadManager.UploadTexture2D(_fontTexture, span);
+                _uploadManager.WaitForUpload(val);
+                tex.SetTexID(new ImTextureID((nint)_fontDescriptorSet.VkHandle));
+                tex.SetStatus(ImTextureStatus.OK);
+            }
         }
     }
 
@@ -355,9 +390,6 @@ public sealed class ImGuiVulkanBackend : IDisposable
         _vertexBuffer?.Dispose();
         _indexBuffer?.Dispose();
         _pipeline.Dispose();
-
-        if (_pipelineLayout.VkHandle != 0)
-            _context.Device.DestroyPipelineLayout(_pipelineLayout, null);
 
         _descriptorAllocator.Dispose();
         _descriptorLayout.Dispose();

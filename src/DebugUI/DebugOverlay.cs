@@ -13,6 +13,7 @@ using Brutal.ImGuiApi;
 using Brutal.Numerics;
 using Jatayu.Core.Profiling;
 using Jatayu.Core.Time;
+using Jatayu.Renderer.Camera;
 using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Profiling;
 
@@ -43,6 +44,8 @@ public sealed class DebugOverlay
     /// </summary>
     public void Draw(
         GameTime gameTime,
+        Camera3D camera,
+        bool vsync,
         VramBudget? vramBudget,
         IReadOnlyList<Profiler.ZoneTiming> cpuZones,
         IReadOnlyList<GpuTimer.GpuPassTiming> gpuPasses)
@@ -63,8 +66,27 @@ public sealed class DebugOverlay
             var frameColor = dtMs <= 6.94f ? _green : (dtMs <= 16.67f ? _yellow : _red);
 
             ImGui.TextColored(frameColor, $"FPS: {fps:F1} ({dtMs:F2} ms)");
+            ImGui.Text($"Frame: #{gameTime.FrameCount}");
             ImGui.Text("Target: 144 FPS / 6.94 ms Budget"u8);
+            ImGui.TextColored(vsync ? _green : _yellow, $"V-Sync: {(vsync ? "ON (Locked to display)" : "OFF (Uncapped)")}");
             ImGui.Separator();
+
+            // -------------------------------------------------------------------------------------
+            // 2. CAMERA & PANINI PROJECTION
+            // -------------------------------------------------------------------------------------
+            if (camera != null)
+            {
+                ImGui.Text($"Camera FOV: {camera.FovDegrees:F0}° (Toggle: [F])");
+                if (camera.PaniniEnabled)
+                {
+                    ImGui.TextColored(_cyan, $"Panini: ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2})");
+                }
+                else
+                {
+                    ImGui.Text("Panini: OFF (Rectilinear, [P] to toggle)"u8);
+                }
+                ImGui.Separator();
+            }
 
             // -------------------------------------------------------------------------------------
             // 2. ZERO-ALLOCATION DISCIPLINE
