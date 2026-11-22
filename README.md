@@ -1,6 +1,7 @@
 ﻿# Jatayu
 
-<img width="1288" height="760" alt="image" src="https://github.com/user-attachments/assets/9cd3e4fa-9203-4261-957b-9326ad69ed72" />
+<img width="1295" height="766" alt="image" src="https://github.com/user-attachments/assets/dc977134-c124-486f-9b36-2d8b4f36fbfb" />
+
 
 
 A simple 3D Vulkan playground and testbed built with C# (.NET 10) and the BRUTAL library bindings (`Ahwoo.BRUTAL.*`).
