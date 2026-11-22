@@ -355,7 +355,22 @@ public static class Program
                 throw new InvalidOperationException("Frustum failed to detect sphere inside view.");
             if (frustum.IsSphereVisible(new System.Numerics.Vector3(0, 0, -6000), 2.0f))
                 throw new InvalidOperationException("Frustum failed to clamp sphere beyond MaxDrawDistance.");
-            Console.WriteLine("  [Visibility] 5-Plane Reverse-Z Frustum with MaxDrawDistance clamp: VERIFIED");
+
+            // 3b. Frustum elevated camera angle check
+            var elevatedCam = new Jatayu.Renderer.Camera.Camera3D(
+                new System.Numerics.Vector3(0, 15, 20),
+                new System.Numerics.Vector3(0, 0, 0),
+                1920, 1080, 60f, 0.1f
+            );
+            System.Numerics.Matrix4x4 elevatedRelView = elevatedCam.ViewMatrix;
+            elevatedRelView.M41 = 0;
+            elevatedRelView.M42 = 0;
+            elevatedRelView.M43 = 0;
+            var elevatedFrustum = new Jatayu.Renderer.Camera.Frustum { MaxDrawDistance = 100000.0f };
+            elevatedFrustum.Update(elevatedRelView * elevatedCam.ProjectionMatrix, System.Numerics.Vector3.Zero);
+            if (!elevatedFrustum.IsSphereVisible(new System.Numerics.Vector3(0, -15, -20), 1.732f))
+                throw new InvalidOperationException("Frustum failed to detect object when viewed from elevated angle above target.");
+            Console.WriteLine("  [Visibility] 5-Plane Reverse-Z Frustum with MaxDrawDistance clamp & elevated angle: VERIFIED");
 
             // 4. DirectionalLight Reverse-Z projection
             var sun = new Jatayu.Renderer.Lighting.DirectionalLight();

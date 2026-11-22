@@ -138,6 +138,41 @@ public sealed class LargeWorldTests
     }
 
     [Fact]
+    public void Frustum_ElevatedCameraAngle_ObjectsRemainVisible()
+    {
+        // Camera elevated at Y = 15m, Z = 20m, looking down at origin (0, 0, 0)
+        var camera = new Camera3D(
+            position: new Vector3(0, 15, 20),
+            target: new Vector3(0, 0, 0),
+            width: 1920,
+            height: 1080,
+            fovDegrees: 60f,
+            nearPlane: 0.1f
+        );
+
+        // In camera-relative space, camera is at Vector3.Zero and target is at (0 - pos)
+        Matrix4x4 cameraRelativeView = camera.ViewMatrix;
+        cameraRelativeView.M41 = 0;
+        cameraRelativeView.M42 = 0;
+        cameraRelativeView.M43 = 0;
+        Matrix4x4 vp = cameraRelativeView * camera.ProjectionMatrix;
+
+        var frustum = new Frustum { MaxDrawDistance = 100000.0f };
+        frustum.Update(vp, Vector3.Zero);
+
+        // Object at origin: relPos = (0 - 0, 0 - 15, 0 - 20) = (0, -15, -20)
+        Vector3 relPos = new Vector3(0, -15, -20);
+        float radius = 1.732f;
+
+        // Must remain visible when viewed from far at an angle above
+        Assert.True(frustum.IsSphereVisible(relPos, radius));
+
+        // Ground quad center at Y = -1.0
+        Vector3 groundRelPos = new Vector3(0, -16, -20);
+        Assert.True(frustum.IsSphereVisible(groundRelPos, 142.0f));
+    }
+
+    [Fact]
     public void Material_PbrDataPackaging_MatchesGpuLayout()
     {
         var mat = new Material

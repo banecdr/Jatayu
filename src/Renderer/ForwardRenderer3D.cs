@@ -806,11 +806,6 @@ public sealed class ForwardRenderer3D : IDisposable
         _pbrPipeline?.Dispose();
         _debugPipeline?.Dispose();
 
-        if (_shadowPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_shadowPipelineLayout, null);
-        if (_skyboxPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_skyboxPipelineLayout, null);
-        if (_pbrPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_pbrPipelineLayout, null);
-        if (_debugPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_debugPipelineLayout, null);
-
         if (_frameDescriptorPool.VkHandle != 0) device.DestroyDescriptorPool(_frameDescriptorPool, null);
         if (_frameDescriptorLayout.VkHandle != 0) device.DestroyDescriptorSetLayout(_frameDescriptorLayout, null);
 

@@ -126,12 +126,12 @@ public sealed class Frustum
         );
 
         // Near plane: Under Vulkan Reverse-Z [0, 1] infinite projection (where near is 1.0):
-        // Vulkan clip space 0 <= z <= w. Near plane is extracted from row 3
+        // Vulkan clip space 0 <= z <= w. Near plane is at z_ndc = 1.0 -> w - z >= 0 (row 4 - row 3)
         _planes[(int)PlaneIndex.Near] = new Plane(
-            viewProjection.M13,
-            viewProjection.M23,
-            viewProjection.M33,
-            viewProjection.M43
+            viewProjection.M14 - viewProjection.M13,
+            viewProjection.M24 - viewProjection.M23,
+            viewProjection.M34 - viewProjection.M33,
+            viewProjection.M44 - viewProjection.M43
         );
     }
 
