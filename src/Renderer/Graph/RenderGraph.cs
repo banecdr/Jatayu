@@ -380,7 +380,7 @@ public sealed class RenderGraph : IDisposable
                         ImageLayout = VkImageLayout.DepthAttachmentOptimal,
                         LoadOp = pass.DepthAttachment.LoadOp,
                         StoreOp = pass.DepthAttachment.StoreOp,
-                        ClearValue = new VkClearColorValue { Float32 = new Brutal.Numerics.float4(pass.DepthAttachment.ClearDepth, 0, 0, 0) },
+                        ClearValue = new VkClearDepthStencilValue { Depth = pass.DepthAttachment.ClearDepth, Stencil = 0 },
                     };
                 }
 
