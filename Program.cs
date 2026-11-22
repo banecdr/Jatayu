@@ -45,12 +45,16 @@ using Brutal.Strings;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
+using Jatayu.AssetFormats.Loaders;
 using Jatayu.Core;
 using Jatayu.Core.Time;
 using Jatayu.Renderer.Camera;
 using Jatayu.Renderer.Mesh;
+using Jatayu.RHI.Vulkan.Commands;
 using Jatayu.RHI.Vulkan.Context;
+using Jatayu.RHI.Vulkan.Descriptors;
 using Jatayu.RHI.Vulkan.Memory;
+using Jatayu.RHI.Vulkan.Pipelines;
 using Jatayu.RHI.Vulkan.Swapchain;
 using Jatayu.RHI.Vulkan.Sync;
 using Jatayu.RHI.Vulkan.Textures;
@@ -209,115 +213,67 @@ public static class Program
     );
 
     // ---------------------------------------------------------------------------------------------
-    // PHASE 4: 3D SHADER COMPILATION & VULKAN GRAPHICS PIPELINE
+    // PHASE 4: COMMAND POOL & TEXTURE DESCRIPTORS (SPRINT 3A RHI ABSTRACTIONS)
     // ---------------------------------------------------------------------------------------------
-    using var compiler = ShaderC.CreateCompiler();
-    using var options = ShaderC.CreateCompilerOptions();
+    using var commandPool = new CommandPoolManager(context, queueFamily);
 
-    VkShaderModule CompileShaderFromFile(string filePath, ShaderKind kind)
-    {
-        var bytes = File.ReadAllBytes(filePath);
-        using var spirv = compiler.Compile(bytes, kind, "shader"u8, "main"u8, options);
-        return ShaderModuleExtensions.FromSpirv(
-            device,
-            new ReadOnlySpan<byte>(spirv.GetBytes(), (int)spirv.GetLength()),
-            null
-        );
-    }
+    // Create 2D procedural checkerboard texture and synchronous GPU upload (Decision D14)
+    var checkerImage = TextureLoader.CreateCheckerboard(width: 256, height: 256, tileSize: 32);
+    using var texture = GpuTexture.CreateFromImageData(context, allocator, commandPool, queue, checkerImage);
+
+    // Create 16x anisotropic repeat sampler
+    using var sampler = VulkanSampler.CreateAnisotropic16xRepeat(context);
+
+    // Descriptor set layout with combined image sampler binding at binding = 0
+    using var descriptorLayout = DescriptorLayout.Create()
+        .AddBinding(0, VkDescriptorType.CombinedImageSampler, VkShaderStageFlags.FragmentBit)
+        .Build(context);
+
+    using var descriptorAllocator = new DescriptorAllocator(context);
+    var descriptorSet = descriptorAllocator.Allocate(descriptorLayout);
+    descriptorAllocator.WriteImage(descriptorSet, 0, sampler, texture);
+
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 5: SHADER COMPILATION & GRAPHICS PIPELINE (PIPELINE BUILDER)
+    // ---------------------------------------------------------------------------------------------
+    using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
+    var vertShader = shaderCompiler.CompileShaderModuleFromFile(device, "assets/shaders/cube.vert", ShaderKind.VertexShader);
+    var fragShader = shaderCompiler.CompileShaderModuleFromFile(device, "assets/shaders/cube.frag", ShaderKind.FragmentShader);
 
     using var shaderStages = new ShaderStages(
         device,
         [
-            Presets.ShaderStage.Vertex(CompileShaderFromFile("assets/shaders/cube.vert", ShaderKind.VertexShader)),
-            Presets.ShaderStage.Fragment(CompileShaderFromFile("assets/shaders/cube.frag", ShaderKind.FragmentShader)),
+            Presets.ShaderStage.Vertex(vertShader),
+            Presets.ShaderStage.Fragment(fragShader),
         ],
         null
     );
 
-    // Configure Vulkan Push Constant range for the 80-byte PushConstantData struct
-    // (64-byte MVP matrix + 16-byte Panini projection parameters)
+    // Push constant range (64-byte MVP + 16-byte Panini parameters)
     var pushConstantRange = new VkPushConstantRange
     {
         StageFlags = VkShaderStageFlags.VertexBit,
         Offset = new ByteSize32(0),
-        Size = new ByteSize32((uint)sizeof(PushConstantData)), // 80 bytes
+        Size = new ByteSize32((uint)sizeof(PushConstantData)),
     };
 
-    var pipelineLayout = device.CreatePipelineLayout([], [pushConstantRange], null);
-
-    // Configure Vulkan 1.3 Graphics Pipeline with Dynamic Rendering and Hardware Depth Stencil
-    var format = swapchain.ColorFormat;
+    var pipelineLayout = device.CreatePipelineLayout([descriptorLayout.Handle], [pushConstantRange], null);
     var vertexInput = new VertexInput(1, 4).AddBindingWithAttributes<Vertex3D>(0, 0, VkVertexInputRate.Vertex);
-    var viewport = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
-    var scissor = new VkRect2D(swapchain.Extent);
-    var viewportState = new VkPipelineViewportStateCreateInfo
-    {
-        ViewportCount = 1,
-        Viewports = &viewport,
-        ScissorCount = 1,
-        Scissors = &scissor,
-    };
 
-    // Specify both Color and Depth attachment formats directly on the pipeline!
-    var rendering = new VkPipelineRenderingCreateInfo
-    {
-        ColorAttachmentCount = 1,
-        ColorAttachmentFormats = &format,
-        DepthAttachmentFormat = depthBuffer.Format,
-    };
-
-    VkDynamicState[] dynamicStates = [VkDynamicState.Viewport, VkDynamicState.Scissor];
-    VkPipeline pipeline;
-    fixed (VkDynamicState* pDynamicStates = dynamicStates)
-    {
-        var dynamicState = new VkPipelineDynamicStateCreateInfo
-        {
-            DynamicStateCount = 2,
-            DynamicStates = pDynamicStates,
-        };
-
-        pipeline = device.CreateGraphicsPipeline(
-            VkPipelineCache.NullHandle,
-            new VkGraphicsPipelineCreateInfo
-            {
-                Next = &rendering,
-                StageCount = shaderStages.Count,
-                Stages = shaderStages,
-                VertexInputState = vertexInput,
-                InputAssemblyState = Presets.InputAssembly.TriangleList,
-                ViewportState = &viewportState,
-                RasterizationState = Presets.Rasterization.Fill.CullBack,
-                MultisampleState = Presets.Multisample.None,
-                DepthStencilState = Presets.DepthStencil.DepthTestWrite, // Active Depth Testing & Writing!
-                ColorBlendState = Presets.BlendState.BlendNone,
-                DynamicState = &dynamicState,
-                Layout = pipelineLayout,
-            },
-            null
-        );
-    }
+    // Modern Vulkan 1.3 Graphics Pipeline built cleanly via PipelineBuilder
+    using var pipeline = PipelineBuilder.Create()
+        .SetShaderStages(shaderStages)
+        .SetVertexInput(vertexInput)
+        .SetColorAttachmentFormat(swapchain.ColorFormat)
+        .SetDepthAttachmentFormat(depthBuffer.Format)
+        .SetPipelineLayout(pipelineLayout)
+        .Build(context);
 
     // ---------------------------------------------------------------------------------------------
-    // PHASE 5: COMMAND POOL & MULTI-FRAME IN-FLIGHT SYNCHRONIZATION
+    // PHASE 6: MULTI-FRAME IN-FLIGHT SYNCHRONIZATION
     // ---------------------------------------------------------------------------------------------
-    var commandPool = device.CreateCommandPool(
-        new VkCommandPoolCreateInfo
-        {
-            QueueFamilyIndex = queueFamily,
-            Flags = VkCommandPoolCreateFlags.ResetCommandBufferBit,
-        },
-        null
-    );
-
     using var frameSync = new FrameSync(context, maxFramesInFlight: 2);
-
-    var commandBuffers = new CommandBuffer[frameSync.MaxFramesInFlight];
-    for (var i = 0; i < frameSync.MaxFramesInFlight; i++)
-    {
-        commandBuffers[i] = device.AllocateCommandBuffer(
-            new VkCommandBufferAllocateInfo { CommandPool = commandPool, Level = VkCommandBufferLevel.Primary }
-        );
-    }
+    var commandBuffers = commandPool.AllocateMultiple(frameSync.MaxFramesInFlight);
 
     var colorRange = new VkImageSubresourceRange
     {
@@ -604,7 +560,7 @@ public static class Program
         );
 
         // Bind 3D graphics pipeline, set dynamic viewport & scissor
-        cmd.BindPipeline(VkPipelineBindPoint.Graphics, pipeline);
+        pipeline.Bind(cmd);
         cmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
         cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
 
@@ -626,11 +582,14 @@ public static class Program
 
         // Push MVP Matrix & Panini parameters to GPU via Push Constants (80 bytes)
         cmd.PushConstants(
-            pipelineLayout,
+            pipeline.Layout,
             VkShaderStageFlags.VertexBit,
             0,
             new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
         );
+
+        // Bind Combined Image Sampler Descriptor Set (Set 0)
+        cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, [descriptorSet], []);
 
         // Bind vertex and index buffers and draw the 36 indices (12 triangles)
         cmd.BindVertexBuffers(0, [vertexBuffer.Handle], [new ByteSize64(0)]);
@@ -683,12 +642,9 @@ public static class Program
     Console.WriteLine("[Shutdown] Waiting for GPU idle...");
     device.WaitIdle();
 
-    device.DestroyCommandPool(commandPool, null);
-    device.DestroyPipeline(pipeline, null);
-    device.DestroyPipelineLayout(pipelineLayout, null);
-
-    // C# 'using' automatically disposes indexBuffer, vertexBuffer, depthBuffer,
-    // frameSync, swapchain, allocator, context, and window.
+    // C# 'using' automatically disposes pipeline, descriptorAllocator, descriptorLayout,
+    // sampler, texture, commandPool, shaderStages, indexBuffer, vertexBuffer,
+    // depthBuffer, frameSync, swapchain, allocator, context, and window.
     Console.WriteLine("[Shutdown] All 3D resources released cleanly. Goodbye!");
     }
 }

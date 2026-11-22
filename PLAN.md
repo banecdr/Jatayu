@@ -213,15 +213,15 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/RHI/Vulkan/Swapchain/VulkanSwapchain.cs` | **DONE** | Presentation engine. Manages double/triple buffering, sRGB formats, image views, acquire/present, and dynamic resizing. |
 | `src/RHI/Vulkan/Sync/FrameSync.cs` | **DONE** | Multi-frame concurrency ($N = 2$ or $3$). Ring buffer of semaphores and fences allowing CPU/GPU overlap. |
 | `src/RHI/Vulkan/Textures/DepthBuffer.cs` | **DONE** | Hardware depth attachment image (`D32_SFLOAT`). (Reverse-Z conversion pending, Sprint 3b). |
-| `src/RHI/Vulkan/Textures/VulkanSampler.cs` | **PLANNED** | Sampler wrapper (Linear, Trilinear, Anisotropic 16x, Clamp, Repeat, and Min-Reduction mode for Hi-Z via `VK_EXT_sampler_filter_minmax`). (Sprint 3a). |
-| `src/RHI/Vulkan/Textures/GpuTexture.cs` | **PLANNED** | 2D/Array GPU texture backed by VMA with mipmaps, format layouts, and image view management. (Sprint 3a). |
-| `src/RHI/Vulkan/Commands/CommandPoolManager.cs`| **PLANNED** | Command pool manager allocating primary and secondary command buffers per frame and per thread. (Sprint 3a). |
-| `src/RHI/Vulkan/Pipelines/ShaderCompiler.cs` | **PLANNED** | Google ShaderC wrapper compiling GLSL to SPIR-V bytecode with disk-based bytecode caching. (Sprint 3a). |
-| `src/RHI/Vulkan/Pipelines/VulkanPipeline.cs` | **PLANNED** | Encapsulates `VkPipeline` and `VkPipelineLayout` with dynamic rendering depth/color attachment states. (Sprint 3a). |
-| `src/RHI/Vulkan/Pipelines/PipelineBuilder.cs` | **PLANNED** | Fluent builder for graphics, compute, and mesh-shader pipelines without boilerplate structs. (Sprint 3a). |
+| `src/RHI/Vulkan/Textures/VulkanSampler.cs` | **DONE** | Sampler wrapper (Linear, Trilinear, Anisotropic 16x, Clamp, Repeat, and Min-Reduction mode for Hi-Z via `VK_EXT_sampler_filter_minmax`). (Sprint 3a). |
+| `src/RHI/Vulkan/Textures/GpuTexture.cs` | **DONE** | 2D/Array GPU texture backed by VMA with mipmaps, format layouts, and image view management. (Sprint 3a). |
+| `src/RHI/Vulkan/Commands/CommandPoolManager.cs`| **DONE** | Command pool manager allocating primary and secondary command buffers per frame and per thread. (Sprint 3a). |
+| `src/RHI/Vulkan/Pipelines/ShaderCompiler.cs` | **DONE** | Google ShaderC wrapper compiling GLSL to SPIR-V bytecode with disk-based bytecode caching. (Sprint 3a). |
+| `src/RHI/Vulkan/Pipelines/VulkanPipeline.cs` | **DONE** | Encapsulates `VkPipeline` and `VkPipelineLayout` with dynamic rendering depth/color attachment states. (Sprint 3a). |
+| `src/RHI/Vulkan/Pipelines/PipelineBuilder.cs` | **DONE** | Fluent builder for graphics, compute, and mesh-shader pipelines without boilerplate structs. (Sprint 3a). |
 | `src/RHI/Vulkan/Pipelines/PipelineCache.cs` | **PLANNED** | Manages persistent `VkPipelineCache` loading and saving to disk to eliminate runtime shader compilation hitches. (Sprint 10). |
-| `src/RHI/Vulkan/Descriptors/DescriptorLayout.cs` | **PLANNED** | Descriptor set layout wrapper for non-bindless passes (ImGui, compute dispatch tables). (Sprint 3a). |
-| `src/RHI/Vulkan/Descriptors/DescriptorAllocator.cs`| **PLANNED** | Pool allocator for `VkDescriptorSet` recycling sets across frames. (Sprint 3a). |
+| `src/RHI/Vulkan/Descriptors/DescriptorLayout.cs` | **DONE** | Descriptor set layout wrapper for non-bindless passes (ImGui, compute dispatch tables). (Sprint 3a). |
+| `src/RHI/Vulkan/Descriptors/DescriptorAllocator.cs`| **DONE** | Pool allocator for `VkDescriptorSet` recycling sets across frames. (Sprint 3a). |
 | `src/RHI/Vulkan/Descriptors/BindlessTable.cs` | **PLANNED** | Global bindless descriptor array (`VK_EXT_descriptor_indexing`) binding thousands of textures to uniform shader arrays. (Sprint 5b). |
 | `src/RHI/Vulkan/Upload/UploadManager.cs` | **PLANNED** | Asynchronous GPU transfer coordinator using dedicated transfer queue, staging ring, and ownership transfers. (Sprint 3b). |
 | `src/RHI/Vulkan/Upload/StagingRing.cs` | **PLANNED** | Persistently mapped 64-256 MB circular staging buffer with head/tail tracking for zero-copy CPU-to-GPU uploads. (Sprint 3b). |
@@ -239,13 +239,13 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Jatayu.AssetFormats/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
-| `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **PLANNED** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
+| `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **DONE** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
 | `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **PLANNED** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
 | `src/Assets/PackReader.cs` | **PLANNED** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
 | `src/Assets/AssetManager.cs` | **PLANNED** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
 | `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
 | `src/Assets/Textures/MipResidency.cs` | **PLANNED** | Tracks loaded mip ranges per texture and manages step-of-2 reallocations and bindless swaps. (Sprint 6b). |
-| `src/Assets/Loaders/ShaderLoader.cs` | **PLANNED** | Runtime shader file watcher for live editing and hot-reloading during development. (Sprint 3a). |
+| `src/Assets/Loaders/ShaderLoader.cs` | **DONE** | Runtime shader file watcher for live editing and hot-reloading during development. (Sprint 3a). |
 
 ### 2.6 Offline Asset Cooker & World Generator (`tools/Jatayu.Cooker/` & `tools/Jatayu.WorldGen/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -420,11 +420,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.19 Automated Testing, Validation & CI Infrastructure
 | File Path | Status | Purpose & Role |
 | :--- | :---: | :--- |
-| `tests/Jatayu.Tests/Jatayu.Tests.csproj` | **PLANNED** | xUnit unit test suite covering math, origin shift, job system, staging ring, pack reader, and cell state machines without GPU requirements. (Sprint 3a). |
-| `tests/Jatayu.RenderSmoke/Program.cs` | **PLANNED** | Automated Vulkan smoke test: runs D20 feature probe, runs full test suite on D10 hardware or reduced validation-only suite on software drivers. (Sprint 3a). |
-| `.github/workflows/ci.yml` | **PLANNED** | Continuous integration pipeline: build, test, and run validation smoke tests. (Sprint 3a). |
-| `Directory.Build.props` | **PLANNED** | Solution-wide compiler settings (`TreatWarningsAsErrors=true`, nullable enabled, analyzers). (Sprint 3a). |
-| `docs/RENDER_CONVENTIONS.md` | **PLANNED** | Canonical reference documenting depth, handedness, matrix layout, units, and shader bindings. (Sprint 3a). |
+| `tests/Jatayu.Tests/Jatayu.Tests.csproj` | **DONE** | xUnit unit test suite covering math, origin shift, job system, staging ring, pack reader, and cell state machines without GPU requirements. (Sprint 3a). |
+| `tests/Jatayu.RenderSmoke/Program.cs` | **DONE** | Automated Vulkan smoke test: runs D20 feature probe, runs full test suite on D10 hardware or reduced validation-only suite on software drivers. (Sprint 3a). |
+| `.github/workflows/ci.yml` | **DONE** | Continuous integration pipeline: build, test, and run validation smoke tests. (Sprint 3a). |
+| `Directory.Build.props` | **DONE** | Solution-wide compiler settings (`TreatWarningsAsErrors=true`, nullable enabled, analyzers). (Sprint 3a). |
+| `docs/RENDER_CONVENTIONS.md` | **DONE** | Canonical reference documenting depth, handedness, matrix layout, units, and shader bindings. (Sprint 3a). |
 
 ### 2.20 Asset Shaders (`assets/shaders/`)
 | File Path | Status | Purpose |
@@ -474,16 +474,16 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 16
-- **Current Completion:** **7.4% (Sprint 2 Complete, Sprint 3a Ready)**
+- **Total Completed Files:** 31
+- **Current Completion:** **14.4% (Sprint 3a Complete, Sprint 3b Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
 | **Core Platform, Memory & Config** | 2 / 16 | In Progress |
 | **Multithreading & Jobs** | 0 / 5 | Planned (Sprint 4) |
 | **Diagnostics & Profiling** | 0 / 4 | Planned (Sprint 3b) |
-| **Modern Vulkan 1.3 RHI** | 7 / 23 | **DepthBuffer Complete** |
-| **Shared Formats & Runtime Assets** | 0 / 12 | Planned (Sprint 3a-6b) |
+| **Modern Vulkan 1.3 RHI** | 15 / 23 | **Sprint 3a RHI Complete** |
+| **Shared Formats & Runtime Assets** | 2 / 12 | **TextureLoader & ShaderLoader Complete** |
 | **Cooker & World Generator** | 0 / 13 | Planned (Sprint 4-10) |
 | **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
@@ -497,8 +497,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **AI, Navigation & Animation** | 0 / 8 | Planned (Sprint 10) |
 | **Diagnostics & Debug UI** | 0 / 2 | Planned (Sprint 3b) |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
-| **Testing, Validation & CI** | 0 / 5 | Planned (Sprint 3a) |
-| **Asset Shaders** | 4 / 39 | **cube.vert, cube.frag Complete** |
+| **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
+| **Asset Shaders** | 4 / 39 | **cube.vert, cube.frag Textured** |
 
 ---
 
@@ -615,11 +615,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | | `Ahwoo.BRUTAL.RenderDoc` | 2026.10.3 | | | |
 | | `Ahwoo.BRUTAL.RenderDoc.ImGui` | 2026.10.3 | | | |
 
-* [ ] **D1/D27:** Ktx binding Basis Universal support; BC7 comparison result; chosen encoder route. Status: *Pending: verify in Sprint 3a*.
-* [ ] **D2/D26:** Arch license; Friflo license; .NET 10 compatibility of Arch. Status: *Pending: verify in Sprint 3a*.
-* [ ] **D8:** MeshOptimizer function exports (cache, fetch, overdraw, simplify, remap). Status: *Pending: verify in Sprint 3a*.
-* [ ] **D9:** Jolt single versus double precision. Status: *Pending: verify in Sprint 3a*.
-* [ ] **D10:** Which of the listed device features the development GPU actually supports against the D10 hardware floor. Status: *Pending: verify in Sprint 3a*.
+* [x] **D1/D27:** Ktx binding Basis Universal support verified: `Ahwoo.BRUTAL.Ktx` exports `KtxTexture2.CompressBasis`, `KtxTexture2.TranscodeBasis`, `KtxBasisParams`, `KtxPackUastcFlagBits`. Basis UASTC to BC7/BC5/BC4 transcoding confirmed supported directly through KTX without external native dependency.
+* [x] **D2/D26:** Arch license (Apache-2.0) and Friflo license (MIT) verified; both compatible with .NET 10. Benchmark spike scheduled for Sprint 5a.
+* [x] **D8:** MeshOptimizer function exports verified: `OptimizeVertexCache`, `OptimizeVertexFetch`, `OptimizeOverdraw`, and `Simplify` confirmed exported by `Ahwoo.BRUTAL.MeshOptimizer`.
+* [x] **D9:** Jolt precision verified: `Ahwoo.BRUTAL.Jolt` uses Single Precision (`float3`). Deterministic origin rebasing procedure (Section 1.3) remains mandatory for large-world coordinates.
+* [x] **D10:** Development GPU (NVIDIA GeForce RTX 5060 Ti) verified: **PASSED** all mandatory D10 hardware floor requirements (DynamicRendering, Synchronization2, Maintenance4, TimelineSemaphore, BufferDeviceAddress, DrawIndirectCount, SamplerFilterMinmax, DescriptorIndexing, TextureCompressionBC, MultiDrawIndirect, ShaderInt64, FragmentStoresAndAtomics).
 
 ---
 
@@ -656,7 +656,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 3a: Textures, Pipelines, Tests and CI [NEXT]                              │
+│ SPRINT 3a: Textures, Pipelines, Tests and CI [COMPLETED]                         │
 │  - Create src/Jatayu.AssetFormats/; add TextureLoader as importer there          │
 │  - GpuTexture, VulkanSampler, ShaderCompiler, ShaderLoader, Shaders              │
 │  - VulkanPipeline & PipelineBuilder, CommandPoolManager, Descriptors             │
@@ -668,7 +668,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 3b: GPU Foundation and Diagnostics                                        │
+│ SPRINT 3b: GPU Foundation and Diagnostics [NEXT]                                 │
 │  - UploadManager, StagingRing (64-256 MB), UploadRequest, TimelineSemaphore      │
 │  - DeferredDeletionQueue (safe resource retirement), VramBudget                  │
 │  - Reverse-Z conversion (DepthConvention, Camera3D, DepthBuffer, shaders)       │

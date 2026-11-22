@@ -3,9 +3,9 @@
  * LOCATION: assets/shaders/cube.frag
  * 
  * WHAT THIS SHADER DOES:
- *   3D Fragment (pixel) shader for rendering 3D solid geometry in Vulkan 1.3.
- *   Calculates per-pixel color with directional diffuse lighting based on interpolated surface
- *   normals. This gives the 3D cube rich dimensionality, visible shading gradients, and volume.
+ *   3D Fragment (pixel) shader for rendering textured 3D solid geometry in Vulkan 1.3.
+ *   Samples the texture descriptor (set 0, binding 0) via sampler2D, modulates with per-vertex
+ *   color, and applies Lambertian directional diffuse lighting based on surface normals.
  *
  * HOW IT WORKS INTERNALLY:
  *   1. Inputs from Vertex Shader:
@@ -13,12 +13,16 @@
  *      - location = 1: vec3 fragNormal   (Interpolated surface normal vector)
  *      - location = 2: vec2 fragTexCoord (Interpolated UV coordinates)
  *
- *   2. Diffuse Directional Lighting:
+ *   2. Texture Sampling:
+ *      - set = 0, binding = 0: uniform sampler2D uTexture (Combined image sampler descriptor)
+ *      - Evaluates texture(uTexture, fragTexCoord)
+ *
+ *   3. Diffuse Directional Lighting:
  *      A simulated key light direction (vec3(0.5, 1.0, 0.7)) shines down on the 3D scene.
  *      The dot product max(dot(N, L), 0.0) calculates Lambertian diffuse reflection.
  *      An ambient term of 0.25 prevents unlit back faces from being completely black.
  *
- *   3. Output:
+ *   4. Output:
  *      - location = 0: vec4 outColor (Final RGBA color written to swapchain color attachment)
  * ================================================================================================= */
 
@@ -28,6 +32,9 @@
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
+
+// Combined Image Sampler Descriptor (Set 0, Binding 0)
+layout(set = 0, binding = 0) uniform sampler2D uTexture;
 
 // Output to Color Attachment
 layout(location = 0) out vec4 outColor;
@@ -42,6 +49,9 @@ void main() {
     float ambient = 0.25;
     float lightIntensity = clamp(ambient + diffuse * 0.75, 0.0, 1.0);
 
-    // Final shaded color
-    outColor = vec4(fragColor * lightIntensity, 1.0);
+    // Sample texture and modulate with vertex color & lighting
+    vec4 texColor = texture(uTexture, fragTexCoord);
+    vec3 finalColor = texColor.rgb * fragColor * lightIntensity;
+
+    outColor = vec4(finalColor, texColor.a);
 }
