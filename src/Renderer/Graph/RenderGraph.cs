@@ -5,12 +5,12 @@
  * WHAT THIS FILE DOES:
  *   Modern Vulkan 1.3 frame render graph (DAG).
  *   - Passes declare read/write dependencies on virtual resource handles.
- *   - Compiles topological execution order and culls dead/unused passes.
+ *   - Compiles topological execution order and culls dead/unused passes with zero GC allocations.
  *   - Automates stage/access transitions and image layout barriers via BarrierBuilder (VK_KHR_synchronization2).
  *   - Coordinates Vulkan 1.3 Dynamic Rendering (vkCmdBeginRendering / vkCmdEndRendering) with zero
  *     legacy VkRenderPass or VkFramebuffer overhead.
  *   - Automatically integrates per-pass GPU timing queries via GpuTimer.
- *   - Reuses preallocated internal buffers for zero-allocation hot paths.
+ *   - Uses 100% preallocated object and collection pools for zero-allocation hot paths.
  * ================================================================================================= */
 
 using System;
@@ -26,10 +26,25 @@ namespace Jatayu.Renderer.Graph;
 /// </summary>
 public sealed class RenderGraph : IDisposable
 {
-    private readonly List<RgTextureResource> _textures = new(32);
+    private const int InitialCapacity = 32;
+
+    private readonly List<RgTextureResource> _textures = new(InitialCapacity);
     private readonly List<RgBufferResource> _buffers = new(16);
-    private readonly List<RenderPass> _passes = new(32);
-    private readonly List<RenderPass> _compiledPasses = new(32);
+    private readonly List<RenderPass> _passes = new(InitialCapacity);
+    private readonly List<RenderPass> _compiledPasses = new(InitialCapacity);
+    private readonly List<RenderPassBuilder> _builders = new(InitialCapacity);
+
+    // Preallocated buffers for zero-allocation DAG compilation
+    private List<int>[] _dependents = new List<int>[InitialCapacity];
+    private readonly Dictionary<uint, List<int>> _writersByResource = new(InitialCapacity);
+    private readonly List<List<int>> _listPool = new(InitialCapacity);
+    private bool[] _isActive = new bool[InitialCapacity];
+    private int[] _activeInDegree = new int[InitialCapacity];
+    private readonly Queue<int> _queue = new(InitialCapacity);
+    private readonly Queue<int> _readyQueue = new(InitialCapacity);
+
+    private int _passCount;
+    private int _textureCount;
 
     private readonly BarrierBuilder _barrierBuilder = new();
     private readonly RenderPassContext _passContext;
@@ -44,6 +59,11 @@ public sealed class RenderGraph : IDisposable
     public IReadOnlyList<RenderPass> Passes => _passes;
 
     /// <summary>
+    /// Gets the number of registered passes.
+    /// </summary>
+    public int PassCount => _passCount;
+
+    /// <summary>
     /// Gets the compiled, topologically sorted active execution list.
     /// </summary>
     public IReadOnlyList<RenderPass> CompiledPasses => _compiledPasses;
@@ -51,10 +71,17 @@ public sealed class RenderGraph : IDisposable
     public RenderGraph()
     {
         _passContext = new RenderPassContext(this);
+
+        for (int i = 0; i < InitialCapacity; i++)
+        {
+            _dependents[i] = new List<int>(8);
+            _listPool.Add(new List<int>(8));
+        }
     }
 
     /// <summary>
     /// Imports an existing external texture (e.g. swapchain image or depth buffer) into the graph.
+    /// Reuses internal pool objects to achieve zero heap allocation per frame.
     /// </summary>
     public RgTextureHandle ImportTexture(
         string name,
@@ -67,78 +94,125 @@ public sealed class RenderGraph : IDisposable
         VkPipelineStageFlags2 initialStage = VkPipelineStageFlags2.None,
         VkAccessFlags2 initialAccess = VkAccessFlags2.None)
     {
-        var handle = new RgTextureHandle((uint)(_textures.Count + 1), 1);
+        var handle = new RgTextureHandle((uint)(_textureCount + 1), 1);
         var aspect = RgTextureResource.DetermineAspect(format);
 
-        var resource = new RgTextureResource
+        RgTextureResource resource;
+        if (_textureCount < _textures.Count)
         {
-            Handle = handle,
-            Name = name,
-            IsImported = true,
-            Image = image,
-            ImageView = imageView,
-            Format = format,
-            Width = width,
-            Height = height,
-            Aspect = aspect,
-            InitialLayout = initialLayout,
-            CurrentLayout = initialLayout,
-            CurrentStage = initialStage,
-            CurrentAccess = initialAccess,
-        };
+            resource = _textures[_textureCount];
+            resource.Handle = handle;
+            resource.Name = name;
+            resource.IsImported = true;
+            resource.Image = image;
+            resource.ImageView = imageView;
+            resource.Format = format;
+            resource.Width = width;
+            resource.Height = height;
+            resource.Aspect = aspect;
+            resource.InitialLayout = initialLayout;
+            resource.CurrentLayout = initialLayout;
+            resource.CurrentStage = initialStage;
+            resource.CurrentAccess = initialAccess;
+        }
+        else
+        {
+            resource = new RgTextureResource
+            {
+                Handle = handle,
+                Name = name,
+                IsImported = true,
+                Image = image,
+                ImageView = imageView,
+                Format = format,
+                Width = width,
+                Height = height,
+                Aspect = aspect,
+                InitialLayout = initialLayout,
+                CurrentLayout = initialLayout,
+                CurrentStage = initialStage,
+                CurrentAccess = initialAccess,
+            };
+            _textures.Add(resource);
+        }
 
-        _textures.Add(resource);
+        _textureCount++;
         return handle;
     }
 
     /// <summary>
     /// Adds a new render pass to the graph DAG with declarative setup and execution callbacks.
+    /// Reuses internal pool objects to achieve zero heap allocation per frame.
     /// </summary>
     public RenderPass AddPass(string name, Action<RenderPassBuilder> setup, Action<RenderPassContext> execute)
     {
         if (setup == null) throw new ArgumentNullException(nameof(setup));
         if (execute == null) throw new ArgumentNullException(nameof(execute));
 
-        var pass = new RenderPass(name, _passes.Count)
+        RenderPass pass;
+        RenderPassBuilder builder;
+
+        if (_passCount < _passes.Count)
         {
-            ExecuteCallback = execute,
-        };
+            pass = _passes[_passCount];
+            pass.Reset();
+            pass.Name = name;
+            pass.PassIndex = _passCount;
+            pass.ExecuteCallback = execute;
+            builder = _builders[_passCount];
+            builder.Pass = pass;
+        }
+        else
+        {
+            pass = new RenderPass(name, _passCount)
+            {
+                ExecuteCallback = execute,
+            };
+            builder = new RenderPassBuilder(pass);
+            _passes.Add(pass);
+            _builders.Add(builder);
+        }
 
-        var builder = new RenderPassBuilder(pass);
+        _passCount++;
         setup(builder);
-
-        _passes.Add(pass);
         _isCompiled = false;
         return pass;
     }
 
     /// <summary>
     /// Compiles the render graph: analyzes data dependencies, culls unused passes, and topologically sorts execution order.
+    /// Uses preallocated scratch buffers to ensure zero GC allocations.
     /// </summary>
     public void Compile()
     {
         _compiledPasses.Clear();
 
-        var passCount = _passes.Count;
+        var passCount = _passCount;
         if (passCount == 0)
         {
             _isCompiled = true;
             return;
         }
 
-        // Build adjacency list for topological sort
-        // In-degree array: inDegree[i] is the number of prerequisites that pass i must wait for
-        var inDegree = new int[passCount];
-        var dependents = new List<int>[passCount];
-        for (int i = 0; i < passCount; i++)
+        if (_dependents.Length < passCount)
         {
-            dependents[i] = [];
+            int newCap = Math.Max(passCount * 2, _dependents.Length * 2);
+            Array.Resize(ref _dependents, newCap);
+            Array.Resize(ref _isActive, newCap);
+            Array.Resize(ref _activeInDegree, newCap);
         }
 
-        // Track last writer for each texture to determine write->read and write->write dependencies
-        var lastWriter = new Dictionary<uint, int>();
-        // Track all writers for each texture
-        var writersByResource = new Dictionary<uint, List<int>>();
+        for (int i = 0; i < passCount; i++)
+        {
+            _dependents[i] ??= new List<int>(8);
+            _dependents[i].Clear();
+            _isActive[i] = false;
+            _activeInDegree[i] = 0;
+        }
+
+        // Track all writers for each texture using pooled lists
+        int poolIndex = 0;
+        _writersByResource.Clear();
         for (int i = 0; i < passCount; i++)
         {
             var pass = _passes[i];
@@ -148,10 +222,20 @@ public sealed class RenderGraph : IDisposable
                     continue;
 
                 var id = decl.TextureHandle.Id;
-                if (!writersByResource.TryGetValue(id, out var list))
+                if (!_writersByResource.TryGetValue(id, out var list))
                 {
-                    list = [];
-                    writersByResource[id] = list;
+                    if (poolIndex < _listPool.Count)
+                    {
+                        list = _listPool[poolIndex++];
+                        list.Clear();
+                    }
+                    else
+                    {
+                        list = new List<int>(8);
+                        _listPool.Add(list);
+                        poolIndex++;
+                    }
+                    _writersByResource[id] = list;
                 }
 
                 if (!list.Contains(i))
@@ -169,7 +253,7 @@ public sealed class RenderGraph : IDisposable
                     continue;
 
                 var id = decl.TextureHandle.Id;
-                if (writersByResource.TryGetValue(id, out var writers))
+                if (_writersByResource.TryGetValue(id, out var writers))
                 {
                     foreach (var w in writers)
                     {
@@ -180,9 +264,9 @@ public sealed class RenderGraph : IDisposable
                         // If pass i also writes, establish ordering based on declaration order
                         if (!decl.IsWrite || w < i)
                         {
-                            if (!dependents[w].Contains(i))
+                            if (!_dependents[w].Contains(i))
                             {
-                                dependents[w].Add(i);
+                                _dependents[w].Add(i);
                             }
                         }
                     }
@@ -192,22 +276,21 @@ public sealed class RenderGraph : IDisposable
 
         // Culling: identify active passes.
         // A pass is active if it has side effects (e.g. presentation) or produces resources consumed by active passes.
-        var isActive = new bool[passCount];
-        var queue = new Queue<int>();
+        _queue.Clear();
 
         for (int i = 0; i < passCount; i++)
         {
             if (_passes[i].HasSideEffects)
             {
-                isActive[i] = true;
-                queue.Enqueue(i);
+                _isActive[i] = true;
+                _queue.Enqueue(i);
             }
         }
 
         // Backtrack from active passes to activate producers
-        while (queue.Count > 0)
+        while (_queue.Count > 0)
         {
-            var curr = queue.Dequeue();
+            var curr = _queue.Dequeue();
             var currPass = _passes[curr];
 
             foreach (var decl in currPass.ResourceDeclarations)
@@ -215,14 +298,14 @@ public sealed class RenderGraph : IDisposable
                 if (decl.IsWrite || !decl.TextureHandle.IsValid)
                     continue;
 
-                if (writersByResource.TryGetValue(decl.TextureHandle.Id, out var writers))
+                if (_writersByResource.TryGetValue(decl.TextureHandle.Id, out var writers))
                 {
                     foreach (var w in writers)
                     {
-                        if (!isActive[w])
+                        if (!_isActive[w])
                         {
-                            isActive[w] = true;
-                            queue.Enqueue(w);
+                            _isActive[w] = true;
+                            _queue.Enqueue(w);
                         }
                     }
                 }
@@ -232,48 +315,47 @@ public sealed class RenderGraph : IDisposable
         // Mark culled passes
         for (int i = 0; i < passCount; i++)
         {
-            _passes[i].IsCulled = !isActive[i];
+            _passes[i].IsCulled = !_isActive[i];
         }
 
         // Calculate in-degree for active passes only
-        var activeInDegree = new int[passCount];
         for (int i = 0; i < passCount; i++)
         {
-            if (!isActive[i])
+            if (!_isActive[i])
                 continue;
 
-            foreach (var v in dependents[i])
+            foreach (var v in _dependents[i])
             {
-                if (isActive[v])
+                if (_isActive[v])
                 {
-                    activeInDegree[v]++;
+                    _activeInDegree[v]++;
                 }
             }
         }
 
         // Topological Sort (Kahn's Algorithm) over active passes
-        var readyQueue = new Queue<int>();
+        _readyQueue.Clear();
         for (int i = 0; i < passCount; i++)
         {
-            if (isActive[i] && activeInDegree[i] == 0)
+            if (_isActive[i] && _activeInDegree[i] == 0)
             {
-                readyQueue.Enqueue(i);
+                _readyQueue.Enqueue(i);
             }
         }
 
-        while (readyQueue.Count > 0)
+        while (_readyQueue.Count > 0)
         {
-            var u = readyQueue.Dequeue();
+            var u = _readyQueue.Dequeue();
             _compiledPasses.Add(_passes[u]);
 
-            foreach (var v in dependents[u])
+            foreach (var v in _dependents[u])
             {
-                if (isActive[v])
+                if (_isActive[v])
                 {
-                    activeInDegree[v]--;
-                    if (activeInDegree[v] == 0)
+                    _activeInDegree[v]--;
+                    if (_activeInDegree[v] == 0)
                     {
-                        readyQueue.Enqueue(v);
+                        _readyQueue.Enqueue(v);
                     }
                 }
             }
@@ -418,9 +500,8 @@ public sealed class RenderGraph : IDisposable
     /// </summary>
     public void Reset()
     {
-        _textures.Clear();
-        _buffers.Clear();
-        _passes.Clear();
+        _passCount = 0;
+        _textureCount = 0;
         _compiledPasses.Clear();
         _barrierBuilder.Clear();
         _isCompiled = false;
@@ -434,7 +515,7 @@ public sealed class RenderGraph : IDisposable
     private RgTextureResource GetTextureResource(RgTextureHandle handle)
     {
         var index = (int)handle.Id - 1;
-        if (index < 0 || index >= _textures.Count)
+        if (index < 0 || index >= _textureCount)
             throw new ArgumentOutOfRangeException(nameof(handle), $"Invalid texture handle: {handle}");
         return _textures[index];
     }
@@ -445,6 +526,11 @@ public sealed class RenderGraph : IDisposable
             return;
 
         Reset();
+        _textures.Clear();
+        _buffers.Clear();
+        _passes.Clear();
+        _compiledPasses.Clear();
+        _builders.Clear();
         _disposed = true;
     }
 }

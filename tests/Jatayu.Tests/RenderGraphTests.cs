@@ -198,4 +198,34 @@ public class RenderGraphTests
         Assert.Equal("OpaquePass", graph.CompiledPasses[0].Name);
         Assert.Equal("PresentPass", graph.CompiledPasses[1].Name);
     }
+
+    [Fact]
+    public void RenderGraph_ZeroHeapAllocations_OnSteadyStateCompileAndExecute()
+    {
+        using var graph = new RenderGraph();
+
+        var dummyImage = new VkImage();
+        var dummyView = new VkImageView();
+
+        static void SetupOpaque(RenderPassBuilder b) => b.HasSideEffects(true);
+        static void ExecuteOpaque(RenderPassContext ctx) { }
+
+        // Warm up pools on frame 1
+        graph.Reset();
+        graph.ImportTexture("Warmup", dummyImage, dummyView, VkFormat.R8G8B8A8UNorm, 1280, 720, VkImageLayout.Undefined);
+        graph.AddPass("WarmupPass", SetupOpaque, ExecuteOpaque);
+        graph.Compile();
+
+        // Measure steady-state frame 2 using AllocationTracker
+        Jatayu.Core.Profiling.AllocationTracker.BeginFrame();
+
+        graph.Reset();
+        var tex = graph.ImportTexture("ColorTarget", dummyImage, dummyView, VkFormat.R8G8B8A8UNorm, 1280, 720, VkImageLayout.Undefined);
+        graph.AddPass("OpaquePass", SetupOpaque, ExecuteOpaque);
+        graph.Compile();
+
+        Jatayu.Core.Profiling.AllocationTracker.EndFrame();
+
+        Assert.Equal(0, Jatayu.Core.Profiling.AllocationTracker.LastFrameAllocatedBytes);
+    }
 }

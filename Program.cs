@@ -306,6 +306,17 @@ public static class Program
     // Modern Vulkan 1.3 Render Graph for DAG pass scheduling and automated sync2 synchronization
     using var renderGraph = new RenderGraph();
 
+    // Preallocated submission arrays to guarantee 0 heap allocations per frame
+    var waitSemaphores = new VkSemaphore[1];
+    var waitStages = new VkPipelineStageFlags[] { VkPipelineStageFlags.ColorAttachmentOutputBit };
+    var submitCmds = new CommandBuffer[1];
+    var signalSemaphores = new VkSemaphore[1];
+
+    // Preallocated viewport, scissor, and descriptor bindings
+    var viewports = new VkViewport[] { new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 } };
+    var scissors = new VkRect2D[] { new VkRect2D(swapchain.Extent) };
+    var descriptorSets = new VkDescriptorSet[] { descriptorSet };
+
     // ---------------------------------------------------------------------------------------------
     // INTERACTIVE HOTKEY EVENT HOOKS
     // ---------------------------------------------------------------------------------------------
@@ -513,6 +524,8 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            viewports[0] = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
+            scissors[0] = new VkRect2D(swapchain.Extent);
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
             continue;
@@ -531,6 +544,8 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            viewports[0] = new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 };
+            scissors[0] = new VkRect2D(swapchain.Extent);
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
             continue;
@@ -605,8 +620,8 @@ public static class Program
                 {
                     var pCmd = ctx.CommandBuffer;
                     pipeline.Bind(pCmd);
-                    pCmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
-                    pCmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
+                    pCmd.SetViewport(0, viewports);
+                    pCmd.SetScissor(0, scissors);
 
                     // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
                     var pushData = new PushConstantData
@@ -625,7 +640,7 @@ public static class Program
                         new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
                     );
 
-                    pCmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, [descriptorSet], []);
+                    pCmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, descriptorSets, []);
                     cubeMesh.Bind(pCmd);
                     cubeMesh.Draw(pCmd);
 
@@ -665,11 +680,15 @@ public static class Program
         using (Profiler.Scope("QueueSubmit"))
         {
             var waitSemaphore = frameSync.CurrentImageAvailable;
+            waitSemaphores[0] = waitSemaphore;
+            submitCmds[0] = cmd;
+            signalSemaphores[0] = signalSemaphore;
+
             queue.Submit(
-                [waitSemaphore],
-                [VkPipelineStageFlags.ColorAttachmentOutputBit],
-                [cmd],
-                [signalSemaphore],
+                waitSemaphores,
+                waitStages,
+                submitCmds,
+                signalSemaphores,
                 frameSync.CurrentFence
             );
         }

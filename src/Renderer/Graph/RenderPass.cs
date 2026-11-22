@@ -92,7 +92,7 @@ public sealed class RenderPassContext
 /// </summary>
 public sealed class RenderPassBuilder
 {
-    internal readonly RenderPass Pass;
+    internal RenderPass Pass { get; set; }
 
     internal RenderPassBuilder(RenderPass pass)
     {
@@ -210,7 +210,7 @@ public sealed class RenderPassBuilder
 /// </summary>
 public sealed class RenderPass
 {
-    public string Name { get; }
+    public string Name { get; internal set; }
     public int PassIndex { get; internal set; }
     public bool HasSideEffects { get; internal set; }
     public bool IsCulled { get; internal set; }
