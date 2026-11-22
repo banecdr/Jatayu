@@ -4,60 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Jatayu – Plan Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-:root{--bg:#f2f4f5;--card:#fff;--ink:#101418;--mut:#4a5560;--line:#cfd6db;--done:#0b7a53;--donebg:#d9f1e6;--next:#a24b06;--nextbg:#fbe8cf;--plan:#4a5560;--planbg:#e6eaed;--code:#e9edf0;
---sans:"IBM Plex Sans","Segoe UI",Helvetica,Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+:root{--desk:#08090b;--win:#101216;--tb:#0b0c0f;--tbon:#1f4276;--ink:#e8eaed;--mut:#98a2b3;--line:#434b5c;--frame:#1c2a44;--hdr:#2b4a7d;--hdrh:#35609f;--acc:#4296fa;--done:#6fdc8c;--next:#f5b942;--tab:#1c3157;--tabon:#2f64ad;--row:#ffffff09;
+--ff:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1316;--card:#161b1f;--ink:#e6ebee;--mut:#9aa7b0;--line:#2a3238;--done:#3ddc97;--donebg:#12301f;--next:#f2b24c;--nextbg:#3a2c0a;--plan:#9aa7b0;--planbg:#222a30;--code:#222a30;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0f1316;--card:#161b1f;--ink:#e6ebee;--mut:#9aa7b0;--line:#2a3238;--done:#3ddc97;--donebg:#12301f;--next:#f2b24c;--nextbg:#3a2c0a;--plan:#9aa7b0;--planbg:#222a30;--code:#222a30;color-scheme:dark}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--desk:#aeb8c6;--win:#f0f1f3;--tb:#d4d7dc;--tbon:#9db9e3;--ink:#16181d;--mut:#4d5666;--line:#9aa3b2;--frame:#d9deea;--hdr:#b9cdee;--hdrh:#9dbbe8;--acc:#2a6fd6;--done:#1a7a37;--next:#9a5200;--tab:#c5d3ea;--tabon:#8fb2e6;--row:#00000008;color-scheme:light}}
+:root[data-theme="light"]{--desk:#aeb8c6;--win:#f0f1f3;--tb:#d4d7dc;--tbon:#9db9e3;--ink:#16181d;--mut:#4d5666;--line:#9aa3b2;--frame:#d9deea;--hdr:#b9cdee;--hdrh:#9dbbe8;--acc:#2a6fd6;--done:#1a7a37;--next:#9a5200;--tab:#c5d3ea;--tabon:#8fb2e6;--row:#00000008;color-scheme:light}
 *{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans)}
-.wrap{max-width:980px;margin:0 auto;padding:24px 16px 70px}
-.hero{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;padding-bottom:14px;margin-bottom:0;border-bottom:2px solid var(--ink)}
-.hero h1{font:600 26px/1 var(--mono);margin:0;letter-spacing:-.02em}.hero small{display:block;font:400 12px var(--mono);color:var(--mut);margin-top:8px}
-.btns{display:flex;gap:6px;flex-wrap:wrap}
-button,input{font:inherit;color:inherit}
-.btns button,.btns a,.tools button,.card button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 11px;cursor:pointer;text-decoration:none;font:13px var(--mono)}
-.btns button:hover,.btns a:hover,.tools button:hover{border-color:var(--ink)}
-.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;display:flex;gap:22px;overflow-x:auto;margin:0 0 18px;padding:0;background:var(--bg);border-bottom:1px solid var(--line)}
-.tabs button{border:0;border-bottom:2px solid transparent;margin-bottom:-1px;border-radius:0;background:none;padding:11px 0;color:var(--mut);white-space:nowrap;cursor:pointer;font:500 14px var(--mono)}
-.tabs button.on{color:var(--ink);border-bottom-color:var(--ink)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px;margin-bottom:12px}
-h2{font:600 15px var(--mono);margin:0 0 12px}
-.figs{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:4px;background:var(--card);margin-bottom:12px}
-.figs div{padding:12px 16px;border-left:1px solid var(--line)}.figs div:first-child{border-left:0}
-.figs b{display:block;font:600 26px/1.2 var(--mono)}.figs span{color:var(--mut);font-size:13px}
-.mosaic{display:flex;flex-wrap:wrap;gap:3px}.mosaic i,.key{width:14px;height:14px;border:1px solid var(--line);border-radius:2px;display:block}
-.mosaic i.d,.key.d{background:var(--done);border-color:var(--done)}.key{display:inline-block;width:10px;height:10px;vertical-align:-1px;margin:0 3px 0 8px}.key:first-child{margin-left:0}
-.bar{height:6px;background:var(--planbg);border-radius:2px;overflow:hidden}.bar i{display:block;height:100%;background:var(--done)}
-.row{display:grid;grid-template-columns:minmax(120px,1.6fr) 3fr 64px;gap:12px;align-items:center;padding:6px 0;font-size:14px}
-.row em{font:12px var(--mono);font-style:normal;color:var(--mut);text-align:right}
-.chip{display:inline-block;font:600 11px var(--mono);border-radius:2px;padding:1px 7px;letter-spacing:.05em;white-space:nowrap}
-.done{background:var(--donebg);color:var(--done)}.next{background:var(--nextbg);color:var(--next)}.plan{background:var(--planbg);color:var(--plan)}
-.sprint header{display:flex;justify-content:space-between;gap:8px;margin:0 0 6px}.sprint h3{margin:0;font-size:15px;font-weight:600}
-.sprint ul{margin:8px 0 0;padding-left:18px;color:var(--mut);font-size:14px}.res{margin-top:10px;font-size:14px;border-top:1px solid var(--line);padding-top:8px}
-code{background:var(--code);border-radius:2px;padding:1px 5px;font:12.5px var(--mono);word-break:break-all}
-.file{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}.file p{grid-column:2;margin:0;color:var(--mut)}
-details summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:8px}details summary::-webkit-details-marker{display:none}
-details summary::before{content:"+";font-family:var(--mono);color:var(--mut)}details[open] summary::before{content:"−"}details summary span:first-child{flex:1}
-.tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.tools input[type=search]{flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:3px;padding:6px 10px}
-.tools button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.mut{color:var(--mut);font-size:13px}.err{border-color:var(--next)}
-textarea{width:100%;min-height:120px;background:var(--code);border:1px solid var(--line);border-radius:3px;padding:8px;color:var(--ink);font:12px var(--mono)}
-.dec{padding:11px 0;border-top:1px solid var(--line)}.dec:first-child{border-top:0}.dec b{margin-right:8px;font-family:var(--mono)}.dec p{margin:4px 0 0;color:var(--mut);font-size:14px}
-.sk{height:80px;border:1px solid var(--line);border-radius:4px;margin-bottom:12px;background:var(--planbg)}
-button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-@media (max-width:560px){.figs{grid-template-columns:1fr 1fr}.figs div:nth-child(3){border-left:0}.figs div:nth-child(n+3){border-top:1px solid var(--line)}.row{grid-template-columns:1fr 56px}.row .bar{grid-column:1/-1;order:3}}
+body{margin:0;background:var(--desk);color:var(--ink);font:13px/1.55 var(--ff)}
+.wrap{max-width:1120px;margin:0 auto;padding:10px 10px 60px}
+.menubar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--tb);border:1px solid var(--line);padding:4px 8px;margin-bottom:8px}
+.menubar b{color:var(--acc);margin-right:8px}.meta{margin-left:auto;color:var(--mut);font-size:12px}
+button,.menubar a{font:inherit;color:var(--ink);background:var(--hdr);border:0;border-radius:3px;padding:3px 10px;cursor:pointer;text-decoration:none}
+button:hover,.menubar a:hover{background:var(--hdrh)}button:active{background:var(--acc);color:#fff}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:2px solid var(--tabon);margin-bottom:8px}
+.tabs button{background:var(--tab);border-radius:4px 4px 0 0;padding:4px 16px;white-space:nowrap}.tabs button:hover{background:var(--hdrh)}.tabs button.on{background:var(--tabon);color:#fff}
+.win,.card{background:var(--win);border:1px solid var(--line);margin-bottom:8px}.card{padding:10px}
+summary{cursor:pointer;list-style:none;display:flex;gap:6px;align-items:center;user-select:none}summary::-webkit-details-marker{display:none}
+summary::before{content:"▶";font-size:9px;color:var(--mut);width:10px}details[open]>summary::before{content:"▼"}
+.win>summary{background:var(--tb);padding:3px 8px}.win[open]>summary{background:var(--tbon);color:#fff}.win[open]>summary::before{color:#fff}
+.r{margin-left:auto}.bd{padding:8px}
+.hd{margin-bottom:3px}.hd>summary{background:var(--hdr);padding:3px 8px}.hd>summary:hover{background:var(--hdrh)}.hd>.bd{background:var(--win);border:1px solid var(--line);border-top:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:0 8px;align-items:start}
+.pb{position:relative;height:18px;background:var(--frame);border-radius:2px;overflow:hidden;margin:2px 0}.pb i{display:block;height:100%;background:var(--acc)}
+.pb span{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:#fff;text-shadow:0 0 3px #000a}
+.line{display:grid;grid-template-columns:1fr 1.3fr;gap:10px;align-items:center;margin:3px 0}
+.tbl{width:100%;border-collapse:collapse;margin-top:8px}.tbl td{padding:3px 8px}.tbl td+td{text-align:right}.tbl tr:nth-child(even){background:var(--row)}.tbl tr:hover{background:var(--hdr)}
+.mosaic{display:flex;flex-wrap:wrap;gap:2px;margin:10px 0 2px}.mosaic i{width:10px;height:10px;background:var(--frame);display:block}.mosaic i.d{background:var(--done)}
+.done{color:var(--done)}.next{color:var(--next)}.plan,.mut{color:var(--mut)}.acc{color:var(--acc)}
+ul{margin:6px 0;padding-left:20px}li::marker{color:var(--acc)}p{margin:6px 0}
+code{color:var(--acc);word-break:break-all}
+.tools{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.tools label{cursor:pointer}
+input[type=search]{flex:1;min-width:180px;background:var(--frame);color:var(--ink);border:0;border-radius:2px;padding:4px 8px;font:inherit}
+.ck{appearance:none;width:14px;height:14px;background:var(--frame);border:1px solid var(--line);border-radius:2px;margin:0 6px 0 0;vertical-align:-3px;cursor:pointer}
+.ck:checked{background:var(--acc)}.ck:checked::after{content:"✓";display:block;color:#fff;font-size:11px;line-height:12px;text-align:center}
+.fr,.ent{display:grid;grid-template-columns:18px 1fr;gap:0 6px;padding:4px 8px}.fr:nth-child(even),.ent:nth-child(even){background:var(--row)}.fr:hover,.ent:hover{background:var(--hdr)}
+.fr .mut{grid-column:2}.ent{display:block}.ent .mut{display:block}
+.cb{width:12px;height:12px;margin-top:4px;background:var(--frame);border:1px solid var(--line);border-radius:2px;display:block;font-size:10px;line-height:10px;text-align:center}.cb.on{color:var(--done)}.cb.on::after{content:"✓"}
+.err{border-color:var(--next)}textarea{width:100%;min-height:110px;background:var(--frame);color:var(--ink);border:0;border-radius:2px;padding:8px;font:12px var(--ff)}
+.sk{height:70px;background:var(--win);border:1px solid var(--line);margin-bottom:8px}
+button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<header class="hero">
-  <h1>Jatayu <small id="meta">Loading plan…</small></h1>
-  <div class="btns"><button id="reload">Refresh</button><button id="theme" title="Toggle theme">Theme</button><a href="https://github.com/banecdr/Jatayu/blob/main/PLAN.md" target="_blank" rel="noopener">PLAN.md</a></div>
-</header>
+<header class="menubar"><b>Jatayu</b><button id="reload">Refresh</button><button id="theme">Theme</button><a href="https://github.com/banecdr/Jatayu/blob/main/PLAN.md" target="_blank" rel="noopener">Open PLAN.md</a><span class="meta" id="meta">Loading plan…</span></header>
 <div id="loadbox"></div>
 <nav class="tabs" id="tabs"></nav>
 <main id="view"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
@@ -119,51 +112,48 @@ function parse(md){
 }
 
 function stats(list){ const d=list.filter(f=>f.done).length; return {d,t:list.length,p:list.length?Math.round(d/list.length*100):0}; }
-const bar = p => `<div class="bar"><i style="width:${p}%"></i></div>`;
-const chip = (c,t) => `<span class="chip ${c}">${t}</span>`;
+const bar=(p,t)=>`<div class="pb"><i style="width:${p}%"></i><span>${t??p+"%"}</span></div>`;
+let sd=true,sp=true;
+const win=(t,r,b,o=true)=>`<details class="win" ${o?"open":""}><summary>${t}<span class="r">${r||""}</span></summary><div class="bd">${b}</div></details>`;
+const lis=a=>`<ul>${a.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>`;
 
 function overview(){
-  const all = stats(D.files), groups = {};
-  D.files.forEach(f=>(groups[f.group] ||= []).push(f));
-  const next = D.sprints.find(s=>s.status==="next");
-  const doneSp = D.sprints.filter(s=>s.status==="done").length;
-  const cells = D.files.map(f=>`<i class="${f.done?"d":""}" title="${esc(f.path)}"></i>`).join("");
-  const note = D.stated.Completed ? `<p class="mut" style="margin:8px 0 0">PLAN.md’s own dashboard claims ${D.stated.Completed} / ${D.stated.Planned}. Counts here come from the file tables.</p>` : "";
-  let h = `<section class="card"><h2>${all.d} of ${all.t} files built · ${all.p}%</h2><div class="mosaic">${cells}</div><p class="mut" style="margin:12px 0 0"><i class="key d"></i>done <i class="key"></i>to do. One square per file, in plan order.</p>${note}</section>
-  <div class="figs"><div><b>${all.d}</b><span>Files done</span></div><div><b>${all.t-all.d}</b><span>Files remaining</span></div><div><b>${doneSp}/${D.sprints.length}</b><span>Sprints complete</span></div><div><b>${D.decs.length}</b><span>Decisions logged</span></div></div>`;
-  if (next) h += `<div class="card sprint next"><header><h3>Up next · Sprint ${esc(next.id)}: ${inline(next.title)}</h3>${chip("next","NEXT")}</header><ul>${next.items.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>${next.result?`<div class="res"><b>Goal:</b> ${inline(next.result)}</div>`:""}</div>`;
-  h += `<div class="card"><h2>By subsystem</h2>` + Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<div class="row"><span>${inline(g)}</span>${bar(s.p)}<em>${s.d}/${s.t}</em></div>`}).join("") + `</div>`;
-  if (D.log.length) h += `<div class="card"><h2>Latest changes</h2>${D.log.slice(-5).reverse().map(c=>`<div class="dec"><b>${esc(c.id)}</b>${chip("plan","Sprint "+esc(c.sprint))}<p>${inline(c.text)}</p></div>`).join("")}</div>`;
-  return h;
+  const all=stats(D.files),groups={};D.files.forEach(f=>(groups[f.group] ||= []).push(f));
+  const next=D.sprints.find(s=>s.status==="next"),doneSp=D.sprints.filter(s=>s.status==="done").length;
+  const cells=D.files.map(f=>`<i class="${f.done?"d":""}" title="${esc(f.path)}"></i>`).join("");
+  const note=D.stated.Completed?`<p class="mut">The plan’s own header says ${D.stated.Completed}/${D.stated.Planned}. These counts come from the file tables.</p>`:"";
+  const sum=win("Summary",`${all.p}%`,`${bar(all.p,`${all.d} / ${all.t} files  (${all.p}%)`)}<div class="mosaic">${cells}</div><div class="mut">One square per file, plan order. Hover for the path.</div><table class="tbl"><tr><td>Files done</td><td class="done">${all.d}</td></tr><tr><td>Files remaining</td><td class="next">${all.t-all.d}</td></tr><tr><td>Sprints complete</td><td>${doneSp} / ${D.sprints.length}</td></tr><tr><td>Decisions logged</td><td>${D.decs.length}</td></tr></table>${note}`);
+  const nx=next?win(`Up next: Sprint ${esc(next.id)}`,"",`<p>${inline(next.title)}</p>${lis(next.items)}${next.result?`<p class="mut">Goal: ${inline(next.result)}</p>`:""}`):"";
+  const sub=win("Subsystems",Object.keys(groups).length,Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<div class="line"><span>${inline(g)}</span>${bar(s.p,`${s.d}/${s.t}`)}</div>`}).join(""));
+  const log=D.log.length?win("Change log","latest 5",`<div style="margin:-8px">${D.log.slice(-5).reverse().map(c=>`<div class="ent"><span class="acc">${esc(c.id)}</span> ${inline(c.text)}</div>`).join("")}</div>`,false):"";
+  return `<div class="grid2"><div>${sum}${nx}</div><div>${sub}${log}</div></div>`;
 }
 
 function sprintsView(){
   return D.sprints.map(s=>{
-    const fs = stats(D.files.filter(f=>f.sprint===s.id)), lab = {done:"DONE",next:"NEXT",plan:"PLANNED"}[s.status];
-    return `<div class="card sprint ${s.status}"><header><h3>Sprint ${esc(s.id)}: ${inline(s.title)} ${s.opt?chip("plan","OPTIONAL"):""}</h3>${chip(s.status,lab)}</header>
-     ${fs.t?`<div class="mut" style="margin-bottom:6px">${fs.d}/${fs.t} files tagged to this sprint are done</div>${bar(fs.p)}`:""}
-     <ul>${s.items.map(x=>`<li>${inline(x)}</li>`).join("")}</ul>${s.result?`<div class="res"><b>Result:</b> ${inline(s.result)}</div>`:""}</div>`;
+    const fs=stats(D.files.filter(f=>f.sprint===s.id)),lab={done:"done",next:"next",plan:"planned"}[s.status];
+    return `<details class="hd" ${s.status==="next"?"open":""}><summary><span>Sprint ${esc(s.id)}  ${inline(s.title)}${s.opt?" (optional)":""}</span><span class="r ${s.status}">${lab}</span></summary><div class="bd">${fs.t?bar(fs.p,`${fs.d}/${fs.t} tagged files`):""}${lis(s.items)}${s.result?`<p><span class="acc">Result:</span> ${inline(s.result)}</p>`:""}</div></details>`;
   }).join("");
 }
 
 function filesView(){
-  const f = D.files.filter(x=>(filt==="all"||(filt==="done")===x.done)&&(!q||(x.path+x.role).toLowerCase().includes(q)));
-  const groups = {}; f.forEach(x=>(groups[x.group] ||= []).push(x));
-  let h = `<div class="tools"><input type="search" id="q" placeholder="Search files…" value="${esc(q)}">${["all","done","planned"].map(k=>`<button data-f="${k}" class="${filt===k?"on":""}">${k[0].toUpperCase()+k.slice(1)}</button>`).join("")}</div>`;
-  if (!f.length) return h + `<p class="mut">No files match.</p>`;
-  return h + Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<details class="card" ${q||filt!=="all"?"open":""}><summary><span>${inline(g)}</span><span class="mut">${s.d}/${s.t}</span></summary>${l.map(x=>`<div class="file">${chip(x.done?"done":"plan",x.done?"DONE":"TODO")}<span><code>${esc(x.path)}</code>${x.sprint?` <span class="mut">· S${esc(x.sprint)}</span>`:""}</span><p>${inline(x.role)}</p></div>`).join("")}</details>`}).join("");
+  const f=D.files.filter(x=>(x.done?sd:sp)&&(!q||(x.path+x.role).toLowerCase().includes(q)));
+  const groups={};f.forEach(x=>(groups[x.group] ||= []).push(x));
+  const tools=`<div class="tools"><input type="search" id="q" placeholder="Filter files…" value="${esc(q)}"><label><input class="ck" type="checkbox" id="cd" ${sd?"checked":""}>Done</label><label><input class="ck" type="checkbox" id="cp" ${sp?"checked":""}>Planned</label><span class="mut">${f.length} shown</span></div>`;
+  if(!f.length)return tools+`<div class="card mut">No files match. Clear the filter, or tick Done and Planned.</div>`;
+  return tools+Object.entries(groups).map(([g,l])=>{const s=stats(l);return `<details class="hd" ${q||!sd||!sp?"open":""}><summary><span>${inline(g)}</span><span class="r mut">${s.d}/${s.t}</span></summary><div class="bd" style="padding:0">${l.map(x=>`<div class="fr"><span class="cb ${x.done?"on":""}"></span><span><code>${esc(x.path)}</code>${x.sprint?` <span class="mut">sprint ${esc(x.sprint)}</span>`:""}</span><span class="mut">${inline(x.role)}</span></div>`).join("")}</div></details>`}).join("");
 }
 
 function decView(){
-  return `<div class="card">` + D.decs.map(d=>{const c=/resolved|adopted/i.test(d.status)?"done":/pending/i.test(d.status)?"next":"plan";
-    return `<div class="dec"><b>${esc(d.id)}</b>${inline(d.title)} ${d.status?chip(c,esc(d.status.split(/[:.]/)[0].toUpperCase().slice(0,22))):""}<p>${inline(d.text)}</p></div>`}).join("") + `</div>`;
+  return `<div class="win"><div style="padding:0">`+D.decs.map(d=>{const c=/resolved|adopted/i.test(d.status)?"done":/pending/i.test(d.status)?"next":"plan";
+    return `<div class="ent"><b class="acc">${esc(d.id)}</b> ${inline(d.title)} ${d.status?`<span class="${c}">(${esc(d.status.split(/[:.]/)[0].toLowerCase().slice(0,24))})</span>`:""}<span class="mut">${inline(d.text)}</span></div>`}).join("")+`</div></div>`;
 }
 
 function render(){
-  const tabs = {overview:"Overview",sprints:"Sprints",files:"Files",decisions:"Decisions"};
-  $("#tabs").innerHTML = Object.entries(tabs).map(([k,v])=>`<button data-t="${k}" class="${tab===k?"on":""}">${v}</button>`).join("");
-  if (!D) return;
-  $("#view").innerHTML = {overview,sprints:sprintsView,files:filesView,decisions:decView}[tab]();
+  const tabs={overview:"Overview",sprints:"Sprints",files:"Files",decisions:"Decisions"};
+  $("#tabs").innerHTML=Object.entries(tabs).map(([k,v])=>`<button data-t="${k}" class="${tab===k?"on":""}">${v}</button>`).join("");
+  if(!D)return;
+  $("#view").innerHTML={overview,sprints:sprintsView,files:filesView,decisions:decView}[tab]();
 }
 
 function load(md, src){
@@ -196,6 +186,7 @@ document.addEventListener("click", e=>{
   if (e.target.id==="go") load($("#ta").value, "Pasted text");
 });
 document.addEventListener("input", e=>{ if(e.target.id==="q"){ q=e.target.value.toLowerCase(); const p=e.target.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(p,p); } });
+document.addEventListener("change",e=>{if(e.target.id==="cd"){sd=e.target.checked;render()}if(e.target.id==="cp"){sp=e.target.checked;render()}});
 document.addEventListener("change", async e=>{ if(e.target.id==="fi" && e.target.files[0]) load(await e.target.files[0].text(), e.target.files[0].name); });
 $("#reload").onclick = fetchPlan;
 const setTheme=t=>{document.documentElement.dataset.theme=t;try{localStorage.setItem("jt",t)}catch(e){}};
