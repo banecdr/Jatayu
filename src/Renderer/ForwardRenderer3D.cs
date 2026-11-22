@@ -122,6 +122,32 @@ public sealed class ForwardRenderer3D : IDisposable
     private readonly VkBuffer[] _vertexBufferArray = new VkBuffer[1];
     private readonly ByteSize64[] _vertexOffsetArray = new ByteSize64[1];
 
+    private readonly Skybox.Skybox _skybox = new();
+    private readonly Frustum _frustum = new() { MaxDrawDistance = 100000.0f };
+
+    // Preallocated render pass callbacks (0 delegate/closure allocations per frame)
+    private readonly Action<RenderPassBuilder> _shadowPassSetup;
+    private readonly Action<RenderPassContext> _shadowPassExecute;
+    private readonly Action<RenderPassBuilder> _skyboxPassSetup;
+    private readonly Action<RenderPassContext> _skyboxPassExecute;
+    private readonly Action<RenderPassBuilder> _pbrPassSetup;
+    private readonly Action<RenderPassContext> _pbrPassExecute;
+    private readonly Action<RenderPassBuilder> _debugPassSetup;
+    private readonly Action<RenderPassContext> _debugPassExecute;
+
+    // Per-frame pass arguments stored on instance to avoid lambda captures
+    private RgTextureHandle _currentShadowDepthHandle;
+    private RgTextureHandle _currentColorTarget;
+    private RgTextureHandle _currentDepthTarget;
+    private ShadowMap _currentShadowMap = null!;
+    private BindlessTable _currentBindlessTable = null!;
+    private Matrix4x4 _currentShadowLightVp;
+    private Matrix4x4 _currentVp;
+    private Matrix4x4 _currentInvVp;
+    private Matrix4x4 _currentCameraViewProj;
+    private uint _currentDebugVertexCount;
+    private GpuBuffer _currentDebugBuffer = null!;
+
     private bool _disposed;
 
     private readonly struct RenderItem
@@ -220,6 +246,16 @@ public sealed class ForwardRenderer3D : IDisposable
 
         // 4. Compile Shaders & Build Pipelines
         BuildPipelines(colorFormat);
+
+        // 5. Preallocate RenderPass Callbacks (0 allocations per frame)
+        _shadowPassSetup = SetupShadowPass;
+        _shadowPassExecute = ExecuteShadowPass;
+        _skyboxPassSetup = SetupSkyboxPass;
+        _skyboxPassExecute = ExecuteSkyboxPass;
+        _pbrPassSetup = SetupPbrPass;
+        _pbrPassExecute = ExecutePbrPass;
+        _debugPassSetup = SetupDebugPass;
+        _debugPassExecute = ExecuteDebugPass;
     }
 
     private unsafe void CreateDescriptorSetLayout()
@@ -520,8 +556,7 @@ public sealed class ForwardRenderer3D : IDisposable
         cameraRelativeView.M43 = 0;
         Matrix4x4 vp = cameraRelativeView * camera.ProjectionMatrix;
 
-        var frustum = new Frustum { MaxDrawDistance = 100000.0f };
-        frustum.Update(vp, Vector3.Zero);
+        _frustum.Update(vp, Vector3.Zero);
 
         Vector3 camPos = camera.Position;
         double camX = camPos.X;
@@ -534,7 +569,7 @@ public sealed class ForwardRenderer3D : IDisposable
             CamX = camX,
             CamY = camY,
             CamZ = camZ,
-            Frustum = frustum,
+            Frustum = _frustum,
             VisibleItems = _visibleItems,
             ShadowCasters = _shadowCasters,
         };
@@ -551,174 +586,27 @@ public sealed class ForwardRenderer3D : IDisposable
             VkImageLayout.Undefined
         );
 
+        // Store frame arguments in fields to allow zero-allocation cached delegate execution
+        _currentShadowDepthHandle = shadowDepthHandle;
+        _currentColorTarget = colorTarget;
+        _currentDepthTarget = depthTarget;
+        _currentShadowMap = shadowMap;
+        _currentBindlessTable = bindlessTable;
+        _currentShadowLightVp = shadowLightVp;
+        _currentVp = vp;
+        _currentInvVp = _skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
+
         // 5. Register Shadow Pass
         if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
         {
-            graph.AddPass(
-                "ShadowPass",
-                builder =>
-                {
-                    builder.SetDepthAttachment(
-                        shadowDepthHandle,
-                        VkAttachmentLoadOp.Clear,
-                        VkAttachmentStoreOp.Store,
-                        DepthConvention.ClearDepth
-                    );
-                },
-                ctx =>
-                {
-                    var cmd = ctx.CommandBuffer;
-                    cmd.BindPipeline(VkPipelineBindPoint.Graphics, _shadowPipeline.Handle);
-
-                    _viewports[0] = new VkViewport
-                    {
-                        X = 0f,
-                        Y = 0f,
-                        Width = shadowMap.Resolution,
-                        Height = shadowMap.Resolution,
-                        MinDepth = 0f,
-                        MaxDepth = 1f,
-                    };
-                    cmd.SetViewport(0, _viewports);
-                    _scissors[0] = new VkRect2D(new VkExtent2D(shadowMap.Resolution, shadowMap.Resolution));
-                    cmd.SetScissor(0, _scissors);
-
-                    for (int i = 0; i < _shadowCasters.Count; i++)
-                    {
-                        var item = _shadowCasters[i];
-                        var pc = new ShadowPushConstants
-                        {
-                            LightViewProj = shadowLightVp,
-                            ModelMatrix = item.CameraRelativeModel,
-                        };
-
-                        CommandBufferExtensions.PushConstants(
-                            cmd,
-                            _shadowPipelineLayout,
-                            VkShaderStageFlags.VertexBit,
-                            new ByteSize(0),
-                            new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
-                        );
-
-                        _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-                        _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
-                        cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-                        cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
-                        cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
-                    }
-                }
-            );
+            graph.AddPass("ShadowPass", _shadowPassSetup, _shadowPassExecute);
         }
 
         // 6. Register Skybox Pass (Renders at Reverse-Z infinity: Z = 0.0)
-        graph.AddPass(
-            "SkyboxPass",
-            builder =>
-            {
-                var clearColor = new VkClearColorValue { Float32 = new float4(0.12f, 0.32f, 0.72f, 1.0f) };
-                builder.SetColorAttachment(colorTarget, VkAttachmentLoadOp.Clear, VkAttachmentStoreOp.Store, clearColor);
-                builder.SetDepthAttachment(depthTarget, VkAttachmentLoadOp.Clear, VkAttachmentStoreOp.Store, DepthConvention.ClearDepth);
-            },
-            ctx =>
-            {
-                var cmd = ctx.CommandBuffer;
-                cmd.BindPipeline(VkPipelineBindPoint.Graphics, _skyboxPipeline.Handle);
-
-                _viewports[0] = new VkViewport
-                {
-                    X = 0f,
-                    Y = 0f,
-                    Width = (float)ctx.RenderArea.Width,
-                    Height = (float)ctx.RenderArea.Height,
-                    MinDepth = 0f,
-                    MaxDepth = 1f,
-                };
-                cmd.SetViewport(0, _viewports);
-                _scissors[0] = new VkRect2D(ctx.RenderArea);
-                cmd.SetScissor(0, _scissors);
-
-                var skybox = new Skybox.Skybox();
-                var invVp = skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
-                var pc = new SkyboxPushConstants { InvViewProj = invVp };
-
-                CommandBufferExtensions.PushConstants(
-                    cmd,
-                    _skyboxPipelineLayout,
-                    VkShaderStageFlags.VertexBit,
-                    new ByteSize(0),
-                    new ReadOnlySpan<SkyboxPushConstants>(&pc, 1)
-                );
-
-                // Fullscreen procedural triangle (3 vertices, no buffers bound)
-                cmd.Draw(3, 1, 0, 0);
-            }
-        );
+        graph.AddPass("SkyboxPass", _skyboxPassSetup, _skyboxPassExecute);
 
         // 7. Register PBR Opaque Pass
-        graph.AddPass(
-            "PbrOpaquePass",
-            builder =>
-            {
-                builder.SetColorAttachment(colorTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-                builder.SetDepthAttachment(depthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-                builder.ReadTexture(shadowDepthHandle, VkPipelineStageFlags2.FragmentShaderBit, VkAccessFlags2.ShaderSampledReadBit, VkImageLayout.ShaderReadOnlyOptimal);
-            },
-            ctx =>
-            {
-                var cmd = ctx.CommandBuffer;
-                cmd.BindPipeline(VkPipelineBindPoint.Graphics, _pbrPipeline.Handle);
-
-                _viewports[0] = new VkViewport
-                {
-                    X = 0f,
-                    Y = 0f,
-                    Width = (float)ctx.RenderArea.Width,
-                    Height = (float)ctx.RenderArea.Height,
-                    MinDepth = 0f,
-                    MaxDepth = 1f,
-                };
-                cmd.SetViewport(0, _viewports);
-                _scissors[0] = new VkRect2D(ctx.RenderArea);
-                cmd.SetScissor(0, _scissors);
-
-                // Bind Set 0 (Frame) and Set 1 (Bindless Textures)
-                _pbrDescriptorSets[0] = _frameDescriptorSet;
-                _pbrDescriptorSets[1] = bindlessTable.DescriptorSet;
-                cmd.BindDescriptorSets(
-                    VkPipelineBindPoint.Graphics,
-                    _pbrPipelineLayout,
-                    0,
-                    _pbrDescriptorSets,
-                    Span<ByteSize32>.Empty
-                );
-
-                for (int i = 0; i < _visibleItems.Count; i++)
-                {
-                    var item = _visibleItems[i];
-                    var pc = new PbrPushConstants
-                    {
-                        ModelMatrix = item.CameraRelativeModel,
-                        ViewProjMatrix = vp,
-                        LightViewProj = shadowLightVp,
-                        MaterialId = item.MaterialId,
-                    };
-
-                    CommandBufferExtensions.PushConstants(
-                        cmd,
-                        _pbrPipelineLayout,
-                        VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
-                        new ByteSize(0),
-                        new ReadOnlySpan<PbrPushConstants>(&pc, 1)
-                    );
-
-                    _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-                    _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
-                    cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-                    cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
-                    cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
-                }
-            }
-        );
+        graph.AddPass("PbrOpaquePass", _pbrPassSetup, _pbrPassExecute);
 
         // 8. Register Debug Wireframe Pass
         if (debugRenderer != null && debugRenderer.VertexCount > 0)
@@ -727,54 +615,212 @@ public sealed class ForwardRenderer3D : IDisposable
 
             if (vertexCount > 0)
             {
-                graph.AddPass(
-                    "DebugPass",
-                    builder =>
-                    {
-                        builder.SetColorAttachment(colorTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-                        builder.SetDepthAttachment(depthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-                    },
-                    ctx =>
-                    {
-                        var cmd = ctx.CommandBuffer;
-                        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _debugPipeline.Handle);
-
-                        _viewports[0] = new VkViewport
-                        {
-                            X = 0f,
-                            Y = 0f,
-                            Width = (float)ctx.RenderArea.Width,
-                            Height = (float)ctx.RenderArea.Height,
-                            MinDepth = 0f,
-                            MaxDepth = 1f,
-                        };
-                        cmd.SetViewport(0, _viewports);
-                        _scissors[0] = new VkRect2D(ctx.RenderArea);
-                        cmd.SetScissor(0, _scissors);
-
-                        var pc = new DebugLinePushConstants
-                        {
-                            ViewProjMatrix = camera.ViewProjection,
-                        };
-
-                        CommandBufferExtensions.PushConstants(
-                            cmd,
-                            _debugPipelineLayout,
-                            VkShaderStageFlags.VertexBit,
-                            new ByteSize(0),
-                            new ReadOnlySpan<DebugLinePushConstants>(&pc, 1)
-                        );
-
-                        _vertexBufferArray[0] = debugBuffer.Handle;
-                        _vertexOffsetArray[0] = new ByteSize64(0);
-                        cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-                        cmd.Draw((int)vertexCount, 1, 0, 0);
-                    }
-                );
+                _currentDebugVertexCount = (uint)vertexCount;
+                _currentDebugBuffer = debugBuffer;
+                _currentCameraViewProj = camera.ViewProjection;
+                graph.AddPass("DebugPass", _debugPassSetup, _debugPassExecute);
             }
 
             debugRenderer.Clear();
         }
+    }
+
+    private void SetupShadowPass(RenderPassBuilder builder)
+    {
+        builder.SetDepthAttachment(
+            _currentShadowDepthHandle,
+            VkAttachmentLoadOp.Clear,
+            VkAttachmentStoreOp.Store,
+            DepthConvention.ClearDepth
+        );
+    }
+
+    private unsafe void ExecuteShadowPass(RenderPassContext ctx)
+    {
+        var cmd = ctx.CommandBuffer;
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _shadowPipeline.Handle);
+
+        _viewports[0] = new VkViewport
+        {
+            X = 0f,
+            Y = 0f,
+            Width = _currentShadowMap.Resolution,
+            Height = _currentShadowMap.Resolution,
+            MinDepth = 0f,
+            MaxDepth = 1f,
+        };
+        cmd.SetViewport(0, _viewports);
+        _scissors[0] = new VkRect2D(new VkExtent2D(_currentShadowMap.Resolution, _currentShadowMap.Resolution));
+        cmd.SetScissor(0, _scissors);
+
+        for (int i = 0; i < _shadowCasters.Count; i++)
+        {
+            var item = _shadowCasters[i];
+            var pc = new ShadowPushConstants
+            {
+                LightViewProj = _currentShadowLightVp,
+                ModelMatrix = item.CameraRelativeModel,
+            };
+
+            CommandBufferExtensions.PushConstants(
+                cmd,
+                _shadowPipelineLayout,
+                VkShaderStageFlags.VertexBit,
+                new ByteSize(0),
+                new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
+            );
+
+            _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+            cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+            cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+        }
+    }
+
+    private void SetupSkyboxPass(RenderPassBuilder builder)
+    {
+        var clearColor = new VkClearColorValue { Float32 = new float4(0.12f, 0.32f, 0.72f, 1.0f) };
+        builder.SetColorAttachment(_currentColorTarget, VkAttachmentLoadOp.Clear, VkAttachmentStoreOp.Store, clearColor);
+        builder.SetDepthAttachment(_currentDepthTarget, VkAttachmentLoadOp.Clear, VkAttachmentStoreOp.Store, DepthConvention.ClearDepth);
+    }
+
+    private unsafe void ExecuteSkyboxPass(RenderPassContext ctx)
+    {
+        var cmd = ctx.CommandBuffer;
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _skyboxPipeline.Handle);
+
+        _viewports[0] = new VkViewport
+        {
+            X = 0f,
+            Y = 0f,
+            Width = (float)ctx.RenderArea.Width,
+            Height = (float)ctx.RenderArea.Height,
+            MinDepth = 0f,
+            MaxDepth = 1f,
+        };
+        cmd.SetViewport(0, _viewports);
+        _scissors[0] = new VkRect2D(ctx.RenderArea);
+        cmd.SetScissor(0, _scissors);
+
+        var pc = new SkyboxPushConstants { InvViewProj = _currentInvVp };
+
+        CommandBufferExtensions.PushConstants(
+            cmd,
+            _skyboxPipelineLayout,
+            VkShaderStageFlags.VertexBit,
+            new ByteSize(0),
+            new ReadOnlySpan<SkyboxPushConstants>(&pc, 1)
+        );
+
+        // Fullscreen procedural triangle (3 vertices, no buffers bound)
+        cmd.Draw(3, 1, 0, 0);
+    }
+
+    private void SetupPbrPass(RenderPassBuilder builder)
+    {
+        builder.SetColorAttachment(_currentColorTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        builder.SetDepthAttachment(_currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        builder.ReadTexture(_currentShadowDepthHandle, VkPipelineStageFlags2.FragmentShaderBit, VkAccessFlags2.ShaderSampledReadBit, VkImageLayout.ShaderReadOnlyOptimal);
+    }
+
+    private unsafe void ExecutePbrPass(RenderPassContext ctx)
+    {
+        var cmd = ctx.CommandBuffer;
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _pbrPipeline.Handle);
+
+        _viewports[0] = new VkViewport
+        {
+            X = 0f,
+            Y = 0f,
+            Width = (float)ctx.RenderArea.Width,
+            Height = (float)ctx.RenderArea.Height,
+            MinDepth = 0f,
+            MaxDepth = 1f,
+        };
+        cmd.SetViewport(0, _viewports);
+        _scissors[0] = new VkRect2D(ctx.RenderArea);
+        cmd.SetScissor(0, _scissors);
+
+        // Bind Set 0 (Frame) and Set 1 (Bindless Textures)
+        _pbrDescriptorSets[0] = _frameDescriptorSet;
+        _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
+        cmd.BindDescriptorSets(
+            VkPipelineBindPoint.Graphics,
+            _pbrPipelineLayout,
+            0,
+            _pbrDescriptorSets,
+            Span<ByteSize32>.Empty
+        );
+
+        for (int i = 0; i < _visibleItems.Count; i++)
+        {
+            var item = _visibleItems[i];
+            var pc = new PbrPushConstants
+            {
+                ModelMatrix = item.CameraRelativeModel,
+                ViewProjMatrix = _currentVp,
+                LightViewProj = _currentShadowLightVp,
+                MaterialId = item.MaterialId,
+            };
+
+            CommandBufferExtensions.PushConstants(
+                cmd,
+                _pbrPipelineLayout,
+                VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+                new ByteSize(0),
+                new ReadOnlySpan<PbrPushConstants>(&pc, 1)
+            );
+
+            _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+            cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+            cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+        }
+    }
+
+    private void SetupDebugPass(RenderPassBuilder builder)
+    {
+        builder.SetColorAttachment(_currentColorTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        builder.SetDepthAttachment(_currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+    }
+
+    private unsafe void ExecuteDebugPass(RenderPassContext ctx)
+    {
+        var cmd = ctx.CommandBuffer;
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _debugPipeline.Handle);
+
+        _viewports[0] = new VkViewport
+        {
+            X = 0f,
+            Y = 0f,
+            Width = (float)ctx.RenderArea.Width,
+            Height = (float)ctx.RenderArea.Height,
+            MinDepth = 0f,
+            MaxDepth = 1f,
+        };
+        cmd.SetViewport(0, _viewports);
+        _scissors[0] = new VkRect2D(ctx.RenderArea);
+        cmd.SetScissor(0, _scissors);
+
+        var pc = new DebugLinePushConstants
+        {
+            ViewProjMatrix = _currentCameraViewProj,
+        };
+
+        CommandBufferExtensions.PushConstants(
+            cmd,
+            _debugPipelineLayout,
+            VkShaderStageFlags.VertexBit,
+            new ByteSize(0),
+            new ReadOnlySpan<DebugLinePushConstants>(&pc, 1)
+        );
+
+        _vertexBufferArray[0] = _currentDebugBuffer.Handle;
+        _vertexOffsetArray[0] = new ByteSize64(0);
+        cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+        cmd.Draw((int)_currentDebugVertexCount, 1, 0, 0);
     }
 
     private static string ResolveShaderPath(string relativePath)

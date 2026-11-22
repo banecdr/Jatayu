@@ -25,6 +25,7 @@ using Jatayu.Renderer.Camera;
 using Jatayu.Renderer.Lighting;
 using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Profiling;
+using System.Text.Unicode;
 
 namespace Jatayu.DebugUI;
 
@@ -77,6 +78,9 @@ public sealed class DebugOverlay
 
         if (ImGui.Begin("Jatayu Engine Diagnostics - Sprint 5b (Large-World & PBR)"u8, ref _isOpen, ImGuiWindowFlags.AlwaysAutoResize))
         {
+            Span<byte> buf = stackalloc byte[256];
+            int w;
+
             // -------------------------------------------------------------------------------------
             // 1. ENGINE PERFORMANCE & VRAM TELEMETRY
             // -------------------------------------------------------------------------------------
@@ -84,19 +88,25 @@ public sealed class DebugOverlay
             float dtMs = gameTime.AverageFrameTimeMs > 0 ? gameTime.AverageFrameTimeMs : gameTime.DeltaTime * 1000f;
             var frameColor = dtMs <= 6.94f ? _green : (dtMs <= 16.67f ? _yellow : _red);
 
-            ImGui.TextColored(frameColor, $"FPS: {fps:F1} ({dtMs:F2} ms)");
+            if (Utf8.TryWrite(buf, $"FPS: {fps:F1} ({dtMs:F2} ms)", out w))
+                ImGui.TextColored(frameColor, buf[..w]);
             ImGui.SameLine(180f);
-            ImGui.Text($"Frame: #{gameTime.FrameCount}");
+            if (Utf8.TryWrite(buf, $"Frame: #{gameTime.FrameCount}", out w))
+                ImGui.Text(buf[..w]);
 
-            ImGui.TextColored(vsync ? _green : _yellow, $"V-Sync: {(vsync ? "ON (Locked to display)" : "OFF (Uncapped FPS)")} [V]");
+            if (vsync)
+                ImGui.TextColored(_green, "V-Sync: ON (Locked to display) [V]"u8);
+            else
+                ImGui.TextColored(_yellow, "V-Sync: OFF (Uncapped FPS) [V]"u8);
 
             long gcAllocated = AllocationTracker.LastFrameAllocatedBytes;
             var allocColor = gcAllocated == 0 ? _green : _red;
             ImGui.Text("Steady-State GC Allocations:"u8);
             ImGui.SameLine();
-            ImGui.TextColored(allocColor, $"{gcAllocated} B");
-            ImGui.SameLine(240f);
-            ImGui.Text($"Zero-Alloc: {AllocationTracker.ZeroAllocationPercent:F1}%");
+            if (Utf8.TryWrite(buf, $"{gcAllocated} B", out w))
+                ImGui.TextColored(allocColor, buf[..w]);
+            if (Utf8.TryWrite(buf, $"Zero-Alloc Frame Rate: {AllocationTracker.ZeroAllocationPercent:F1}%", out w))
+                ImGui.Text(buf[..w]);
 
             if (vramBudget != null)
             {
@@ -105,7 +115,8 @@ public sealed class DebugOverlay
                 double budgetMb = stats.TotalBudgetBytes / (1024.0 * 1024.0);
                 float fraction = stats.BudgetUsagePercent;
 
-                ImGui.Text($"VRAM: {usedMb:F0} MB / {budgetMb:F0} MB ({fraction * 100f:F1}%)");
+                if (Utf8.TryWrite(buf, $"VRAM: {usedMb:F0} MB / {budgetMb:F0} MB ({fraction * 100f:F1}%)", out w))
+                    ImGui.Text(buf[..w]);
                 ImGui.ProgressBar(fraction, new float2(320f, 0f), ""u8);
             }
             ImGui.Separator();
@@ -129,13 +140,17 @@ public sealed class DebugOverlay
                     var pos = camera.Position;
                     var tgt = camera.Target;
                     float dist = Vector3.Distance(pos, tgt);
-                    ImGui.Text($"Camera Pos:   ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) m");
-                    ImGui.Text($"Camera Target:({tgt.X:F1}, {tgt.Y:F1}, {tgt.Z:F1}) m | Dist: {dist:F1} m");
-                    ImGui.Text($"Camera FOV:   {camera.FovDegrees:F0}° (Toggle: [F])");
+                    if (Utf8.TryWrite(buf, $"Camera Pos:   ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) m", out w))
+                        ImGui.Text(buf[..w]);
+                    if (Utf8.TryWrite(buf, $"Camera Target:({tgt.X:F1}, {tgt.Y:F1}, {tgt.Z:F1}) m | Dist: {dist:F1} m", out w))
+                        ImGui.Text(buf[..w]);
+                    if (Utf8.TryWrite(buf, $"Camera FOV:   {camera.FovDegrees:F0}° (Toggle: [F])", out w))
+                        ImGui.Text(buf[..w]);
 
                     if (camera.PaniniEnabled)
                     {
-                        ImGui.TextColored(_cyan, $"Panini Proj:  ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2}) (Cycle: [P], [-]/[=])");
+                        if (Utf8.TryWrite(buf, $"Panini Proj:  ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2}) (Cycle: [P], [-]/[=])", out w))
+                            ImGui.TextColored(_cyan, buf[..w]);
                     }
                     else
                     {
@@ -146,8 +161,10 @@ public sealed class DebugOverlay
                 if (originShift != null)
                 {
                     var orig = originShift.CurrentOrigin;
-                    ImGui.Text($"Floating Origin: ({orig.X:F1}, {orig.Y:F1}, {orig.Z:F1}) m");
-                    ImGui.Text($"Shift Threshold: {originShift.ThresholdDistance:F0} m (Snapped to 256m tiles)");
+                    if (Utf8.TryWrite(buf, $"Floating Origin: ({orig.X:F1}, {orig.Y:F1}, {orig.Z:F1}) m", out w))
+                        ImGui.Text(buf[..w]);
+                    if (Utf8.TryWrite(buf, $"Shift Threshold: {originShift.ThresholdDistance:F0} m (Snapped to 256m tiles)", out w))
+                        ImGui.Text(buf[..w]);
                 }
             }
 
@@ -156,7 +173,8 @@ public sealed class DebugOverlay
             // -------------------------------------------------------------------------------------
             if (ImGui.CollapsingHeader("Scene ECS & PBR Materials"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
-                ImGui.Text($"Entities: {totalEntities} Total | {visibleEntities} In Frustum | {shadowCasters} Shadow Casters");
+                if (Utf8.TryWrite(buf, $"Entities: {totalEntities} Total | {visibleEntities} In Frustum | {shadowCasters} Shadow Casters", out w))
+                    ImGui.Text(buf[..w]);
                 ImGui.Text("Active PBR Materials:"u8);
                 ImGui.TextColored(_gold, "  #1 Gold:          Metallic 1.00, Roughness 0.15"u8);
                 ImGui.TextColored(_orange, "  #2 Copper:        Metallic 0.95, Roughness 0.25"u8);
@@ -175,9 +193,12 @@ public sealed class DebugOverlay
                 if (lightEnv != null)
                 {
                     var dir = lightEnv.Sun.Direction;
-                    ImGui.Text($"Sun Direction: ({dir.X:F2}, {dir.Y:F2}, {dir.Z:F2})");
-                    ImGui.TextColored(sunOrbiting ? _green : _yellow, $"Sun Light Orbit: {(sunOrbiting ? "ANIMATING" : "PAUSED")} (Toggle: [L])");
-                    ImGui.Text($"Sun Illuminance: {lightEnv.Sun.Intensity:F0} Lux");
+                    if (Utf8.TryWrite(buf, $"Sun Direction: ({dir.X:F2}, {dir.Y:F2}, {dir.Z:F2})", out w))
+                        ImGui.Text(buf[..w]);
+                    if (Utf8.TryWrite(buf, $"Sun Light Orbit: {(sunOrbiting ? "ANIMATING" : "PAUSED")} (Toggle: [L])", out w))
+                        ImGui.TextColored(sunOrbiting ? _green : _yellow, buf[..w]);
+                    if (Utf8.TryWrite(buf, $"Sun Illuminance: {lightEnv.Sun.Intensity:F0} Lux", out w))
+                        ImGui.Text(buf[..w]);
                     ImGui.Text("Shadow Map:    2048x2048 D32_SFLOAT (Reverse-Z Comparison, 16-tap PCF)"u8);
                     ImGui.Text("Skybox:        Reverse-Z Procedural Atmosphere (Z = 0.0 Infinity)"u8);
                 }
@@ -188,7 +209,8 @@ public sealed class DebugOverlay
             // -------------------------------------------------------------------------------------
             if (ImGui.CollapsingHeader("3D Wireframe Diagnostics"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
-                ImGui.TextColored(debugWireframe ? _green : _yellow, $"3D Wireframes: {(debugWireframe ? "VISIBLE" : "HIDDEN")} (Toggle: [B])");
+                if (Utf8.TryWrite(buf, $"3D Wireframes: {(debugWireframe ? "VISIBLE" : "HIDDEN")} (Toggle: [B])", out w))
+                    ImGui.TextColored(debugWireframe ? _green : _yellow, buf[..w]);
                 ImGui.Text("  Axes:   Red = +X, Green = +Y, Blue = +Z (3m origin gizmo)"u8);
                 ImGui.Text("  Bounds: Yellow/Orange/Cyan AABB wireframe bounding boxes"u8);
             }
@@ -201,9 +223,11 @@ public sealed class DebugOverlay
                 for (int i = 0; i < cpuZones.Count; i++)
                 {
                     var zone = cpuZones[i];
-                    ImGui.Text($"  {zone.Name}:");
+                    if (Utf8.TryWrite(buf, $"  {zone.Name}:", out w))
+                        ImGui.Text(buf[..w]);
                     ImGui.SameLine(180f);
-                    ImGui.TextColored(_cyan, $"{zone.DurationMs:F3} ms");
+                    if (Utf8.TryWrite(buf, $"{zone.DurationMs:F3} ms", out w))
+                        ImGui.TextColored(_cyan, buf[..w]);
                 }
             }
 
@@ -212,9 +236,11 @@ public sealed class DebugOverlay
                 for (int i = 0; i < gpuPasses.Count; i++)
                 {
                     var pass = gpuPasses[i];
-                    ImGui.Text($"  {pass.Name}:");
+                    if (Utf8.TryWrite(buf, $"  {pass.Name}:", out w))
+                        ImGui.Text(buf[..w]);
                     ImGui.SameLine(180f);
-                    ImGui.TextColored(_cyan, $"{pass.DurationMs:F3} ms");
+                    if (Utf8.TryWrite(buf, $"{pass.DurationMs:F3} ms", out w))
+                        ImGui.TextColored(_cyan, buf[..w]);
                 }
             }
 

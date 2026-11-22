@@ -612,6 +612,28 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         var time = new GameTime();
 
+        RgTextureHandle currentSwapchainTarget = default;
+        Action<RenderPassBuilder> imguiPassSetup = setup =>
+        {
+            setup.SetColorAttachment(currentSwapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        };
+        Action<RenderPassContext> imguiPassExecute = ctx =>
+        {
+            imguiBackend.Render(ctx.CommandBuffer);
+        };
+
+        Action<RenderPassBuilder> presentPassSetup = setup =>
+        {
+            setup.ReadTexture(
+                currentSwapchainTarget,
+                VkPipelineStageFlags2.ColorAttachmentOutputBit,
+                VkAccessFlags2.None,
+                VkImageLayout.PresentSrcKHR
+            );
+            setup.HasSideEffects(true);
+        };
+        Action<RenderPassContext> presentPassExecute = static _ => { };
+
         while (!window.ShouldClose)
         {
             AllocationTracker.BeginFrame();
@@ -806,7 +828,6 @@ public static class Program
                 cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
 
                 gpuTimer.BeginFrame(cmd, frameSync.CurrentFrame);
-
                 renderGraph.Reset();
 
                 var swapchainTarget = renderGraph.ImportTexture(
@@ -849,38 +870,16 @@ public static class Program
                     depthTarget,
                     originShift
                 );
+                currentSwapchainTarget = swapchainTarget;
 
                 // ImGui Diagnostics HUD Pass
                 if (debugOverlay.IsVisible)
                 {
-                    renderGraph.AddPass(
-                        "ImGuiPass",
-                        setup =>
-                        {
-                            setup.SetColorAttachment(swapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-                        },
-                        ctx =>
-                        {
-                            imguiBackend.Render(ctx.CommandBuffer);
-                        }
-                    );
+                    renderGraph.AddPass("ImGuiPass", imguiPassSetup, imguiPassExecute);
                 }
 
                 // Swapchain Presentation Transition Pass
-                renderGraph.AddPass(
-                    "PresentTransition",
-                    setup =>
-                    {
-                        setup.ReadTexture(
-                            swapchainTarget,
-                            VkPipelineStageFlags2.ColorAttachmentOutputBit,
-                            VkAccessFlags2.None,
-                            VkImageLayout.PresentSrcKHR
-                        );
-                        setup.HasSideEffects(true);
-                    },
-                    ctx => { }
-                );
+                renderGraph.AddPass("PresentTransition", presentPassSetup, presentPassExecute);
 
                 renderGraph.Compile();
                 renderGraph.Execute(cmd, gpuTimer);
