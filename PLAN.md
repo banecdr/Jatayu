@@ -17,7 +17,7 @@
  *      in-flight synchronization, swapchain recreation, dynamic rendering, timeline semaphores,
  *      async staging ring, deferred deletion queue, and bindless descriptor tables).
  *   3. Shared Formats & Cooker: Standalone Jatayu.AssetFormats library, tools cooker producing packed,
- *      memory-mapped archives (.jpak) with BC7/BC5 textures, resident mip tails, meshlet-ready LOD
+ *      memory-mapped archives (.jpak) with BC7/BC5 textures, resident mip tails, LOD
  *      geometry optimized via meshoptimizer, and binary cell records.
  *   4. World Grid & Region Streaming: 2D cell grid (128m cells), velocity-scaled priority streaming,
  *      hysteresis radii, asynchronous loading jobs, main-thread GPU budget allocation, and HLOD proxies.
@@ -112,9 +112,9 @@
 ### 1.3 Floating-Origin Rebasing Procedure
 When the camera travels beyond 2,000 m from the current physics/simulation origin, `OriginShift` coordinates a deterministic world rebase:
 1. **Trigger Window:** Executes at a **frame boundary**, strictly after the physics step and before any queries, raycasts, or rendering commands for the next frame are recorded.
-2. **Offset Snapping:** The shift offset is computed in double precision and snapped to an integer multiple of the world cell size (128 m), ensuring cell-local coordinates remain invariant.
+2. **Offset Snapping:** The shift offset is computed in double precision and snapped to a multiple of **256 m** (the terrain tile dimension covering $2\times 2$ cells), ensuring terrain tile data and cell-local coordinates remain invariant.
 3. **Subsystem Batch Updates:**
-   - Jolt physics: Active and sleeping rigid bodies are translated by the negative offset using batched updates; character controllers, kinematic bodies, and raycast caches are updated.
+   - Jolt physics: Active, sleeping, kinematic, and character bodies are translated by the negative offset using batched updates; raycast caches are updated.
    - Spatial audio: AudioListener position and all active AudioSource emitter coordinates are translated.
    - ECS & Scene: Root entity transforms and active Camera `WorldPosition` are updated.
 4. **Event Dispatch:** An `OriginShifted` event is broadcast through `EventBus` so any custom gameplay listeners can synchronize.
@@ -172,7 +172,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Core/Window.cs` | **DONE** | GLFW desktop window wrapper. DPI awareness, screen centering, V-Sync toggle, minimization safety, and OS event dispatch. |
 | `src/Core/Time/GameTime.cs` | **DONE** | High-precision stopwatch clock (`Stopwatch.GetTimestamp`). Clamped frame deltas, FPS tracking, and fixed-timestep accumulator for physics. |
 | `src/Core/Math/WorldPosition.cs` | **PLANNED** | Double-precision 3D vector (`double X, Y, Z`), conversion to camera-relative `float3`, distance methods, SIMD alignment. (Sprint 5b). |
-| `src/Core/Math/OriginShift.cs` | **PLANNED** | Floating-origin coordinator. Snaps shift offset to cell multiples and broadcasts rebase events to Jolt, ECS, and audio at frame boundaries. (Sprint 5b). |
+| `src/Core/Math/OriginShift.cs` | **PLANNED** | Floating-origin coordinator. Snaps shift offset to 256m terrain tile multiples and broadcasts rebase events at frame boundaries. (Sprint 5b). |
 | `src/Core/Memory/NativeArena.cs` | **PLANNED** | High-speed linear frame allocator allocating native memory with zero GC impact; reset once per frame. (Sprint 3b). |
 | `src/Core/Memory/NativePool.cs` | **PLANNED** | Pooled unmanaged buffer blocks recycling memory across streaming decodes and render passes. (Sprint 3b). |
 | `src/Core/Input/KeyCodes.cs` | **PLANNED** | Strongly typed C# enum mapping GLFW key and mouse codes into clean, game-ready names (`Key.W`, `Key.Space`, `MouseButton.Left`). (Sprint 5a). |
@@ -231,17 +231,20 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/RHI/Vulkan/Memory/VramBudget.cs` | **PLANNED** | Queries `VK_EXT_memory_budget` to track physical VRAM usage, budget limits, and streaming pressure. (Sprint 3b). |
 
 ### 2.5 Shared Asset Formats & Runtime Assets (`src/Jatayu.AssetFormats/` & `src/Assets/`)
-*Note: `src/Jatayu.AssetFormats/` is a lightweight shared class library without GPU/Vulkan dependencies, shared between the runtime engine and `tools/Jatayu.Cooker/`.*
+*Note: `src/Jatayu.AssetFormats/` is a lightweight shared class library without GPU/Vulkan dependencies, shared between runtime engine, cooker, and world generator.*
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
 | `src/Jatayu.AssetFormats/AssetGuid.cs` | **PLANNED** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
-| `src/Jatayu.AssetFormats/CookedFormats.cs` | **PLANNED** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord, CookedCellRecord. (Sprint 4). |
+| `src/Jatayu.AssetFormats/CookedFormats.cs` | **PLANNED** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
+| `src/Jatayu.AssetFormats/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
+| `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
+| `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **PLANNED** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
 | `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **PLANNED** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
 | `src/Assets/PackReader.cs` | **PLANNED** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
 | `src/Assets/AssetManager.cs` | **PLANNED** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
-| `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on screen coverage and issues upload/eviction requests. (Sprint 6b). |
-| `src/Assets/Textures/MipResidency.cs` | **PLANNED** | Tracks loaded mip ranges per texture and manages min-LOD clamps in bindless descriptor tables. (Sprint 6b). |
+| `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
+| `src/Assets/Textures/MipResidency.cs` | **PLANNED** | Tracks loaded mip ranges per texture and manages step-of-2 reallocations and bindless swaps. (Sprint 6b). |
 | `src/Assets/Loaders/ShaderLoader.cs` | **PLANNED** | Runtime shader file watcher for live editing and hot-reloading during development. (Sprint 3a). |
 
 ### 2.6 Offline Asset Cooker & World Generator (`tools/Jatayu.Cooker/` & `tools/Jatayu.WorldGen/`)
@@ -259,18 +262,16 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `tools/Jatayu.Cooker/FoliageCooker.cs` | **PLANNED** | Evaluates procedural density splat maps to generate per-cell foliage instance buffers. (Sprint 7b). |
 | `tools/Jatayu.Cooker/NavMeshCooker.cs` | **PLANNED** | Bakes per-cell Recast navigation mesh tiles from static geometry colliders. (Sprint 10). |
 | `tools/Jatayu.Cooker/ShaderCooker.cs` | **PLANNED** | Precompiles all runtime GLSL shaders into SPIR-V bytecode blobs and initializes pipeline cache files. (Sprint 10). |
-| `tools/Jatayu.WorldGen/Program.cs` | **PLANNED** | Procedural world generator for the Reference Scene (heightmap, instance scatter, foliage maps, lights). (Sprint 6a). |
+| `tools/Jatayu.WorldGen/Program.cs` | **PLANNED** | Procedural world generator: bakes Reference Scene terrain heightmaps, scatter tables, foliage maps, and procedural placeholder glTF models (rocks, buildings, trees, grass cards) into assets/generated/. (Sprint 6a). |
 
 ### 2.7 World Grid & Region Streaming (`src/World/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/World/WorldConfig.cs` | **PLANNED** | World configuration (CellSize: 128m, LoadRadius: 600m, UnloadRadius: 750m, MaxDrawDistance: 8000m, LeadSeconds: 6s). (Sprint 6a). |
-| `src/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, and neighbor iterators. (Sprint 6a). |
+| `src/World/WorldConfig.cs` | **PLANNED** | World configuration (CellSize: 128m, LoadRadius: 600m, UnloadRadius: 750m, MaxDrawDistance: 8000m, LeadSeconds: 6s, 900m prefetch cap). (Sprint 6a). |
 | `src/World/WorldCell.cs` | **PLANNED** | Cell state machine (`Unloaded` → `LoadingIO` → `LoadingDecode` → `ReadyToFinalize` → `Active` → `Unloading`). Owns static instance data. (Sprint 6a). |
 | `src/World/WorldGrid.cs` | **PLANNED** | Sparse 2D hash grid storing active and dormant cells. Fast spatial lookup by `WorldPosition`. (Sprint 6a). |
-| `src/World/StreamingManager.cs` | **PLANNED** | Central streaming controller: evaluates player position/velocity, prioritizes loading queue, enforces time budget. (Sprint 6a). |
+| `src/World/StreamingManager.cs` | **PLANNED** | Central streaming controller: evaluates player position/velocity, prioritizes loading queue, enforces time budget and VRAM limits. (Sprint 6a). |
 | `src/World/CellLoader.cs` | **PLANNED** | Job system worker reading cooked cell records from `.jpak`, parsing instances, and preparing GPU upload payloads. (Sprint 6a). |
-| `src/World/CellFormat.cs` | **PLANNED** | Binary structure specifications for packed cell records (Header, InstanceTable, ColliderTable, AudioTable). (Sprint 6a). |
 | `src/World/Hlod.cs` | **PLANNED** | Hierarchical LOD manager: swaps distant cell clusters with simplified proxy meshes and impostors. (Sprint 6b). |
 | `src/World/StreamingDebugOverlay.cs` | **PLANNED** | Visual debug grid displaying cell states (Green=Active, Yellow=Loading, Red=Unloading), memory, and queue depths. (Sprint 6a). |
 
@@ -285,7 +286,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
 | `src/Terrain/TerrainTile.cs` | **PLANNED** | Represents a 256m terrain chunk (covering 2x2 cells, keyed by `TileCoord = CellCoord / 2`): height data, normal maps, splat weights, Jolt shape handle. (Sprint 6b). |
-| `src/Terrain/TerrainClipmap.cs` | **PLANNED** | GPU clipmap / quadtree LOD renderer with continuous geomorphing to prevent popping and edge cracks out to 8 km. (Sprint 6b). |
+| `src/Terrain/TerrainClipmap.cs` | **PLANNED** | Single canonical GPU clipmap LOD renderer for all rings with continuous geomorphing and 16m tile-edge blending. (Sprint 6b). |
 | `src/Terrain/TerrainMaterial.cs` | **PLANNED** | 4-8 layer splat-map material shader parameters with triplanar blending for steep cliff faces. (Sprint 6b). |
 | `src/Terrain/TerrainHeightPyramid.cs` | **PLANNED** | Streamed height pyramid backing far-field clipmap (Ring C): coarse mip levels permanently resident, fine levels streamed per tile. (Sprint 6b). |
 
@@ -301,10 +302,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
 | `src/Renderer/GpuDriven/GeometryPool.cs` | **PLANNED** | Monolithic shared vertex/index GPU memory pool enabling draw calls across all static meshes without rebinding buffers. (Sprint 5b basic, 7a full). |
-| `src/Renderer/GpuDriven/DynamicInstanceRing.cs` | **PLANNED** | Ring-buffered per-frame instance buffer region allowing dynamic ECS entities to feed the GPU-driven renderer. (Sprint 5b). |
-| `src/Renderer/GpuDriven/InstanceBuffer.cs` | **PLANNED** | GPU storage buffer holding per-instance data: camera-relative float transform, mesh ID, material ID, bounding sphere. (Sprint 7a). |
+| `src/Renderer/GpuDriven/DynamicInstanceRing.cs` | **PLANNED** | Ring-buffered per-frame instance buffer region allowing dynamic ECS entities to feed the GPU-driven renderer with current and previous transforms. (Sprint 5b). |
+| `src/Renderer/GpuDriven/InstanceBuffer.cs` | **PLANNED** | GPU storage buffer holding per-instance data: camera-relative float transforms (current & previous), mesh ID, material ID, bounding sphere. (Sprint 7a). |
 | `src/Renderer/GpuDriven/IndirectDrawBuffer.cs` | **PLANNED** | Indirect command buffer populated by compute shader for `vkCmdDrawIndexedIndirectCount` draws. (Sprint 7a). |
-| `src/Renderer/GpuDriven/GpuCuller.cs` | **PLANNED** | Compute shader dispatcher: executes 5-plane frustum culling, max draw distance clamp, and Hi-Z min-reduction occlusion. (Sprint 7a). |
+| `src/Renderer/GpuDriven/GpuCuller.cs` | **PLANNED** | Compute shader dispatcher: executes 5-plane frustum culling, max draw distance clamp, LOD selection, and Hi-Z min-reduction occlusion across 5 views. (Sprint 7a). |
 | `src/Renderer/GpuDriven/HiZBuilder.cs` | **PLANNED** | Generates hierarchical depth mip pyramid (Hi-Z) from the depth pre-pass using MIN reduction filters. (Sprint 7a). |
 
 ### 2.11 3D Graphics, Lighting & Environment (`src/Renderer/`)
@@ -336,14 +337,14 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Renderer/Sky/TimeOfDay.cs` | **PLANNED** | 24-hour sun/moon orbit simulation driving directional light vector, sky color, and ambient tones. (Sprint 9). |
 | `src/Renderer/Skybox/Skybox.cs` | **PLANNED** | Procedural atmospheric or cubemap background drawn at reverse-Z infinity ($Z = 0.0$). (Sprint 5b). |
 | `src/Renderer/Water/WaterRenderer.cs` | **PLANNED** | Planar Gerstner water surface with depth absorption, wave displacement, normal blending, and screen refraction. (Sprint 9). |
-| `src/Renderer/ForwardRenderer3D.cs` | **PLANNED** | High-performance GPU-driven forward renderer coordinating render graph passes and presenting to swapchain. (Sprint 5b). |
+| `src/Renderer/ForwardRenderer3D.cs` | **PLANNED** | Basic forward rendering path in Sprint 5b, converted to GPU-driven indirect renderer in Sprint 7a. (Sprint 5b). |
 | `src/Renderer/Debug/DebugRenderer.cs` | **PLANNED** | 3D wireframe line, box, sphere, and frustum renderer for visualizing physics colliders and streaming bounds. (Sprint 5b). |
 
 ### 2.12 Post-Processing Pipeline (`src/Renderer/PostProcess/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
 | `src/Renderer/PostProcess/PostProcessChain.cs` | **PLANNED** | Orchestrates post-process passes via render graph attachments in HDR `R16G16B16A16_SFLOAT`. (Sprint 9). |
-| `src/Renderer/PostProcess/Tonemap.cs` | **PLANNED** | ACES / AgX filmic tonemapping, auto-exposure adaptation, color grading LUT, and gamma correction. (Sprint 9). |
+| `src/Renderer/PostProcess/Tonemap.cs` | **PLANNED** | ACES / AgX filmic tonemapping, auto-exposure adaptation via luminance histogram, and color grading. (Sprint 9). |
 | `src/Renderer/PostProcess/Bloom.cs` | **PLANNED** | Downsample/upsample progressive blur pyramid with threshold knee and energy conservation. (Sprint 9). |
 | `src/Renderer/PostProcess/Taa.cs` | **PLANNED** | Temporal Anti-Aliasing with jittered projection matrices, motion vector reprojection, and variance clipping. (Sprint 9). |
 | `src/Renderer/PostProcess/MotionVectors.cs` | **PLANNED** | Generates screen-space velocity buffer correcting for camera translation and floating-origin shifts. (Sprint 9). |
@@ -397,7 +398,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
 | `src/DebugUI/ImGuiVulkanBackend.cs` | **PLANNED** | Custom Vulkan 1.3 Dynamic Rendering backend for Dear ImGui. Zero legacy render passes. (Sprint 3b). |
-| `src/DebugUI/DebugOverlay.cs` | **PLANNED** | Lightweight diagnostics HUD: FPS, CPU/GPU pass times, heap allocations, VRAM bar, streaming map, camera free-fly. (Sprint 3b). |
+| `src/DebugUI/DebugOverlay.cs` | **PLANNED** | Diagnostics HUD: frame time, CPU/GPU pass times, heap allocations, VRAM bar. (Sprint 3b; streaming map in 6a). |
 
 ### 2.18 Optional Standalone Editor Suite (`src/Editor/` — Sprint 11)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -420,7 +421,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | File Path | Status | Purpose & Role |
 | :--- | :---: | :--- |
 | `tests/Jatayu.Tests/Jatayu.Tests.csproj` | **PLANNED** | xUnit unit test suite covering math, origin shift, job system, staging ring, pack reader, and cell state machines without GPU requirements. (Sprint 3a). |
-| `tests/Jatayu.RenderSmoke/Program.cs` | **PLANNED** | Automated offscreen/hidden-window Vulkan smoke test verifying zero validation errors and frame budget thresholds. (Sprint 3a). |
+| `tests/Jatayu.RenderSmoke/Program.cs` | **PLANNED** | Automated Vulkan smoke test: runs D20 feature probe, runs full test suite on D10 hardware or reduced validation-only suite on software drivers. (Sprint 3a). |
 | `.github/workflows/ci.yml` | **PLANNED** | Continuous integration pipeline: build, test, and run validation smoke tests. (Sprint 3a). |
 | `Directory.Build.props` | **PLANNED** | Solution-wide compiler settings (`TreatWarningsAsErrors=true`, nullable enabled, analyzers). (Sprint 3a). |
 | `docs/RENDER_CONVENTIONS.md` | **PLANNED** | Canonical reference documenting depth, handedness, matrix layout, units, and shader bindings. (Sprint 3a). |
@@ -440,7 +441,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `assets/shaders/skybox.frag` | **PLANNED** | Procedural gradient sky or prefiltered cubemap shader. (Sprint 5b). |
 | `assets/shaders/debug_line.vert`| **PLANNED** | 3D debug wireframe vertex shader. (Sprint 5b). |
 | `assets/shaders/debug_line.frag`| **PLANNED** | Unlit flat-color fragment shader for physics debug lines and bounds. (Sprint 5b). |
-| `assets/shaders/cull.comp` | **PLANNED** | Compute shader for 5-plane frustum culling, max draw distance clamp, Hi-Z min-reduction occlusion, and indirect command generation. (Sprint 7a). |
+| `assets/shaders/cull.comp` | **PLANNED** | Compute shader for 5-plane frustum culling, max draw distance clamp, LOD selection, Hi-Z min-reduction occlusion, and indirect command generation across 5 views. (Sprint 7a). |
 | `assets/shaders/hiz_build.comp` | **PLANNED** | Compute shader generating hierarchical depth mip pyramid using MIN reduction for reverse-Z. (Sprint 7a). |
 | `assets/shaders/light_cull.comp`| **PLANNED** | Compute shader dividing frustum into 3D clusters and assigning point/spot light indices. (Sprint 7b). |
 | `assets/shaders/particle.vert` | **PLANNED** | GPU particle billboard vertex shader with size attenuation. (Sprint 7b). |
@@ -472,9 +473,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 
 ## 3. Progress Tracking Dashboard
 
-- **Total Planned Files:** 214
+- **Total Planned Files:** 215
 - **Total Completed Files:** 16
-- **Current Completion:** **7.5% (Sprint 2 Complete, Sprint 3a Ready)**
+- **Current Completion:** **7.4% (Sprint 2 Complete, Sprint 3a Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -482,9 +483,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Multithreading & Jobs** | 0 / 5 | Planned (Sprint 4) |
 | **Diagnostics & Profiling** | 0 / 4 | Planned (Sprint 3b) |
 | **Modern Vulkan 1.3 RHI** | 7 / 23 | **DepthBuffer Complete** |
-| **Shared Formats & Runtime Assets** | 0 / 9 | Planned (Sprint 3a-6b) |
+| **Shared Formats & Runtime Assets** | 0 / 12 | Planned (Sprint 3a-6b) |
 | **Cooker & World Generator** | 0 / 13 | Planned (Sprint 4-10) |
-| **World Grid & Streaming** | 0 / 9 | Planned (Sprint 6a) |
+| **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
 | **Render Graph** | 0 / 4 | Planned (Sprint 4) |
 | **GPU-Driven Rendering** | 0 / 6 | Planned (Sprint 5b, 7a) |
@@ -504,9 +505,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 4. Architectural Decisions Log & Resolutions
 
 * **D1 (Texture Compression in Cooker):**
-  * *Verification & Choice:* Inspected `Brutal.Texture.dll` and `Brutal.Ktx.dll` (v2026.10.2). They expose KTX2 containers, Basis Universal (UASTC/ETC1S) encoding and transcoding, but do not provide direct high-quality standalone offline BC7/BC5 block encoders. For direct raw BC7/BC5/BC4 block output into `.jpak` archives, `tools/Jatayu.Cooker/` will wrap a native `bc7enc` (MIT/Apache-2.0) or `ispc_texcomp` compressor via P/Invoke. Provides fast low-quality iteration mode and high-quality production mode.
+  * *Verification & Choice:* Inspected `Brutal.Texture.dll` and `Brutal.Ktx.dll` (v2026.10.2). They expose KTX2 containers and Basis Universal (UASTC/ETC1S) transcoders, but do not provide direct high-quality standalone offline BC7/BC5 block encoders. For direct raw BC7/BC5/BC4 block output into `.jpak` archives, `tools/Jatayu.Cooker/` will wrap a native `bc7enc` (MIT/Apache-2.0) or `ispc_texcomp` compressor via P/Invoke. Provides fast low-quality iteration mode and high-quality production mode.
 * **D2 (ECS Implementation):**
-  * *Verification & Choice:* Candidate: **Arch** (licensed under Apache-2.0). Provides struct component archetype storage, zero-allocation queries (`QueryDescription`), parallel query execution, and runs on .NET 10. Compatibility, license constraints, and allocation behavior will be strictly validated in the Sprint 5a 100k-entity query benchmark spike. Fallback candidate: **Friflo.Engine.ECS** (MIT license).
+  * *Verification & Choice:* Candidate: **Arch** (verified Apache-2.0 license). Provides struct component archetype storage, zero-allocation queries (`QueryDescription`), parallel query execution, and runs on .NET 10. Compatibility, license constraints, and allocation behavior will be strictly validated in the Sprint 5a 100k-entity query benchmark spike. Fallback candidate: **Friflo.Engine.ECS** (verified MIT license) or a minimal custom archetype store.
 * **D3 (Cell Sizing):**
   * *Choice:* **128 m** world cells; terrain tiles cover $2 \times 2$ cells (256 m). Stays configurable in `WorldConfig`.
 * **D4 (Distance Streaming Rings):**
@@ -525,12 +526,18 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
   * *Verification:* `Ahwoo.BRUTAL.MeshOptimizer` (v2026.10.2) is referenced in `Jatayu.csproj` and confirmed to export: `meshopt_optimizeVertexCache`, `meshopt_optimizeVertexFetch`, `meshopt_optimizeOverdraw`, `meshopt_simplify`, `meshopt_buildMeshlets`, and `meshopt_generateVertexRemap`. Directly usable without extra dependencies.
 * **D9 (Physics Precision):**
   * *Verification:* `Ahwoo.BRUTAL.Jolt` (v2026.10.4) is compiled with single-precision floats (`Vec3`, `Float3`). Floating-origin rebasing (`OriginShift`) is therefore mandatory.
-* **D10 (Hardware Floor):**
-  * *Choice:* Vulkan 1.3 discrete GPU with at least 4 GB VRAM and these features: dynamic rendering, synchronization2, timeline semaphores, descriptor indexing (`runtimeDescriptorArray`, `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`), buffer device address, `drawIndirectCount`, `samplerFilterMinmax`, and `VK_EXT_memory_budget`. `VulkanContext` will explicitly request these in Sprint 3a and fail with clear messaging if unsupported.
+* **D10 (Final Hardware Floor):**
+  * *Choice:* Vulkan 1.3 discrete GPU with at least 4 GB VRAM and all of the following:
+    - Core 1.3: `dynamicRendering`, `synchronization2`, `maintenance4`
+    - Core 1.2: `timelineSemaphore`, `bufferDeviceAddress`, `drawIndirectCount`, `samplerFilterMinmax`, `descriptorIndexing` (`runtimeDescriptorArray`, `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`, `descriptorBindingUpdateUnusedWhilePending`, `descriptorBindingVariableDescriptorCount`, `shaderSampledImageArrayNonUniformIndexing`, `shaderStorageBufferArrayNonUniformIndexing`)
+    - Core 1.1: `shaderDrawParameters`
+    - Core 1.0: `samplerAnisotropy`, `multiDrawIndirect`, `textureCompressionBC`, `shaderInt64`, `fragmentStoresAndAtomics`
+    - Extensions: `VK_EXT_memory_budget`; optional: `VK_EXT_debug_utils` (debug builds)
+    `VulkanContext` will explicitly request all of these in Sprint 3a and fail with a clear exception naming any missing feature.
 * **D11 (Platform Target):**
   * *Choice:* Windows x64 primary, Linux x64 secondary (GLFW, Vulkan, OpenAL are cross-platform).
 * **D12 (Reference GPU Tier):**
-  * *Choice:* Discrete GPU of NVIDIA GeForce RTX 3060 (12 GB) or AMD Radeon RX 6600 XT (8 GB) class at $1920\times 1080$. Every measurement report will explicitly declare the physical GPU, driver version, and CPU model used.
+  * *Choice:* Discrete GPU of NVIDIA GeForce RTX 3060 (12 GB) or AMD Radeon RX 6600 XT (8 GB) class at $1920\times 1080$. Development GPU is NVIDIA GeForce RTX 5060 Ti (Vulkan 1.4.351, Driver 617.42). Every measurement report will explicitly declare the physical GPU, driver version, and CPU model used.
 * **D13 (Debug UI Location):**
   * *Choice:* `ImGuiVulkanBackend.cs` and `DebugOverlay.cs` are placed in `src/DebugUI/`, not `src/Editor/`. The engine depends on `DebugUI`, while the optional editor depends on the engine.
 * **D14 (Sprint 3a Temporary Paths):**
@@ -545,6 +552,28 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
   * *Choice:* Foliage is Ring A only (to ~300 m); Ring B shows tree impostors and HLOD proxies. Hysteresis: Ring A unload is 150 m beyond load radius; Rings B and C use 10% of radius.
 * **D19 (Velocity-Scaled Streaming Radius):**
   * *Choice:* At 100 m/s, 600 m gives only 6 s lead time. `WorldConfig` adds `LeadSeconds` (default: 6 s): effective load radius = base radius + speed $\times$ LeadSeconds, capped, prioritized along player velocity.
+* **D20 (CI and Hardware Floor Strategy):**
+  * *Choice:* The render smoke test first executes a feature probe. On a physical GPU meeting the D10 floor, it runs the full verification suite. On a runner lacking advanced features (e.g. software rasterizer/lavapipe), it runs a reduced validation-only suite (instance, device, swapchain-less clear) and reports skipped checks explicitly as `SKIPPED`. Full-suite passing results on a D10-compliant machine are mandatory before declaring any sprint complete.
+* **D21 (MipResidency Dynamic Allocation):**
+  * *Choice:* Replaces descriptor min-LOD clamps. Each streamed texture holds a contiguous range of top-mips-missing levels (always including the resident mip tail $\le 64\times 64$). To adjust residency, `TextureStreamer` allocates a new `GpuTexture` with the target mip range, copies resident mips via GPU blit, uploads missing mips via `UploadManager`, atomically updates the bindless slot, and retires the old image via `DeferredDeletionQueue`. Churn is limited by stepping in 2-mip increments; target mips are chosen via CPU distance and texel-density heuristics.
+* **D22 (Unified Clipmap Terrain Renderer):**
+  * *Choice:* `TerrainClipmap` is the sole terrain renderer for all rings. `TerrainTile` supplies streamed tile data (height, normals, splat weights, Jolt shape); `TerrainHeightPyramid` supplies coarse far-field geometry. The clipmap samples tile data where resident and the pyramid elsewhere, blending over a 16 m edge transition. Tiles never submit draw calls directly.
+* **D23 (Streaming Radius Prefetch Cap):**
+  * *Choice:* The velocity-scaled radius from D19 is capped at 900 m and applies strictly to prefetch loading (~155 cells maximum). Activation of colliders, audio, and dynamic entity ticking remains strictly bounded to the 600 m Ring A radius. `StreamingManager` defers prefetch under `VramBudget` pressure.
+* **D24 (GPU Culling Across 5 Views and LOD Selection):**
+  * *Choice:* `cull.comp` evaluates instance bounding spheres and selects mesh LOD from the mesh record's LOD error table, applying `lod_dither.glsl` screen-door cross-fade. Culling executes for 5 views per frame (main camera + 4 shadow cascades). Main-camera culling is budgeted at 0.30 ms; cascade culling is accounted within the 0.80 ms shadow budget.
+* **D25 (Previous-Frame Transforms for Motion Vectors):**
+  * *Choice:* `DynamicInstanceRing` and `InstanceBuffer` store current and previous camera-relative transforms for dynamic entities (static instances use previous = current). The previous-frame view-projection matrix is corrected using the double-precision camera delta and snapped origin shifts, ensuring TAA velocity remains continuous across rebases.
+* **D26 (ECS Fallback License Verification):**
+  * *Verification & Choice:* Verified `Arch` is licensed under **Apache-2.0** and `Friflo.Engine.ECS` is licensed under **MIT**. Both licenses are permissive and acceptable for production. A minimal custom archetype store is retained as an emergency secondary fallback.
+* **D27 (BC7 Encoder Evaluation Route):**
+  * *Choice:* Before committing to native `bc7enc`, a quick evaluation on 3 test textures (albedo, normal, roughness) will compare Basis Universal UASTC transcoding to BC7 via `Ahwoo.BRUTAL.Ktx` vs native `bc7enc`. If UASTC shows no perceptible fidelity loss, it will be adopted to avoid native binary dependencies; otherwise native `bc7enc` will be linked via P/Invoke.
+* **D28 (Meshlet Scope Removal):**
+  * *Choice:* Mesh shaders and meshlets are fully removed from the engine plan and catalog to maintain disciplined scope. They remain an optional post-Sprint-10 consideration.
+* **D29 (Sprint 5b Scope Clarification):**
+  * *Choice:* Sprint 5b includes the basic `ForwardRenderer3D` path, `Skybox`, `DebugRenderer`, `ShadowMap`, `LightEnvironment`, and their shaders (`skybox.*`, `shadow.*`, `debug_line.*`), which are listed explicitly in the roadmap and catalog.
+* **D30 (Shared Formats Dependency Direction):**
+  * *Choice:* `tools/Jatayu.Cooker/` and `tools/Jatayu.WorldGen/` reference only `src/Jatayu.AssetFormats/` and BRUTAL import libraries. They never reference runtime engine projects or Vulkan graphics types.
 
 ---
 
@@ -582,12 +611,13 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 3a: Textures, Pipelines, Tests and CI [NEXT]                              │
-│  - src/Jatayu.AssetFormats/ (TextureLoader importer), D14 temporary upload       │
-│  - GpuTexture, VulkanSampler (with min-reduction mode), ShaderCompiler           │
+│  - Create src/Jatayu.AssetFormats/; add TextureLoader as importer there          │
+│  - GpuTexture, VulkanSampler (with min-reduction mode), ShaderCompiler, Shaders  │
 │  - VulkanPipeline & PipelineBuilder, CommandPoolManager, Descriptors             │
-│  - Directory.Build.props, tests/Jatayu.Tests, tests/Jatayu.RenderSmoke, ci.yml   │
-│  - docs/RENDER_CONVENTIONS.md; Request D10 device features in VulkanContext     │
-│  - Result: Textured cube rendered via modular pipeline, validation-clean, CI     │
+│  - D14 temporary synchronous upload helper                                       │
+│  - Directory.Build.props, tests/Jatayu.Tests, tests/Jatayu.RenderSmoke (D20 probe│
+│  - docs/RENDER_CONVENTIONS.md; VulkanContext requests full D10 feature set       │
+│  - Result: Textured cube through new pipeline abstraction, validation clean, CI  │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
                                          ▼
@@ -597,7 +627,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
 │  - DeferredDeletionQueue (safe resource retirement), VramBudget                  │
 │  - Reverse-Z conversion (DepthConvention, Camera3D, DepthBuffer, shaders)       │
 │  - NativeArena, NativePool, Profiler, GpuTimer, DebugNames, AllocationTracker    │
-│  - src/DebugUI/ImGuiVulkanBackend.cs & DebugOverlay.cs (live telemetry HUD)      │
+│  - src/DebugUI/ImGuiVulkanBackend.cs & DebugOverlay.cs (frame time, GPU, alloc)  │
 │  - Result: Textured cube with async uploads, reverse-Z, live diagnostics HUD     │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -605,8 +635,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 4: Jobs, Cooking & Render Graph                                           │
 │  - JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher                  │
-│  - Cooker (Program, MeshCooker, TextureCooker with D1 encoder & mip tail, etc.)  │
-│  - PackWriter/PackReader (.jpak memory-mapped archives), AssetManager            │
+│  - Cooker (Program, MeshCooker, TextureCooker with D27 encoder & mip tail, etc.)  │
+│  - AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager               │
 │  - RenderGraph (Pass DAG, sync2 barriers, depth pre-pass, opaque pass, GPU times)│
 │  - Remove D14 temporary PNG/upload exception                                     │
 │  - Result: glTF model cooked offline, loaded from .jpak, rendered via graph      │
@@ -615,7 +645,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 5a: Engine Runtime and ECS                                                │
-│  - ECS spike (100k entity query benchmark, zero allocations) & decision D2       │
+│  - ECS spike (100k entity query benchmark, zero allocations) & decision D2/D26   │
 │  - Scene, Entity, Transform, MeshRenderer, CameraComponent, RigidBodyComponent   │
 │  - Engine & EngineConfig, Settings, EventBus, Log, Input, KeyCodes, Gamepad      │
 │  - Result: Game loop through Engine.Run() with ECS entities, zero allocation     │
@@ -624,19 +654,21 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 5b: Large-World Rendering Foundations                                     │
-│  - WorldPosition (double), Camera-Relative Rendering, OriginShift (1.3 procedure)│
+│  - WorldPosition (double), Camera-Relative Rendering, OriginShift (256m snap)    │
 │  - Frustum culling (5 planes + max draw distance clamp)                          │
 │  - BindlessTable, basic GeometryPool, DynamicInstanceRing, Material, MaterialTab │
-│  - PBR shaders (pbr.vert, pbr.frag), DirectionalLight with single shadow map     │
+│  - PBR shaders, DirectionalLight, ShadowMap with shadow.*, LightEnvironment      │
+│  - Skybox with skybox.*, DebugRenderer with debug_line.*, basic ForwardRenderer3D│
 │  - Result: PBR scene rendered at 50,000m from origin with zero vertex jitter     │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 6a: World Grid and Streaming                                              │
-│  - WorldConfig (D18 rings, D19 lead time), CellCoord, WorldCell, WorldGrid       │
-│  - StreamingManager, CellLoader, CellFormat, CellCooker, StreamingDebugOverlay   │
-│  - tools/Jatayu.WorldGen/ procedural generator for Reference Scene               │
+│  - WorldConfig (D18 rings, D19 lead time, D23 900m cap), WorldCell, WorldGrid    │
+│  - StreamingManager, CellLoader, CellCooker, StreamingDebugOverlay (adds map)   │
+│  - CellCoord, CellFormat, WorldConstants from Jatayu.AssetFormats (P4)           │
+│  - tools/Jatayu.WorldGen/ procedural generator with placeholder meshes (P6)      │
 │  - Temporary non-GPU instanced draw path for cell instances (replaced in 7a)     │
 │  - Result: Traverse 16 km x 16 km world at 100 m/s without hitch > 2ms           │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
@@ -644,10 +676,10 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 6b: Terrain, HLOD and Texture Streaming                                   │
-│  - TerrainTile (256m), TerrainClipmap (geomorphing), TerrainMaterial splat       │
+│  - TerrainTile (256m), TerrainClipmap (unified D22), TerrainMaterial splat       │
 │  - TerrainHeightPyramid (far-field clipmap), HeightfieldCooker (D15 rules)       │
 │  - Hlod, HlodCooker, ImpostorCooker                                              │
-│  - TextureStreamer, MipResidency (resident mip tail, streamed mips, eviction)   │
+│  - TextureStreamer, MipResidency (resident mip tail, streamed mips, D21 swaps)   │
 │  - Result: 3 GB cooked textures run in 2 GB budget without popping > 1 mip level │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -655,8 +687,9 @@ To maintain rigorous, objective performance validation across sprints, all frame
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ SPRINT 7a: GPU-Driven Rendering                                                  │
 │  - InstanceBuffer, IndirectDrawBuffer (vkCmdDrawIndexedIndirectCount)           │
-│  - GpuCuller (compute 5-plane culling), HiZBuilder (MIN reduction), cull/hiz comp│
-│  - Velocity output in opaque pass; replace temporary draw path                   │
+│  - GpuCuller (5 views: main + 4 cascades, LOD selection D24), HiZBuilder         │
+│  - Velocity output in opaque pass with previous-frame transforms (D25)           │
+│  - Full GeometryPool; ForwardRenderer3D converted to GPU-driven indirect         │
 │  - Result: 200,000 visible instances in < 4ms GPU, < 1ms CPU render submission   │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -733,8 +766,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-11** | Sprint 3b, 5b | Added `NativeArena.cs`, `NativePool.cs`, `Settings.cs`, and `MaterialTable.cs` to the catalog. |
 | **CL-12** | Core | Documented exact 5-step floating-origin rebasing procedure in Section 1.3. |
 | **CL-13** | Core | Updated GPU frame budget table to 5.90 ms (providing ~15% headroom under 144 FPS / 6.94 ms target) and CPU frame budget to 5.20 ms. Defined Reference Scene in Section 5. |
-| **CL-14** | Dashboard | Recounted all catalog files across 20 subsystem tables: 214 total planned files, 16 completed files (7.5% completion). |
-| **CL-15** | Cross-Refs | Fixed broken cross-reference in Section 1.4 pointing to Reference Scene (Section 5) and OriginShift (Section 1.3). Removed all legacy document tags (G1, G3, etc.). |
+| **CL-14** | Dashboard | Recounted all catalog files across 20 subsystem tables: 215 total planned files, 16 completed files (7.4% completion). |
+| **CL-15** | Cross-Refs | Fixed broken cross-reference in Section 1.4 pointing to Reference Scene (Section 5) and OriginShift (Section 1.3). Removed all legacy document tags. |
 | **CL-16** | Sprint 5b | Resolved bindless sequencing bug by moving `BindlessTable.cs` and basic `GeometryPool.cs` into Sprint 5b to support `MaterialTable` and `MipResidency`. Added `DynamicInstanceRing.cs`. |
 | **CL-17** | Decisions | Recorded verified D8 (`Ahwoo.BRUTAL.MeshOptimizer` v2026.10.2 functions), D9 (Jolt single-precision floats), D10 (Vulkan 1.3 hardware floor requirements), D11 (Platform targets), and D12 (Reference GPU tier). |
 | **CL-18** | Decisions | Recorded verified findings for D1 (native `bc7enc` P/Invoke in cooker) and D2 (Arch candidate Apache-2.0 license, Sprint 5a spike). |
@@ -746,3 +779,14 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-24** | Sprint 5a, 5b | Split Sprint 5 into **Sprint 5a** (ECS & Engine Runtime) and **Sprint 5b** (Large-World Rendering Foundations, Bindless, Origin Shift). |
 | **CL-25** | Sprint 6a, 6b | Split Sprint 6 into **Sprint 6a** (World Grid & Streaming) and **Sprint 6b** (Terrain, HLOD & Texture Streaming). |
 | **CL-26** | World | Added `LeadSeconds` (default: 6 s) velocity-scaled streaming radius calculation to `WorldConfig` (D19) and foliage Ring A-only rule (D18). |
+| **CL-27** | Vulkan RHI | Replaced D10 with the exhaustive Vulkan 1.3 hardware floor specification (P1). |
+| **CL-28** | Testing & CI | Added decision D20: hardware probe in `tests/Jatayu.RenderSmoke` running full test suite on D10 hardware or reduced validation suite on CI/software drivers (P2). |
+| **CL-29** | Header | Removed "meshlet-ready" and all references to meshlets from PLAN.md (P3, D28). |
+| **CL-30** | Shared Formats | Moved `CellFormat.cs` and `CellCoord.cs` to `src/Jatayu.AssetFormats/World/`, added `WorldConstants.cs`, and removed duplicate `CookedCellRecord` from `CookedFormats.cs` (P4). |
+| **CL-31** | Core Math | Updated floating-origin shift snap from 128m to 256m (terrain tile multiple) in Section 1.3 and `OriginShift.cs` (P5). |
+| **CL-32** | WorldGen | Updated `tools/Jatayu.WorldGen/Program.cs` catalog row to generate procedural placeholder glTF meshes into `assets/generated/` (P6). |
+| **CL-33** | DebugUI | Clarified `DebugOverlay.cs` scope for Sprint 3b to frame time, pass times, allocations, and VRAM only (P7). |
+| **CL-34** | Renderer | Specified `ForwardRenderer3D.cs` role as basic forward in Sprint 5b, converted to GPU-driven indirect in Sprint 7a (P8, D29). |
+| **CL-35** | Streaming & Mips | Added decisions D21 (MipResidency dynamic allocation and bindless swap), D22 (unified `TerrainClipmap` renderer), and D23 (900m streaming prefetch cap). |
+| **CL-36** | GPU-Driven | Added decisions D24 (culling across 5 views and LOD selection), D25 (previous-frame transforms for TAA motion vectors continuous across origin shifts), and D30 (shared formats dependency direction). |
+| **CL-37** | Decisions | Added decisions D26 (ECS licenses: Arch Apache-2.0, Friflo MIT), and D27 (BC7 encoder evaluation route). |

@@ -277,7 +277,7 @@ static unsafe void RunEngineDemo()
                 VertexInputState = vertexInput,
                 InputAssemblyState = Presets.InputAssembly.TriangleList,
                 ViewportState = &viewportState,
-                RasterizationState = Presets.Rasterization.Fill.CullNone,
+                RasterizationState = Presets.Rasterization.Fill.CullBack,
                 MultisampleState = Presets.Multisample.None,
                 DepthStencilState = Presets.DepthStencil.DepthTestWrite, // Active Depth Testing & Writing!
                 ColorBlendState = Presets.BlendState.BlendNone,
