@@ -38,6 +38,14 @@ public static class Program
                     if (args.Length < 3) { Console.WriteLine("Usage: cook-texture <inputFile> <outputFile>"); return 1; }
                     return ExecuteCookTexture(args[1], args[2]);
 
+                case "cook-model":
+                    if (args.Length < 3) { Console.WriteLine("Usage: cook-model <inputGltf> <outputDir>"); return 1; }
+                    return ExecuteCookModel(args[1], args[2]);
+
+                case "cook-pak":
+                    if (args.Length < 3) { Console.WriteLine("Usage: cook-pak <outputJpak> <inputDir>"); return 1; }
+                    return ExecuteCookPak(args[1], args[2]);
+
                 case "inspect":
                     if (args.Length < 2) { Console.WriteLine("Usage: inspect <packagePath.jpak>"); return 1; }
                     return ExecuteInspect(args[1]);
@@ -118,10 +126,93 @@ public static class Program
         return 0;
     }
 
+    private static int ExecuteCookModel(string gltfPath, string outputDir)
+    {
+        if (!File.Exists(gltfPath))
+        {
+            Console.WriteLine($"[Error] glTF model file not found: {gltfPath}");
+            return 1;
+        }
+
+        Directory.CreateDirectory(outputDir);
+        Console.WriteLine($"[Cooker] Loading glTF model: {gltfPath}");
+        var rawModel = Jatayu.AssetFormats.Loaders.ModelLoader.LoadFromFile(gltfPath);
+
+        var modelName = Path.GetFileNameWithoutExtension(gltfPath);
+        Console.WriteLine($"[Cooker] Loaded model '{modelName}' with {rawModel.Submeshes.Count} submeshes");
+        for (int i = 0; i < rawModel.Submeshes.Count; i++)
+        {
+            var submesh = rawModel.Submeshes[i];
+            var submeshName = string.IsNullOrEmpty(submesh.Name) ? $"submesh_{i}" : submesh.Name;
+            var guid = AssetGuid.FromPath($"{modelName}/{submeshName}");
+            var outputPath = Path.Combine(outputDir, $"{guid}.jmesh");
+
+            Console.WriteLine($"  Baking submesh {i}: '{submeshName}' ({submesh.Vertices.Length} verts, {submesh.Indices.Length} indices) -> {Path.GetFileName(outputPath)}");
+            var bytes = MeshCooker.CookRawSubmesh(submesh, guid);
+            File.WriteAllBytes(outputPath, bytes);
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"[Cooker] Successfully cooked all submeshes for '{modelName}'");
+        Console.ResetColor();
+        return 0;
+    }
+
+    private static int ExecuteCookPak(string outputJpak, string inputDir)
+    {
+        if (!Directory.Exists(inputDir))
+        {
+            Console.WriteLine($"[Error] Input asset directory not found: {inputDir}");
+            return 1;
+        }
+
+        using var packWriter = new PackWriter();
+        var files = Directory.GetFiles(inputDir, "*.*", SearchOption.AllDirectories);
+        Console.WriteLine($"[Cooker] Packing {files.Length} files from '{inputDir}' into '{outputJpak}'");
+
+        foreach (var file in files)
+        {
+            var ext = Path.GetExtension(file).ToLowerInvariant();
+            AssetType type = ext switch
+            {
+                ".jmesh" => AssetType.Mesh,
+                ".jtex" => AssetType.Texture,
+                ".jmat" => AssetType.Material,
+                _ => AssetType.Unknown,
+            };
+
+            if (type == AssetType.Unknown)
+                continue;
+
+            var filenameWithoutExt = Path.GetFileNameWithoutExtension(file);
+            AssetGuid guid;
+            if (ulong.TryParse(filenameWithoutExt, System.Globalization.NumberStyles.HexNumber, null, out var guidVal))
+            {
+                guid = new AssetGuid(guidVal);
+            }
+            else
+            {
+                guid = AssetGuid.FromPath(file);
+            }
+
+            var bytes = File.ReadAllBytes(file);
+            packWriter.AddEntry(guid, type, bytes);
+            Console.WriteLine($"  Added {type,-8} {guid} ({bytes.Length:N0} bytes)");
+        }
+
+        packWriter.WriteToFile(outputJpak);
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"[Cooker] Successfully generated archive: {outputJpak}");
+        Console.ResetColor();
+        return 0;
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("Available commands:");
         Console.WriteLine("  cook-texture <inputFile> <outputFile>   : Bakes an image into .jtex with mipmaps & resident tail");
+        Console.WriteLine("  cook-model <inputGltf> <outputDir>      : Bakes glTF meshes into optimized .jmesh files");
+        Console.WriteLine("  cook-pak <outputJpak> <inputDir>        : Bundles cooked assets into a .jpak package");
         Console.WriteLine("  inspect <packagePath.jpak>              : Inspects .jpak Table of Contents header");
     }
 }

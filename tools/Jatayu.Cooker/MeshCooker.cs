@@ -50,6 +50,33 @@ public static class MeshCooker
     /// <summary>
     /// Cooks raw vertices and indices into an optimized .jmesh binary blob with LOD hierarchy.
     /// </summary>
+    public static byte[] CookRawSubmesh(Jatayu.AssetFormats.Loaders.RawSubmesh submesh, AssetGuid guid, int lodLevels = 3)
+    {
+        var cookedVertices = new CookedVertex[submesh.Vertices.Length];
+        for (int i = 0; i < submesh.Vertices.Length; i++)
+        {
+            ref readonly var v = ref submesh.Vertices[i];
+            cookedVertices[i] = new CookedVertex
+            {
+                PosX = v.Position.X,
+                PosY = v.Position.Y,
+                PosZ = v.Position.Z,
+                ColorR = v.Color.X,
+                ColorG = v.Color.Y,
+                ColorB = v.Color.Z,
+                NormalX = v.Normal.X,
+                NormalY = v.Normal.Y,
+                NormalZ = v.Normal.Z,
+                TexCoordU = v.TexCoord.X,
+                TexCoordV = v.TexCoord.Y,
+            };
+        }
+        return CookMesh(guid, cookedVertices, submesh.Indices, lodLevels);
+    }
+
+    /// <summary>
+    /// Cooks raw vertices and indices into an optimized .jmesh binary blob with LOD hierarchy.
+    /// </summary>
     public static unsafe byte[] CookMesh(
         AssetGuid guid,
         ReadOnlySpan<CookedVertex> vertices,
