@@ -234,8 +234,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 *Note: `src/Jatayu.AssetFormats/` is a lightweight shared class library without GPU/Vulkan dependencies, shared between runtime engine, cooker, and world generator.*
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Jatayu.AssetFormats/AssetGuid.cs` | **PLANNED** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
-| `src/Jatayu.AssetFormats/CookedFormats.cs` | **PLANNED** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
+| `src/Jatayu.AssetFormats/AssetGuid.cs` | **DONE** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
+| `src/Jatayu.AssetFormats/CookedFormats.cs` | **DONE** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
 | `src/Jatayu.AssetFormats/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
