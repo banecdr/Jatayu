@@ -1,4 +1,4 @@
-﻿<!-- =================================================================================================
+<!-- =================================================================================================
  * FILE: PLAN.md
  * LOCATION: PLAN.md
  * 
@@ -189,11 +189,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.2 Multithreading & Job System (`src/Core/Jobs/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Core/Jobs/JobSystem.cs` | **PLANNED** | Work-stealing thread pool sized to physical cores minus 1-2. Supports priorities (`High`, `Normal`, `Background`) and dependencies. (Sprint 4). |
-| `src/Core/Jobs/Job.cs` | **PLANNED** | Pooled unmanaged/struct job definition representing an executable delegate or function pointer. Zero allocation per task. (Sprint 4). |
-| `src/Core/Jobs/JobHandle.cs` | **PLANNED** | Lightweight completion and dependency token for jobs with `.Wait()`, `.IsCompleted`, and `.Combine()`. (Sprint 4). |
-| `src/Core/Jobs/ParallelFor.cs` | **PLANNED** | Batched parallel-for range partitioner for parallel execution of culling, animation, and data processing. (Sprint 4). |
-| `src/Core/Jobs/MainThreadDispatcher.cs` | **PLANNED** | Lock-free queue for job results requiring main-thread execution (GPU resource finalization, scene mutation) with ms time budgeting. (Sprint 4). |
+| `src/Core/Jobs/JobSystem.cs` | **DONE** | Work-stealing thread pool sized to physical cores minus 1-2. Supports priorities (`High`, `Normal`, `Background`) and dependencies. (Sprint 4). |
+| `src/Core/Jobs/Job.cs` | **DONE** | Pooled unmanaged/struct job definition representing an executable delegate or function pointer. Zero allocation per task. (Sprint 4). |
+| `src/Core/Jobs/JobHandle.cs` | **DONE** | Lightweight completion and dependency token for jobs with `.Wait()`, `.IsCompleted`, and `.Combine()`. (Sprint 4). |
+| `src/Core/Jobs/ParallelFor.cs` | **DONE** | Batched parallel-for range partitioner for parallel execution of culling, animation, and data processing. (Sprint 4). |
+| `src/Core/Jobs/MainThreadDispatcher.cs` | **DONE** | Lock-free queue for job results requiring main-thread execution (GPU resource finalization, scene mutation) with ms time budgeting. (Sprint 4). |
 
 ### 2.3 Diagnostics, Profiling & GPU Metrics (`src/Core/Profiling/` & `src/RHI/Vulkan/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
