@@ -243,6 +243,18 @@ public static class Program
         Console.WriteLine("\n--- [CHECK 5] Sprint 3b: GPU Foundation & Subsystem Verification ---");
         try
         {
+            // ImGui font atlas check
+            Brutal.ImGuiApi.ImGui.CreateContext();
+            var io = Brutal.ImGuiApi.ImGui.GetIO();
+            if (io.Fonts.Fonts.Count == 0)
+            {
+                Brutal.ImGuiApi.ImFontAtlasExtensions.AddFontDefault(io.Fonts, default);
+            }
+            if (io.Fonts.TexData.Ptr == null || io.Fonts.TexData.Width <= 0 || io.Fonts.TexData.Height <= 0)
+                throw new InvalidOperationException("ImGui font atlas failed to initialize.");
+            Console.WriteLine($"  [ImGui] Font atlas initialized: {io.Fonts.TexData.Width}x{io.Fonts.TexData.Height} px, {io.Fonts.TexData.BytesPerPixel} Bpp");
+            Brutal.ImGuiApi.ImGui.DestroyContext();
+
             // Reverse-Z matrix verification
             var proj = Jatayu.Renderer.Camera.DepthConvention.CreateReverseZInfiniteProjection(MathF.PI / 3f, 16f / 9f, 0.1f);
             if (proj.M22 >= 0f) throw new InvalidOperationException("M22 must be negative for Vulkan NDC Y-flip.");

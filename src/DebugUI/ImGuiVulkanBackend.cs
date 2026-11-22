@@ -83,11 +83,17 @@ public sealed class ImGuiVulkanBackend : IDisposable
         var io = ImGui.GetIO();
         io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
 
+        // Ensure default font is added so the font atlas is initialized
+        if (io.Fonts.Fonts.Count == 0)
+        {
+            ImFontAtlasExtensions.AddFontDefault(io.Fonts, default);
+        }
+
         // 2. Build font texture and upload via UploadManager
         var texData = io.Fonts.TexData;
         int fontW = texData.Width;
         int fontH = texData.Height;
-        var pixelsPtr = (byte*)texData.GetPixels();
+        var pixelsPtr = (byte*)texData.Pixels.Pointer;
         var fontSpan = new ReadOnlySpan<byte>(pixelsPtr, fontW * fontH * 4);
         var fontImageData = new LoadedImageData(fontW, fontH, 4, ImagePixelFormat.R8G8B8A8_Unorm, fontSpan.ToArray());
 
@@ -111,7 +117,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
             VkImageLayout.ShaderReadOnlyOptimal
         );
 
-        texData.SetTexID(new ImTextureID((nint)_fontDescriptorSet.VkHandle));
+        texData.TexID = new ImTextureID((nint)_fontDescriptorSet.VkHandle);
 
         // 4. Compile ImGui shaders
         using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
