@@ -171,8 +171,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | :--- | :---: | :--- |
 | `src/Core/Window.cs` | **DONE** | GLFW desktop window wrapper. DPI awareness, screen centering, V-Sync toggle, minimization safety, and OS event dispatch. |
 | `src/Core/Time/GameTime.cs` | **DONE** | High-precision stopwatch clock (`Stopwatch.GetTimestamp`). Clamped frame deltas, FPS tracking, and fixed-timestep accumulator for physics. |
-| `src/Core/Math/WorldPosition.cs` | **PLANNED** | Double-precision 3D vector (`double X, Y, Z`), conversion to camera-relative `float3`, distance methods, SIMD alignment. (Sprint 5b). |
-| `src/Core/Math/OriginShift.cs` | **PLANNED** | Floating-origin coordinator. Snaps shift offset to 256m terrain tile multiples and broadcasts rebase events at frame boundaries. (Sprint 5b). |
+| `src/Core/Math/WorldPosition.cs` | **DONE** | Double-precision 3D vector (`double X, Y, Z`), conversion to camera-relative `float3`, distance methods, SIMD alignment. (Sprint 5b). |
+| `src/Core/Math/OriginShift.cs` | **DONE** | Floating-origin coordinator. Snaps shift offset to 256m terrain tile multiples and broadcasts rebase events at frame boundaries. (Sprint 5b). |
 | `src/Core/Memory/NativeArena.cs` | **DONE** | High-speed linear frame allocator allocating native memory with zero GC impact; reset once per frame. (Sprint 3b). |
 | `src/Core/Memory/NativePool.cs` | **DONE** | Pooled unmanaged buffer blocks recycling memory across streaming decodes and render passes. (Sprint 3b). |
 | `src/Core/Input/KeyCodes.cs` | **DONE** | Strongly typed C# enum mapping GLFW key and mouse codes into clean, game-ready names (`Key.W`, `Key.Space`, `MouseButton.Left`). (Sprint 5a). |
@@ -222,7 +222,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/RHI/Vulkan/Pipelines/PipelineCache.cs` | **PLANNED** | Manages persistent `VkPipelineCache` loading and saving to disk to eliminate runtime shader compilation hitches. (Sprint 10). |
 | `src/RHI/Vulkan/Descriptors/DescriptorLayout.cs` | **DONE** | Descriptor set layout wrapper for non-bindless passes (ImGui, compute dispatch tables). (Sprint 3a). |
 | `src/RHI/Vulkan/Descriptors/DescriptorAllocator.cs`| **DONE** | Pool allocator for `VkDescriptorSet` recycling sets across frames. (Sprint 3a). |
-| `src/RHI/Vulkan/Descriptors/BindlessTable.cs` | **PLANNED** | Global bindless descriptor array (`VK_EXT_descriptor_indexing`) binding thousands of textures to uniform shader arrays. (Sprint 5b). |
+| `src/RHI/Vulkan/Descriptors/BindlessTable.cs` | **DONE** | Global bindless descriptor array (`VK_EXT_descriptor_indexing`) binding thousands of textures to uniform shader arrays. (Sprint 5b). |
 | `src/RHI/Vulkan/Upload/UploadManager.cs` | **DONE** | Asynchronous GPU transfer coordinator using dedicated transfer queue, staging ring, and ownership transfers. (Sprint 3b). |
 | `src/RHI/Vulkan/Upload/StagingRing.cs` | **DONE** | Persistently mapped 64-256 MB circular staging buffer with head/tail tracking for zero-copy CPU-to-GPU uploads. (Sprint 3b). |
 | `src/RHI/Vulkan/Upload/UploadRequest.cs` | **DONE** | Struct describing buffer/image copy request, mip ranges, and target subresources. (Sprint 3b). |
@@ -301,8 +301,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.10 GPU-Driven Rendering (`src/Renderer/GpuDriven/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Renderer/GpuDriven/GeometryPool.cs` | **PLANNED** | Monolithic shared vertex/index GPU memory pool enabling draw calls across all static meshes without rebinding buffers. (Sprint 5b basic, 7a full). |
-| `src/Renderer/GpuDriven/DynamicInstanceRing.cs` | **PLANNED** | Ring-buffered per-frame instance buffer region allowing dynamic ECS entities to feed the GPU-driven renderer with current and previous transforms. (Sprint 5b). |
+| `src/Renderer/GpuDriven/GeometryPool.cs` | **DONE** | Monolithic shared vertex/index GPU memory pool enabling draw calls across all static meshes without rebinding buffers. (Sprint 5b basic, 7a full). |
+| `src/Renderer/GpuDriven/DynamicInstanceRing.cs` | **DONE** | Ring-buffered per-frame instance buffer region allowing dynamic ECS entities to feed the GPU-driven renderer with current and previous transforms. (Sprint 5b). |
 | `src/Renderer/GpuDriven/InstanceBuffer.cs` | **PLANNED** | GPU storage buffer holding per-instance data: camera-relative float transforms (current & previous), mesh ID, material ID, bounding sphere. (Sprint 7a). |
 | `src/Renderer/GpuDriven/IndirectDrawBuffer.cs` | **PLANNED** | Indirect command buffer populated by compute shader for `vkCmdDrawIndexedIndirectCount` draws. (Sprint 7a). |
 | `src/Renderer/GpuDriven/GpuCuller.cs` | **PLANNED** | Compute shader dispatcher: executes 5-plane frustum culling, max draw distance clamp, LOD selection, and Hi-Z min-reduction occlusion across 5 views. (Sprint 7a). |
@@ -313,20 +313,20 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | :--- | :---: | :--- |
 | `src/Renderer/Camera/Camera3D.cs` | **DONE** | 3D Perspective camera. Computes View, Projection, and camera-relative transformation matrices. |
 | `src/Renderer/Camera/CameraController.cs` | **DONE** | Smooth camera controller supporting first-person free-look, orbit, pitch/yaw, and keyboard navigation. |
-| `src/Renderer/Camera/Frustum.cs` | **PLANNED** | Extracts 5 bounding planes (Left, Right, Bottom, Top, Near) plus configurable max draw distance for CPU-side coarse culling. (Sprint 5b). |
+| `src/Renderer/Camera/Frustum.cs` | **DONE** | Extracts 5 bounding planes (Left, Right, Bottom, Top, Near) plus configurable max draw distance for CPU-side coarse culling. (Sprint 5b). |
 | `src/Renderer/Camera/DepthConvention.cs` | **DONE** | Canonical depth settings and matrices (Reverse-Z flag, infinite projection builder, clear depth constants). (Sprint 3b). |
 | `src/Renderer/Mesh/Vertex3D.cs` | **DONE** | Standard 3D PBR vertex struct: Position (`float3`), Normal (`float3`), Tangent (`float4`), UV (`float2`), and Color (`float4`). |
 | `src/Renderer/Mesh/Mesh.cs` | **DONE** | GPU geometry container holding vertex/index buffer slices, triangle count, and bounding box. (Sprint 4). |
 | `src/Renderer/Mesh/Model.cs` | **DONE** | Multi-mesh 3D model container containing sub-meshes, materials, and local node hierarchies. (Sprint 4). |
-| `src/Renderer/Material/Material.cs` | **PLANNED** | PBR material binding albedo, normal, metallic-roughness, AO, emissive textures and scalar factors. (Sprint 5b). |
-| `src/Renderer/Material/MaterialTable.cs` | **PLANNED** | GPU storage buffer containing all active material parameters indexed by material ID for bindless draws. (Sprint 5b). |
-| `src/Renderer/Lighting/DirectionalLight.cs` | **PLANNED** | Sunlight parameters: Direction, Color, Intensity, Cascaded shadow configuration. (Sprint 5b). |
+| `src/Renderer/Material/Material.cs` | **DONE** | PBR material binding albedo, normal, metallic-roughness, AO, emissive textures and scalar factors. (Sprint 5b). |
+| `src/Renderer/Material/MaterialTable.cs` | **DONE** | GPU storage buffer containing all active material parameters indexed by material ID for bindless draws. (Sprint 5b). |
+| `src/Renderer/Lighting/DirectionalLight.cs` | **DONE** | Sunlight parameters: Direction, Color, Intensity, Cascaded shadow configuration. (Sprint 5b). |
 | `src/Renderer/Lighting/PointLight.cs` | **PLANNED** | Point light parameters: Camera-relative position, Color, Intensity, Attenuation radius. (Sprint 7b). |
 | `src/Renderer/Lighting/SpotLight.cs` | **PLANNED** | Spot light parameters: Position, Direction, Inner/Outer cone angles, Color, Intensity. (Sprint 7b). |
-| `src/Renderer/Lighting/LightEnvironment.cs` | **PLANNED** | Scene lighting container holding sun light, ambient sky light, and active clustered light arrays. (Sprint 5b). |
+| `src/Renderer/Lighting/LightEnvironment.cs` | **DONE** | Scene lighting container holding sun light, ambient sky light, and active clustered light arrays. (Sprint 5b). |
 | `src/Renderer/Lighting/ClusteredLightCulling.cs`| **PLANNED** | 3D view-frustum cluster grid allocator and compute pass assigning point/spot lights to 3D clusters. (Sprint 7b). |
 | `src/Renderer/Lighting/IblProbe.cs` | **PLANNED** | Image-based lighting probe: diffuse irradiance cubemap, specular prefiltered reflection map, BRDF LUT. (Sprint 7b). |
-| `src/Renderer/Shadows/ShadowMap.cs` | **PLANNED** | Depth render target and light view-projection for single directional/spot shadow passes. (Sprint 5b). |
+| `src/Renderer/Shadows/ShadowMap.cs` | **DONE** | Depth render target and light view-projection for single directional/spot shadow passes. (Sprint 5b). |
 | `src/Renderer/Shadows/CascadedShadowMap.cs` | **PLANNED** | 4-cascade shadow map renderer with texel snapping to prevent edge shimmering during camera translation. (Sprint 7b). |
 | `src/Renderer/Shadows/ShadowCascade.cs` | **PLANNED** | Individual cascade bounds, projection matrix, split distance, and depth bias calculations. (Sprint 7b). |
 | `src/Renderer/Vegetation/FoliageSystem.cs` | **PLANNED** | GPU instancing manager for grass, shrubs, and trees with wind vertex animation and distance LOD dithering. (Sprint 7b). |
@@ -335,10 +335,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Renderer/Particles/ParticleSystem.cs` | **PLANNED** | GPU particle simulation (compute update, indirect draw) with soft particle depth fading. (Sprint 7b). |
 | `src/Renderer/Sky/Atmosphere.cs` | **PLANNED** | Analytical Rayleigh/Mie atmospheric scattering shader simulation and aerial perspective fog. (Sprint 9). |
 | `src/Renderer/Sky/TimeOfDay.cs` | **PLANNED** | 24-hour sun/moon orbit simulation driving directional light vector, sky color, and ambient tones. (Sprint 9). |
-| `src/Renderer/Skybox/Skybox.cs` | **PLANNED** | Procedural atmospheric or cubemap background drawn at reverse-Z infinity ($Z = 0.0$). (Sprint 5b). |
+| `src/Renderer/Skybox/Skybox.cs` | **DONE** | Procedural atmospheric or cubemap background drawn at reverse-Z infinity ($Z = 0.0$). (Sprint 5b). |
 | `src/Renderer/Water/WaterRenderer.cs` | **PLANNED** | Planar Gerstner water surface with depth absorption, wave displacement, normal blending, and screen refraction. (Sprint 9). |
-| `src/Renderer/ForwardRenderer3D.cs` | **PLANNED** | Basic forward rendering path in Sprint 5b, converted to GPU-driven indirect renderer in Sprint 7a. (Sprint 5b). |
-| `src/Renderer/Debug/DebugRenderer.cs` | **PLANNED** | 3D wireframe line, box, sphere, and frustum renderer for visualizing physics colliders and streaming bounds. (Sprint 5b). |
+| `src/Renderer/ForwardRenderer3D.cs` | **DONE** | Basic forward rendering path in Sprint 5b, converted to GPU-driven indirect renderer in Sprint 7a. (Sprint 5b). |
+| `src/Renderer/Debug/DebugRenderer.cs` | **DONE** | 3D wireframe line, box, sphere, and frustum renderer for visualizing physics colliders and streaming bounds. (Sprint 5b). |
 
 ### 2.12 Post-Processing Pipeline (`src/Renderer/PostProcess/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -433,14 +433,14 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `assets/shaders/triangle.frag` | **DONE** | 2D test fragment shader. |
 | `assets/shaders/cube.vert` | **DONE** | 3D cube vertex shader (push constants: MVP + demo-only Panini option). |
 | `assets/shaders/cube.frag` | **DONE** | 3D cube fragment shader with directional diffuse normal shading. |
-| `assets/shaders/pbr.vert` | **PLANNED** | Camera-relative vertex shader evaluating world normals, tangents, shadow coordinates, and velocity output for TAA. (Sprint 5b). |
-| `assets/shaders/pbr.frag` | **PLANNED** | Cook-Torrance microfacet specular BRDF, metallic-roughness, normal mapping, cascaded shadows. (Sprint 5b). |
-| `assets/shaders/shadow.vert` | **PLANNED** | Depth-only vertex shader for directional cascaded shadow map passes. (Sprint 5b). |
-| `assets/shaders/shadow.frag` | **PLANNED** | Depth-only fragment shader supporting alpha-testing for foliage shadow casting. (Sprint 5b, alpha test 7b). |
-| `assets/shaders/skybox.vert` | **PLANNED** | Fullscreen triangle vertex shader rendering background at reverse-Z depth = 0.0. (Sprint 5b). |
-| `assets/shaders/skybox.frag` | **PLANNED** | Procedural gradient sky or prefiltered cubemap shader. (Sprint 5b). |
-| `assets/shaders/debug_line.vert`| **PLANNED** | 3D debug wireframe vertex shader. (Sprint 5b). |
-| `assets/shaders/debug_line.frag`| **PLANNED** | Unlit flat-color fragment shader for physics debug lines and bounds. (Sprint 5b). |
+| `assets/shaders/pbr.vert` | **DONE** | Camera-relative vertex shader evaluating world normals, tangents, shadow coordinates, and velocity output for TAA. (Sprint 5b). |
+| `assets/shaders/pbr.frag` | **DONE** | Cook-Torrance microfacet specular BRDF, metallic-roughness, normal mapping, cascaded shadows. (Sprint 5b). |
+| `assets/shaders/shadow.vert` | **DONE** | Depth-only vertex shader for directional cascaded shadow map passes. (Sprint 5b). |
+| `assets/shaders/shadow.frag` | **DONE** | Depth-only fragment shader supporting alpha-testing for foliage shadow casting. (Sprint 5b, alpha test 7b). |
+| `assets/shaders/skybox.vert` | **DONE** | Fullscreen triangle vertex shader rendering background at reverse-Z depth = 0.0. (Sprint 5b). |
+| `assets/shaders/skybox.frag` | **DONE** | Procedural gradient sky or prefiltered cubemap shader. (Sprint 5b). |
+| `assets/shaders/debug_line.vert`| **DONE** | 3D debug wireframe vertex shader. (Sprint 5b). |
+| `assets/shaders/debug_line.frag`| **DONE** | Unlit flat-color fragment shader for physics debug lines and bounds. (Sprint 5b). |
 | `assets/shaders/cull.comp` | **PLANNED** | Compute shader for 5-plane frustum culling, max draw distance clamp, LOD selection, Hi-Z min-reduction occlusion, and indirect command generation across 5 views. (Sprint 7a). |
 | `assets/shaders/hiz_build.comp` | **PLANNED** | Compute shader generating hierarchical depth mip pyramid using MIN reduction for reverse-Z. (Sprint 7a). |
 | `assets/shaders/light_cull.comp`| **PLANNED** | Compute shader dividing frustum into 3D clusters and assigning point/spot light indices. (Sprint 7b). |
@@ -474,22 +474,22 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 83
-- **Current Completion:** **38.6% (Sprint 5a Complete, Sprint 5b Ready)**
+- **Total Completed Files:** 105
+- **Current Completion:** **48.8% (Sprint 5b Complete, Sprint 6a Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
-| **Core Platform, Memory & Config** | 13 / 16 | **Engine, EngineConfig, Settings, Input, EventBus, Log Added** |
+| **Core Platform, Memory & Config** | 15 / 16 | **WorldPosition, OriginShift, Engine, Settings, Input, EventBus Complete** |
 | **Multithreading & Jobs** | 5 / 5 | **COMPLETE (JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher)** |
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
-| **Modern Vulkan 1.3 RHI** | 21 / 23 | **Async Uploads, Timeline, DeletionQueue & VramBudget Added** |
+| **Modern Vulkan 1.3 RHI** | 22 / 23 | **BindlessTable, Async Uploads, Timeline, DeletionQueue Added** |
 | **Shared Formats & Runtime Assets** | 7 / 12 | **AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager Complete** |
 | **Cooker & World Generator** | 5 / 13 | **Program, MeshCooker, TextureCooker, MaterialCooker, PackWriter Complete** |
 | **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
 | **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
-| **GPU-Driven Rendering** | 0 / 6 | Planned (Sprint 5b, 7a) |
-| **3D Graphics, Lighting & Environment** | 6 / 28 | **Mesh & Model Added (Camera3D, Vertex3D, DepthConvention)** |
+| **GPU-Driven Rendering** | 2 / 6 | **GeometryPool, DynamicInstanceRing Complete** (Sprint 5b, 7a) |
+| **3D Graphics, Lighting & Environment** | 15 / 28 | **ForwardRenderer3D, Skybox, DebugRenderer, ShadowMap, Material, LightEnv Complete** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 7 / 7 | **COMPLETE (Scene, Entity, Transform, MeshRenderer, Camera, Light, RigidBody)** |
 | **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
@@ -498,7 +498,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
 | **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
-| **Asset Shaders** | 6 / 39 | **cube.vert/frag, imgui.vert/frag** |
+| **Asset Shaders** | 14 / 39 | **pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.* Complete** |
 
 ---
 
@@ -699,7 +699,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 5b: Large-World Rendering Foundations [NEXT]                              │
+│ SPRINT 5b: Large-World Rendering Foundations [DONE]                              │
 │  - WorldPosition (double), Camera-Relative Rendering, OriginShift (256m snap)    │
 │  - Frustum culling (5 planes + max draw distance clamp)                          │
 │  - BindlessTable, basic GeometryPool, DynamicInstanceRing, Material, MaterialTable│
@@ -710,7 +710,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 6a: World Grid and Streaming                                              │
+│ SPRINT 6a: World Grid and Streaming [NEXT]                                       │
 │  - WorldConfig (D18 rings, D19 lead time, D23 900m cap), WorldCell, WorldGrid    │
 │  - StreamingManager, CellLoader, CellCooker, StreamingDebugOverlay (adds map)   │
 │  - CellCoord, CellFormat, WorldConstants from Jatayu.AssetFormats                │

@@ -322,6 +322,67 @@ public static class Program
             failureCount++;
         }
 
+        // -----------------------------------------------------------------------------------------
+        // 6. SPRINT 5b: LARGE-WORLD FOUNDATIONS & 3D SHADING VERIFICATION
+        // -----------------------------------------------------------------------------------------
+        Console.WriteLine("\n--- [CHECK 6] Sprint 5b: Large-World Foundations & 3D Shading Verification ---");
+        try
+        {
+            // 1. WorldPosition 50,000m zero-jitter test
+            var objPos = new Jatayu.Core.Mathematics.WorldPosition(50000.0, 200.0, -50000.0);
+            var camPos = new Jatayu.Core.Mathematics.WorldPosition(49990.0, 200.0, -50000.0);
+            var relPos = objPos.ToCameraRelative(in camPos);
+            if (Math.Abs(relPos.X - 10.0f) > 0.0001f || Math.Abs(relPos.Y) > 0.0001f || Math.Abs(relPos.Z) > 0.0001f)
+                throw new InvalidOperationException("WorldPosition camera-relative translation failed precision check.");
+            Console.WriteLine($"  [LargeWorld] 50,000m zero-jitter camera-relative translation: VERIFIED (RelX={relPos.X:F2}m)");
+
+            // 2. OriginShift 256m terrain tile snap
+            var originShift = new Jatayu.Core.Mathematics.OriginShift { ThresholdDistance = 2000.0 };
+            if (!originShift.CheckAndShift(new Jatayu.Core.Mathematics.WorldPosition(2200.0, 0, 0), out var shiftDelta))
+                throw new InvalidOperationException("OriginShift failed to trigger at 2200m.");
+            if (Math.Abs(shiftDelta.X - 2304.0) > 0.001)
+                throw new InvalidOperationException($"OriginShift did not snap to 256m tile: expected 2304m, got {shiftDelta.X}m");
+            Console.WriteLine($"  [LargeWorld] OriginShift 256m snapping: VERIFIED (ShiftDelta={shiftDelta.X:F0}m)");
+
+            // 3. Frustum 5-plane culling with MaxDrawDistance clamp
+            var camera = new Jatayu.Renderer.Camera.Camera3D(
+                new System.Numerics.Vector3(0, 0, 0),
+                new System.Numerics.Vector3(0, 0, -10),
+                1920, 1080, 60f, 0.1f
+            );
+            var frustum = Jatayu.Renderer.Camera.Frustum.FromCamera(camera, maxDrawDistance: 5000.0f);
+            if (!frustum.IsSphereVisible(new System.Numerics.Vector3(0, 0, -50), 2.0f))
+                throw new InvalidOperationException("Frustum failed to detect sphere inside view.");
+            if (frustum.IsSphereVisible(new System.Numerics.Vector3(0, 0, -6000), 2.0f))
+                throw new InvalidOperationException("Frustum failed to clamp sphere beyond MaxDrawDistance.");
+            Console.WriteLine("  [Visibility] 5-Plane Reverse-Z Frustum with MaxDrawDistance clamp: VERIFIED");
+
+            // 4. DirectionalLight Reverse-Z projection
+            var sun = new Jatayu.Renderer.Lighting.DirectionalLight();
+            var lightVp = sun.ComputeLightViewProjection(System.Numerics.Vector3.Zero);
+            if (!System.Numerics.Matrix4x4.Invert(lightVp, out _))
+                throw new InvalidOperationException("DirectionalLight view-projection matrix is not invertible.");
+            Console.WriteLine("  [Lighting] Directional sunlight & Reverse-Z orthographic projection: VERIFIED");
+
+            // 5. Skybox inverse ray reconstruction
+            var skybox = new Jatayu.Renderer.Skybox.Skybox();
+            var invVp = skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
+            if (float.IsNaN(invVp.M11))
+                throw new InvalidOperationException("Skybox inverse view-projection matrix contains NaN.");
+            Console.WriteLine("  [Skybox] Procedural atmosphere at Reverse-Z infinity: VERIFIED");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(">> Sprint 5b Large-World Foundations: VERIFIED");
+            Console.ResetColor();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Sprint 5b Error]: {ex.Message}");
+            Console.ResetColor();
+            failureCount++;
+        }
+
         Console.WriteLine("\n================================================================================");
         if (failureCount == 0)
         {

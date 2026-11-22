@@ -60,6 +60,11 @@ public static class DepthConvention
     public const bool IsReverseZ = true;
 
     /// <summary>
+    /// Canonical depth buffer format for Reverse-Z (D32_SFLOAT).
+    /// </summary>
+    public const VkFormat DepthFormat = VkFormat.D32SFloat;
+
+    /// <summary>
     /// Constructs a Vulkan-tailored Reverse-Z perspective projection matrix with an infinite far plane.
     /// Near plane maps to 1.0f, far plane at infinity maps to 0.0f.
     /// Automatically applies Vulkan NDC Y-axis flipping (proj.M22 = -proj.M22).

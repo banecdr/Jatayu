@@ -84,14 +84,12 @@ public class ApiInspectionTests
     }
 
     [Fact]
-    public void InspectGlfwWindowEvents()
+    public void InspectDescriptorIndexingTypes()
     {
-        _output.WriteLine("=== GlfwWindow Events ===");
-        foreach (var ev in typeof(Brutal.GlfwApi.GlfwWindow).GetEvents())
+        _output.WriteLine("=== VkDescriptorBindingFlags Enum Values ===");
+        foreach (var val in Enum.GetNames<Brutal.VulkanApi.VkDescriptorBindingFlags>())
         {
-            var invoke = ev.EventHandlerType?.GetMethod("Invoke");
-            string paramsStr = invoke != null ? string.Join(", ", invoke.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) : "";
-            _output.WriteLine($"  Event: {ev.Name}({paramsStr})");
+            _output.WriteLine($"  {val}");
         }
     }
 }
