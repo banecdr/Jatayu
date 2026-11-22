@@ -110,6 +110,21 @@ public static class Program
         // -----------------------------------------------------------------------------------------
         // 2. D8: MESHOPTIMIZER EXPORT PROBE
         // -----------------------------------------------------------------------------------------
+        try
+        {
+            var imguiAsm = Assembly.Load("Brutal.ImGui");
+            Console.WriteLine($"\n[ImGui Exported Types]:");
+            foreach (var t in imguiAsm.GetExportedTypes())
+            {
+                if (t.Name.Contains("Draw") || t.Name.Contains("Vert") || t.Name.Contains("Font") || t.Name.Contains("IO"))
+                    Console.WriteLine($"  {t.FullName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ImGui Load error]: {ex.Message}");
+        }
+
         Console.WriteLine("\n--- [CHECK 2] D8: MeshOptimizer Function Exports ---");
         try
         {

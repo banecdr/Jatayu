@@ -34,6 +34,17 @@ public sealed class PipelineBuilder
     private PtrOwner<VkPipelineRasterizationStateCreateInfo> _rasterization = Presets.Rasterization.Fill.CullBack;
     private PtrOwner<VkPipelineMultisampleStateCreateInfo> _multisample = Presets.Multisample.None;
     private PtrOwner<VkPipelineDepthStencilStateCreateInfo> _depthStencil = Presets.DepthStencil.DepthTestWrite;
+    private VkPipelineDepthStencilStateCreateInfo _customDepthStencil = new()
+    {
+        DepthTestEnable = true,
+        DepthWriteEnable = true,
+        DepthCompareOp = VkCompareOp.GreaterOrEqual,
+        DepthBoundsTestEnable = false,
+        StencilTestEnable = false,
+        MinDepthBounds = 0.0f,
+        MaxDepthBounds = 1.0f,
+    };
+    private bool _useCustomDepthStencil = true;
     private PtrOwner<VkPipelineColorBlendStateCreateInfo> _colorBlend = Presets.BlendState.BlendNone;
     private VkPipelineLayout _layout;
     private VkFormat _colorFormat;
@@ -91,11 +102,35 @@ public sealed class PipelineBuilder
     }
 
     /// <summary>
-    /// Sets the depth-stencil testing state.
+    /// Sets the depth-stencil testing state using a Brutal preset.
     /// </summary>
     public PipelineBuilder SetDepthStencil(PtrOwner<VkPipelineDepthStencilStateCreateInfo> depthStencil)
     {
         _depthStencil = depthStencil;
+        _useCustomDepthStencil = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures depth testing and writing directly.
+    /// Defaults to canonical Reverse-Z (GreaterOrEqual).
+    /// </summary>
+    public PipelineBuilder SetDepthTest(
+        bool depthTestEnable = true,
+        bool depthWriteEnable = true,
+        VkCompareOp compareOp = VkCompareOp.GreaterOrEqual)
+    {
+        _customDepthStencil = new VkPipelineDepthStencilStateCreateInfo
+        {
+            DepthTestEnable = depthTestEnable,
+            DepthWriteEnable = depthWriteEnable,
+            DepthCompareOp = compareOp,
+            DepthBoundsTestEnable = false,
+            StencilTestEnable = false,
+            MinDepthBounds = 0.0f,
+            MaxDepthBounds = 1.0f,
+        };
+        _useCustomDepthStencil = true;
         return this;
     }
 
@@ -191,24 +226,29 @@ public sealed class PipelineBuilder
 
             var vertexInputState = _vertexInput ?? new VertexInput(0, 0);
 
-            var createInfo = new VkGraphicsPipelineCreateInfo
+            fixed (VkPipelineDepthStencilStateCreateInfo* pCustomDepth = &_customDepthStencil)
             {
-                Next = &renderingInfo,
-                StageCount = _shaderStages.Count,
-                Stages = _shaderStages,
-                VertexInputState = vertexInputState,
-                InputAssemblyState = _inputAssembly,
-                ViewportState = &viewportState,
-                RasterizationState = _rasterization,
-                MultisampleState = _multisample,
-                DepthStencilState = _depthStencil,
-                ColorBlendState = _colorBlend,
-                DynamicState = &dynamicStateInfo,
-                Layout = _layout,
-            };
+                var depthState = _useCustomDepthStencil ? pCustomDepth : (VkPipelineDepthStencilStateCreateInfo*)_depthStencil;
 
-            var pipeline = device.CreateGraphicsPipeline(cache, createInfo, null);
-            return new VulkanPipeline(context, pipeline, _layout, VkPipelineBindPoint.Graphics);
+                var createInfo = new VkGraphicsPipelineCreateInfo
+                {
+                    Next = &renderingInfo,
+                    StageCount = _shaderStages.Count,
+                    Stages = _shaderStages,
+                    VertexInputState = vertexInputState,
+                    InputAssemblyState = _inputAssembly,
+                    ViewportState = &viewportState,
+                    RasterizationState = _rasterization,
+                    MultisampleState = _multisample,
+                    DepthStencilState = depthState,
+                    ColorBlendState = _colorBlend,
+                    DynamicState = &dynamicStateInfo,
+                    Layout = _layout,
+                };
+
+                var pipeline = device.CreateGraphicsPipeline(cache, createInfo, null);
+                return new VulkanPipeline(context, pipeline, _layout, VkPipelineBindPoint.Graphics);
+            }
         }
     }
 }

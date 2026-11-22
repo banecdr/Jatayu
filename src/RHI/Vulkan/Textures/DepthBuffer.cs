@@ -65,6 +65,7 @@ using Brutal.VulkanApi;
 using Brutal.VulkanApi.Vma;
 using Jatayu.RHI.Vulkan.Context;
 using Jatayu.RHI.Vulkan.Memory;
+using Jatayu.Renderer.Camera;
 
 namespace Jatayu.RHI.Vulkan.Textures;
 
@@ -237,12 +238,12 @@ public sealed class DepthBuffer : IDisposable
     /// </summary>
     /// <param name="loadOp">Clear or Load operation (default: Clear).</param>
     /// <param name="storeOp">Store or DontCare operation (default: DontCare for transient depth).</param>
-    /// <param name="clearDepth">Clear depth value (1.0 = furthest distance).</param>
+    /// <param name="clearDepth">Clear depth value (0.0 = furthest distance under Reverse-Z).</param>
     /// <returns>A populated attachment info struct.</returns>
     public VkRenderingAttachmentInfo GetAttachmentInfo(
         VkAttachmentLoadOp loadOp = VkAttachmentLoadOp.Clear,
         VkAttachmentStoreOp storeOp = VkAttachmentStoreOp.DontCare,
-        float clearDepth = 1.0f)
+        float clearDepth = DepthConvention.ClearDepth)
     {
         return new VkRenderingAttachmentInfo
         {

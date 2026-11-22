@@ -102,6 +102,16 @@ public sealed class VulkanContext : IDisposable
     public Queue PresentQueue { get; }
 
     /// <summary>
+    /// Gets the dedicated or fallback transfer queue for asynchronous DMA memory operations.
+    /// </summary>
+    public Queue TransferQueue { get; }
+
+    /// <summary>
+    /// Gets the dedicated or fallback compute queue for GPU compute dispatches.
+    /// </summary>
+    public Queue ComputeQueue { get; }
+
+    /// <summary>
     /// Initializes Vulkan 1.3, binds to the window surface, selects the best GPU, and builds the logical device.
     /// </summary>
     /// <param name="window">The desktop window to render into.</param>
@@ -218,6 +228,8 @@ public sealed class VulkanContext : IDisposable
         // 11. Retrieve Queue handles
         GraphicsQueue = Device.GetQueue(QueueFamilies.GraphicsFamily!.Value, 0);
         PresentQueue = Device.GetQueue(QueueFamilies.PresentFamily!.Value, 0);
+        TransferQueue = Device.GetQueue(QueueFamilies.TransferFamily!.Value, 0);
+        ComputeQueue = Device.GetQueue(QueueFamilies.ComputeFamily!.Value, 0);
     }
 
     /// <summary>
