@@ -240,7 +240,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **DONE** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
-| `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **PLANNED** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
+| `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **DONE** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
 | `src/Assets/PackReader.cs` | **PLANNED** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
 | `src/Assets/AssetManager.cs` | **PLANNED** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
 | `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
@@ -250,11 +250,11 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.6 Offline Asset Cooker & World Generator (`tools/Jatayu.Cooker/` & `tools/Jatayu.WorldGen/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `tools/Jatayu.Cooker/Program.cs` | **PLANNED** | CLI asset cooker entry point (commands: cook-all, cook-models, cook-textures, cook-world). (Sprint 4). |
-| `tools/Jatayu.Cooker/MeshCooker.cs` | **PLANNED** | Optimizes vertices with `Ahwoo.BRUTAL.MeshOptimizer` (cache, overdraw, fetch), builds LOD chain, quantizes. (Sprint 4). |
-| `tools/Jatayu.Cooker/TextureCooker.cs` | **PLANNED** | Compresses textures to BC7/BC5/BC4 with full mipmaps; splits resident mip tail ($\le 64\times 64$) from streamable mips. (Sprint 4). |
-| `tools/Jatayu.Cooker/MaterialCooker.cs` | **PLANNED** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
-| `tools/Jatayu.Cooker/PackWriter.cs` | **PLANNED** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
+| `tools/Jatayu.Cooker/Program.cs` | **DONE** | CLI asset cooker entry point (commands: cook-all, cook-models, cook-textures, cook-world). (Sprint 4). |
+| `tools/Jatayu.Cooker/MeshCooker.cs` | **DONE** | Optimizes vertices with `Ahwoo.BRUTAL.MeshOptimizer` (cache, overdraw, fetch), builds LOD chain, quantizes. (Sprint 4). |
+| `tools/Jatayu.Cooker/TextureCooker.cs` | **DONE** | Compresses textures to BC7/BC5/BC4 with full mipmaps; splits resident mip tail ($\le 64\times 64$) from streamable mips. (Sprint 4). |
+| `tools/Jatayu.Cooker/MaterialCooker.cs` | **DONE** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
+| `tools/Jatayu.Cooker/PackWriter.cs` | **DONE** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
 | `tools/Jatayu.Cooker/CellCooker.cs` | **PLANNED** | Bakes world cells into binary chunk records inside `.jpak`: static instance arrays, physics colliders, audio points. (Sprint 6a). |
 | `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **PLANNED** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
 | `tools/Jatayu.Cooker/HlodCooker.cs` | **PLANNED** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |

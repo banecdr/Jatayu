@@ -122,4 +122,13 @@ public class AssetFormatsTests
         Assert.True(mat.AlbedoTexture.IsValid);
         Assert.True(mat.NormalTexture.IsValid);
     }
+
+    [Fact]
+    public void ModelLoader_ThrowsOnMissingFile()
+    {
+        Assert.Throws<FileNotFoundException>(() =>
+        {
+            Jatayu.AssetFormats.Loaders.ModelLoader.LoadFromFile("non_existent_model.gltf");
+        });
+    }
 }
