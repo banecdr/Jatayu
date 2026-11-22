@@ -86,7 +86,7 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 }
 
 // Directional shadow map evaluation with Reverse-Z comparison and 3x3 PCF
-float EvaluateShadow(vec4 shadowCoord, float bias) {
+float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
     if (uLight.CastsShadows == 0u) {
         return 1.0;
     }
@@ -101,8 +101,9 @@ float EvaluateShadow(vec4 shadowCoord, float bias) {
     }
 
     // In Reverse-Z, closer to light is higher depth value (1.0 = near, 0.0 = far).
-    // Adding bias pushes the reference depth closer to the light, preventing self-shadow acne.
-    float currentDepth = projCoords.z + bias;
+    // Slope-scaled bias pushes the reference depth closer to the light, preventing self-shadow acne.
+    float dynamicBias = max(bias * (1.0 - NdotL), bias * 0.25);
+    float currentDepth = projCoords.z + dynamicBias;
 
     vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
     float shadow = 0.0;
@@ -173,16 +174,18 @@ void main() {
     vec3 specular = numerator / denominator;
 
     float NdotL = max(dot(N, L), 0.0);
-    float shadow = EvaluateShadow(vShadowCoord, uLight.ShadowBias);
+    float shadow = EvaluateShadow(vShadowCoord, uLight.ShadowBias, NdotL);
 
-    // Directional light radiance (scaled for physical lux)
-    vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.00001);
-    vec3 directLighting = (kD * albedo.rgb / PI + specular) * lightRadiance * NdotL * shadow;
+    // Directional light radiance (calibrated for SDR viewport)
+    vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
+    vec3 directLighting = (kD * albedo.rgb + specular * PI) * lightRadiance * NdotL * shadow;
 
-    // Hemispherical ambient environment lighting
+    // Hemispherical ambient environment lighting with metallic ambient specular fallback
     float skyFactor = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 ambientColor = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, skyFactor);
-    vec3 ambientLighting = ambientColor * uLight.AmbientIntensity * albedo.rgb * ao;
+    vec3 ambientDiffuse = ambientColor * albedo.rgb * (1.0 - metallic);
+    vec3 ambientSpecular = ambientColor * F0 * (1.0 - roughness * 0.5);
+    vec3 ambientLighting = (ambientDiffuse + ambientSpecular) * uLight.AmbientIntensity * ao;
 
     // Emissive contribution
     vec3 emissive = mat.EmissiveFactor * mat.EmissiveIntensity;

@@ -75,4 +75,32 @@ public class DepthConventionTests
         float farNdcZ = farClip.Z / farClip.W;
         Assert.Equal(0.0f, farNdcZ, tolerance: 0.0001f);
     }
+
+    [Fact]
+    public void DirectionalLight_ReverseZMapping_CloserObjectsHaveGreaterDepth()
+    {
+        var sun = new Jatayu.Renderer.Lighting.DirectionalLight
+        {
+            Direction = Vector3.Normalize(new Vector3(-0.6f, -1.0f, -0.4f))
+        };
+        var lightVp = sun.ComputeLightViewProjection(Vector3.Zero);
+
+        Vector3 camPos = new Vector3(0f, 2.0f, 4.5f);
+        Vector3 cubePos = new Vector3(0f, 0.5f, 0f);
+        Vector3 groundPos = new Vector3(0f, -2.0f, 0f);
+
+        Vector3 cubeRelPos = cubePos - camPos;
+        Vector3 groundRelPos = groundPos - camPos;
+
+        var cubeClip = Vector4.Transform(new Vector4(cubeRelPos, 1.0f), lightVp);
+        var groundClip = Vector4.Transform(new Vector4(groundRelPos, 1.0f), lightVp);
+
+        float cubeZ = cubeClip.Z / cubeClip.W;
+        float groundZ = groundClip.Z / groundClip.W;
+
+        // In Reverse-Z, closer object (cube) must have GREATER depth than further object (ground)
+        Assert.True(cubeZ > groundZ, $"Cube ({cubeZ:F4}) must have greater depth than ground ({groundZ:F4}) in Reverse-Z");
+        Assert.True(cubeZ > 0.0f && cubeZ < 1.0f, "Cube depth must fall inside [0, 1] shadow frustum");
+        Assert.True(groundZ > 0.0f && groundZ < 1.0f, "Ground depth must fall inside [0, 1] shadow frustum");
+    }
 }

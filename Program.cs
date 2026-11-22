@@ -237,9 +237,9 @@ public static class Program
         uint groundMatId = materialTable.RegisterMaterial(new Material
         {
             Name = "GroundSlate",
-            BaseColor = new Vector4(0.25f, 0.28f, 0.32f, 1.0f),
-            Metallic = 0.1f,
-            Roughness = 0.9f
+            BaseColor = new Vector4(0.52f, 0.55f, 0.58f, 1.0f),
+            Metallic = 0.05f,
+            Roughness = 0.85f
         });
 
         materialTable.Flush(uploadManager);
@@ -361,8 +361,8 @@ public static class Program
             },
             AmbientSkyColor = new Vector3(0.2f, 0.35f, 0.6f),
             AmbientGroundColor = new Vector3(0.1f, 0.08f, 0.05f),
-            AmbientIntensity = 0.35f,
-            ShadowBias = 0.0005f
+            AmbientIntensity = 0.40f,
+            ShadowBias = 0.001f
         };
 
         using var debugRenderer = new DebugRenderer(context, allocator);
