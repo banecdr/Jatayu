@@ -173,8 +173,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Core/Time/GameTime.cs` | **DONE** | High-precision stopwatch clock (`Stopwatch.GetTimestamp`). Clamped frame deltas, FPS tracking, and fixed-timestep accumulator for physics. |
 | `src/Core/Math/WorldPosition.cs` | **PLANNED** | Double-precision 3D vector (`double X, Y, Z`), conversion to camera-relative `float3`, distance methods, SIMD alignment. (Sprint 5b). |
 | `src/Core/Math/OriginShift.cs` | **PLANNED** | Floating-origin coordinator. Snaps shift offset to 256m terrain tile multiples and broadcasts rebase events at frame boundaries. (Sprint 5b). |
-| `src/Core/Memory/NativeArena.cs` | **PLANNED** | High-speed linear frame allocator allocating native memory with zero GC impact; reset once per frame. (Sprint 3b). |
-| `src/Core/Memory/NativePool.cs` | **PLANNED** | Pooled unmanaged buffer blocks recycling memory across streaming decodes and render passes. (Sprint 3b). |
+| `src/Core/Memory/NativeArena.cs` | **DONE** | High-speed linear frame allocator allocating native memory with zero GC impact; reset once per frame. (Sprint 3b). |
+| `src/Core/Memory/NativePool.cs` | **DONE** | Pooled unmanaged buffer blocks recycling memory across streaming decodes and render passes. (Sprint 3b). |
 | `src/Core/Input/KeyCodes.cs` | **PLANNED** | Strongly typed C# enum mapping GLFW key and mouse codes into clean, game-ready names (`Key.W`, `Key.Space`, `MouseButton.Left`). (Sprint 5a). |
 | `src/Core/Input/Input.cs` | **PLANNED** | Central input polling system. Tracks current/previous button states, mouse delta, and scroll wheel. (Sprint 5a). |
 | `src/Core/Input/InputActions.cs` | **PLANNED** | Action/axis mapping abstraction with rebinding support ("MoveForward", "Jump", "LookX"). (Sprint 5a). |
@@ -198,10 +198,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.3 Diagnostics, Profiling & GPU Metrics (`src/Core/Profiling/` & `src/RHI/Vulkan/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Core/Profiling/Profiler.cs` | **PLANNED** | Lightweight CPU zone profiler with microsecond timing, frame markers, and optional Tracy integration. (Sprint 3b). |
-| `src/Core/Profiling/AllocationTracker.cs` | **PLANNED** | Per-frame heap allocation monitor (`GC.GetAllocatedBytesForCurrentThread()`) verifying zero GC allocations in hot paths. (Sprint 3b). |
-| `src/RHI/Vulkan/Profiling/GpuTimer.cs` | **PLANNED** | Hardware timestamp query pool wrapper. Measures per-pass GPU execution times with N-frame latency readback. (Sprint 3b). |
-| `src/RHI/Vulkan/Debug/DebugNames.cs` | **PLANNED** | Wraps `VK_EXT_debug_utils` to assign names and colors to Vulkan buffers, images, command labels, and queue regions. (Sprint 3b). |
+| `src/Core/Profiling/Profiler.cs` | **DONE** | Lightweight CPU zone profiler with microsecond timing, frame markers, and zero-allocation scopes. (Sprint 3b). |
+| `src/Core/Profiling/AllocationTracker.cs` | **DONE** | Per-frame heap allocation monitor (`GC.GetAllocatedBytesForCurrentThread()`) verifying zero GC allocations in hot paths. (Sprint 3b). |
+| `src/RHI/Vulkan/Profiling/GpuTimer.cs` | **DONE** | Hardware timestamp query pool wrapper. Measures per-pass GPU execution times with N-frame latency readback. (Sprint 3b). |
+| `src/RHI/Vulkan/Debug/DebugNames.cs` | **DONE** | Wraps `VK_EXT_debug_utils` to assign names and colors to Vulkan buffers, images, command labels, and queue regions. (Sprint 3b). |
 
 ### 2.4 Modern Vulkan 1.3 RHI (`src/RHI/Vulkan/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -212,7 +212,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/RHI/Vulkan/Memory/GpuBuffer.cs` | **DONE** | Object-oriented GPU memory buffer (`VkBuffer` + `VmaAllocation`). Handles direct host pointer mapping and SIMD uploads. |
 | `src/RHI/Vulkan/Swapchain/VulkanSwapchain.cs` | **DONE** | Presentation engine. Manages double/triple buffering, sRGB formats, image views, acquire/present, and dynamic resizing. |
 | `src/RHI/Vulkan/Sync/FrameSync.cs` | **DONE** | Multi-frame concurrency ($N = 2$ or $3$). Ring buffer of semaphores and fences allowing CPU/GPU overlap. |
-| `src/RHI/Vulkan/Textures/DepthBuffer.cs` | **DONE** | Hardware depth attachment image (`D32_SFLOAT`). (Reverse-Z conversion pending, Sprint 3b). |
+| `src/RHI/Vulkan/Textures/DepthBuffer.cs` | **DONE** | Hardware depth attachment image (`D32_SFLOAT`). Reverse-Z conversion complete (`DepthConvention.ClearDepth = 0.0f`). |
 | `src/RHI/Vulkan/Textures/VulkanSampler.cs` | **DONE** | Sampler wrapper (Linear, Trilinear, Anisotropic 16x, Clamp, Repeat, and Min-Reduction mode for Hi-Z via `VK_EXT_sampler_filter_minmax`). (Sprint 3a). |
 | `src/RHI/Vulkan/Textures/GpuTexture.cs` | **DONE** | 2D/Array GPU texture backed by VMA with mipmaps, format layouts, and image view management. (Sprint 3a). |
 | `src/RHI/Vulkan/Commands/CommandPoolManager.cs`| **DONE** | Command pool manager allocating primary and secondary command buffers per frame and per thread. (Sprint 3a). |
@@ -223,12 +223,12 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/RHI/Vulkan/Descriptors/DescriptorLayout.cs` | **DONE** | Descriptor set layout wrapper for non-bindless passes (ImGui, compute dispatch tables). (Sprint 3a). |
 | `src/RHI/Vulkan/Descriptors/DescriptorAllocator.cs`| **DONE** | Pool allocator for `VkDescriptorSet` recycling sets across frames. (Sprint 3a). |
 | `src/RHI/Vulkan/Descriptors/BindlessTable.cs` | **PLANNED** | Global bindless descriptor array (`VK_EXT_descriptor_indexing`) binding thousands of textures to uniform shader arrays. (Sprint 5b). |
-| `src/RHI/Vulkan/Upload/UploadManager.cs` | **PLANNED** | Asynchronous GPU transfer coordinator using dedicated transfer queue, staging ring, and ownership transfers. (Sprint 3b). |
-| `src/RHI/Vulkan/Upload/StagingRing.cs` | **PLANNED** | Persistently mapped 64-256 MB circular staging buffer with head/tail tracking for zero-copy CPU-to-GPU uploads. (Sprint 3b). |
-| `src/RHI/Vulkan/Upload/UploadRequest.cs` | **PLANNED** | Struct describing buffer/image copy request, mip ranges, and target subresources. (Sprint 3b). |
-| `src/RHI/Vulkan/Sync/TimelineSemaphore.cs` | **PLANNED** | Vulkan 1.3 timeline semaphore wrapper for fine-grained async transfer queue synchronization. (Sprint 3b). |
-| `src/RHI/Vulkan/Memory/DeferredDeletionQueue.cs` | **PLANNED** | Retires GPU objects safely after $N$ in-flight frames have completed on the GPU timeline. (Sprint 3b). |
-| `src/RHI/Vulkan/Memory/VramBudget.cs` | **PLANNED** | Queries `VK_EXT_memory_budget` to track physical VRAM usage, budget limits, and streaming pressure. (Sprint 3b). |
+| `src/RHI/Vulkan/Upload/UploadManager.cs` | **DONE** | Asynchronous GPU transfer coordinator using dedicated transfer queue, staging ring, and ownership transfers. (Sprint 3b). |
+| `src/RHI/Vulkan/Upload/StagingRing.cs` | **DONE** | Persistently mapped 64-256 MB circular staging buffer with head/tail tracking for zero-copy CPU-to-GPU uploads. (Sprint 3b). |
+| `src/RHI/Vulkan/Upload/UploadRequest.cs` | **DONE** | Struct describing buffer/image copy request, mip ranges, and target subresources. (Sprint 3b). |
+| `src/RHI/Vulkan/Sync/TimelineSemaphore.cs` | **DONE** | Vulkan 1.3 timeline semaphore wrapper for fine-grained async transfer queue synchronization. (Sprint 3b). |
+| `src/RHI/Vulkan/Memory/DeferredDeletionQueue.cs` | **DONE** | Retires GPU objects safely after $N$ in-flight frames have completed on the GPU timeline. (Sprint 3b). |
+| `src/RHI/Vulkan/Memory/VramBudget.cs` | **DONE** | Queries `VK_EXT_memory_budget` to track physical VRAM usage, budget limits, and streaming pressure. (Sprint 3b). |
 
 ### 2.5 Shared Asset Formats & Runtime Assets (`src/Jatayu.AssetFormats/` & `src/Assets/`)
 *Note: `src/Jatayu.AssetFormats/` is a lightweight shared class library without GPU/Vulkan dependencies, shared between runtime engine, cooker, and world generator.*
@@ -314,7 +314,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Renderer/Camera/Camera3D.cs` | **DONE** | 3D Perspective camera. Computes View, Projection, and camera-relative transformation matrices. |
 | `src/Renderer/Camera/CameraController.cs` | **DONE** | Smooth camera controller supporting first-person free-look, orbit, pitch/yaw, and keyboard navigation. |
 | `src/Renderer/Camera/Frustum.cs` | **PLANNED** | Extracts 5 bounding planes (Left, Right, Bottom, Top, Near) plus configurable max draw distance for CPU-side coarse culling. (Sprint 5b). |
-| `src/Renderer/Camera/DepthConvention.cs` | **PLANNED** | Canonical depth settings and matrices (Reverse-Z flag, infinite projection builder, clear depth constants). (Sprint 3b). |
+| `src/Renderer/Camera/DepthConvention.cs` | **DONE** | Canonical depth settings and matrices (Reverse-Z flag, infinite projection builder, clear depth constants). (Sprint 3b). |
 | `src/Renderer/Mesh/Vertex3D.cs` | **DONE** | Standard 3D PBR vertex struct: Position (`float3`), Normal (`float3`), Tangent (`float4`), UV (`float2`), and Color (`float4`). |
 | `src/Renderer/Mesh/Mesh.cs` | **PLANNED** | GPU geometry container holding vertex/index buffer slices, triangle count, and bounding box. (Sprint 4). |
 | `src/Renderer/Mesh/Model.cs` | **PLANNED** | Multi-mesh 3D model container containing sub-meshes, materials, and local node hierarchies. (Sprint 4). |
@@ -397,8 +397,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.17 Diagnostics & Debug UI (`src/DebugUI/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/DebugUI/ImGuiVulkanBackend.cs` | **PLANNED** | Custom Vulkan 1.3 Dynamic Rendering backend for Dear ImGui. Zero legacy render passes. (Sprint 3b). |
-| `src/DebugUI/DebugOverlay.cs` | **PLANNED** | Diagnostics HUD: frame time, CPU/GPU pass times, heap allocations, VRAM bar. (Sprint 3b; streaming map in 6a). |
+| `src/DebugUI/ImGuiVulkanBackend.cs` | **DONE** | Custom Vulkan 1.3 Dynamic Rendering backend for Dear ImGui. Zero legacy render passes. (Sprint 3b). |
+| `src/DebugUI/DebugOverlay.cs` | **DONE** | Diagnostics HUD: frame time, CPU/GPU pass times, heap allocations, VRAM bar. (Sprint 3b; streaming map in 6a). |
 
 ### 2.18 Optional Standalone Editor Suite (`src/Editor/` — Sprint 11)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -474,31 +474,31 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 31
-- **Current Completion:** **14.4% (Sprint 3a Complete, Sprint 3b Ready)**
+- **Total Completed Files:** 46
+- **Current Completion:** **21.4% (Sprint 3b Complete, Sprint 4 Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
-| **Core Platform, Memory & Config** | 2 / 16 | In Progress |
+| **Core Platform, Memory & Config** | 4 / 16 | **NativeArena & NativePool Added** |
 | **Multithreading & Jobs** | 0 / 5 | Planned (Sprint 4) |
-| **Diagnostics & Profiling** | 0 / 4 | Planned (Sprint 3b) |
-| **Modern Vulkan 1.3 RHI** | 15 / 23 | **Sprint 3a RHI Complete** |
+| **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
+| **Modern Vulkan 1.3 RHI** | 21 / 23 | **Async Uploads, Timeline, DeletionQueue & VramBudget Added** |
 | **Shared Formats & Runtime Assets** | 2 / 12 | **TextureLoader & ShaderLoader Complete** |
 | **Cooker & World Generator** | 0 / 13 | Planned (Sprint 4-10) |
 | **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
 | **Render Graph** | 0 / 4 | Planned (Sprint 4) |
 | **GPU-Driven Rendering** | 0 / 6 | Planned (Sprint 5b, 7a) |
-| **3D Graphics, Lighting & Environment** | 3 / 28 | **Camera3D & Vertex3D Complete** |
+| **3D Graphics, Lighting & Environment** | 4 / 28 | **Camera3D, Vertex3D & DepthConvention Complete** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 0 / 7 | Planned (Sprint 5a) |
 | **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
 | **Audio (BRUTAL.OpenAL)** | 0 / 4 | Planned (Sprint 8) |
 | **AI, Navigation & Animation** | 0 / 8 | Planned (Sprint 10) |
-| **Diagnostics & Debug UI** | 0 / 2 | Planned (Sprint 3b) |
+| **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
 | **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
-| **Asset Shaders** | 4 / 39 | **cube.vert, cube.frag Textured** |
+| **Asset Shaders** | 6 / 39 | **cube.vert/frag, imgui.vert/frag** |
 
 ---
 
@@ -668,7 +668,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 3b: GPU Foundation and Diagnostics [NEXT]                                 │
+│ SPRINT 3b: GPU Foundation and Diagnostics [COMPLETED]                            │
 │  - UploadManager, StagingRing (64-256 MB), UploadRequest, TimelineSemaphore      │
 │  - DeferredDeletionQueue (safe resource retirement), VramBudget                  │
 │  - Reverse-Z conversion (DepthConvention, Camera3D, DepthBuffer, shaders)       │
@@ -679,7 +679,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 4: Jobs, Cooking & Render Graph                                           │
+│ SPRINT 4: Jobs, Cooking & Render Graph [NEXT]                                    │
 │  - JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher                  │
 │  - Cooker (Program, MeshCooker, TextureCooker with D27 encoder & mip tail, etc.)  │
 │  - AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager               │
@@ -848,3 +848,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-47** | Cleanup | Removed leftover brief tags (P1-P8, P4, P6) from Sprint 6a box and Change Log entries CL-27 to CL-34. |
 | **CL-48** | Roadmap | Fixed cosmetic typos in Sprint 3a box (closed parenthesis, added ShaderLoader) and Sprint 5b box (MaterialTable). |
 | **CL-49** | Verification | Populated Section 4.1 with compact table of installed Ahwoo.BRUTAL.* packages read from Jatayu.csproj. |
+| **CL-50** | Sprint 3b | Completed Sprint 3b: Implemented UploadManager, StagingRing, TimelineSemaphore, DeferredDeletionQueue, VramBudget, Reverse-Z depth conversion, NativeArena, NativePool, Profiler, AllocationTracker, GpuTimer, DebugNames, ImGuiVulkanBackend (dynamic rendering), DebugOverlay HUD, shaders, wired into Program.cs with 22/22 unit tests passing and hardware verification passing. |

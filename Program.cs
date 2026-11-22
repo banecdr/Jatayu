@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: Program.cs
  * LOCATION: Program.cs
  * 
@@ -47,7 +47,9 @@ using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
 using Jatayu.AssetFormats.Loaders;
 using Jatayu.Core;
+using Jatayu.Core.Profiling;
 using Jatayu.Core.Time;
+using Jatayu.DebugUI;
 using Jatayu.Renderer.Camera;
 using Jatayu.Renderer.Mesh;
 using Jatayu.RHI.Vulkan.Commands;
@@ -55,9 +57,11 @@ using Jatayu.RHI.Vulkan.Context;
 using Jatayu.RHI.Vulkan.Descriptors;
 using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Pipelines;
+using Jatayu.RHI.Vulkan.Profiling;
 using Jatayu.RHI.Vulkan.Swapchain;
 using Jatayu.RHI.Vulkan.Sync;
 using Jatayu.RHI.Vulkan.Textures;
+using Jatayu.RHI.Vulkan.Upload;
 
 namespace Jatayu;
 
@@ -84,7 +88,7 @@ public static class Program
     // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
     // ---------------------------------------------------------------------------------------------
     using var window = new Window(
-        title: "Jatayu Engine | Phase 2: 3D Geometry + Panini Projection",
+        title: "Jatayu Vulkan 1.3 3D Engine",
         width: InitialWidth,
         height: InitialHeight,
         resizable: true,
@@ -202,24 +206,36 @@ public static class Program
         20, 21, 22, 22, 23, 20,
     ];
 
-    using var vertexBuffer = allocator.CreateBufferWithData<Vertex3D>(
-        cubeVertices,
-        VkBufferUsageFlags.VertexBufferBit
+    // ---------------------------------------------------------------------------------------------
+    // PHASE 4: ASYNC UPLOAD PIPELINE & DEFERRED DELETION (SPRINT 3B FOUNDATION)
+    // ---------------------------------------------------------------------------------------------
+    using var uploadManager = new UploadManager(context, allocator);
+    using var deletionQueue = new DeferredDeletionQueue(context);
+    var vramBudget = new VramBudget(context);
+
+    // Asynchronously upload vertex and index buffers via UploadManager and StagingRing
+    using var vertexBuffer = allocator.CreateBuffer(
+        (ulong)(sizeof(Vertex3D) * cubeVertices.Length),
+        VkBufferUsageFlags.VertexBufferBit | VkBufferUsageFlags.TransferDstBit,
+        VmaMemoryUsage.GpuOnly
+    );
+    using var indexBuffer = allocator.CreateBuffer(
+        (ulong)(sizeof(ushort) * cubeIndices.Length),
+        VkBufferUsageFlags.IndexBufferBit | VkBufferUsageFlags.TransferDstBit,
+        VmaMemoryUsage.GpuOnly
     );
 
-    using var indexBuffer = allocator.CreateBufferWithData<ushort>(
-        cubeIndices,
-        VkBufferUsageFlags.IndexBufferBit
-    );
+    var vUpload = uploadManager.UploadBuffer(vertexBuffer, 0, MemoryMarshal.AsBytes<Vertex3D>(cubeVertices));
+    var iUpload = uploadManager.UploadBuffer(indexBuffer, 0, MemoryMarshal.AsBytes<ushort>(cubeIndices));
 
-    // ---------------------------------------------------------------------------------------------
-    // PHASE 4: COMMAND POOL & TEXTURE DESCRIPTORS (SPRINT 3A RHI ABSTRACTIONS)
-    // ---------------------------------------------------------------------------------------------
     using var commandPool = new CommandPoolManager(context, queueFamily);
 
-    // Create 2D procedural checkerboard texture and synchronous GPU upload (Decision D14)
+    // Asynchronously upload 2D procedural checkerboard texture via UploadManager (retires D14 synchronous helper)
     var checkerImage = TextureLoader.CreateCheckerboard(width: 256, height: 256, tileSize: 32);
-    using var texture = GpuTexture.CreateFromImageData(context, allocator, commandPool, queue, checkerImage);
+    using var texture = uploadManager.CreateTextureFromImageData(checkerImage, out var texUpload);
+
+    // Wait until initial scene geometry and texture transfers complete
+    uploadManager.WaitForUpload(Math.Max(Math.Max(vUpload, iUpload), texUpload));
 
     // Create 16x anisotropic repeat sampler
     using var sampler = VulkanSampler.CreateAnisotropic16xRepeat(context);
@@ -234,7 +250,7 @@ public static class Program
     descriptorAllocator.WriteImage(descriptorSet, 0, sampler, texture);
 
     // ---------------------------------------------------------------------------------------------
-    // PHASE 5: SHADER COMPILATION & GRAPHICS PIPELINE (PIPELINE BUILDER)
+    // PHASE 5: SHADER COMPILATION & GRAPHICS PIPELINE (PIPELINE BUILDER & REVERSE-Z)
     // ---------------------------------------------------------------------------------------------
     using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
     var vertShader = shaderCompiler.CompileShaderModuleFromFile(device, "assets/shaders/cube.vert", ShaderKind.VertexShader);
@@ -270,10 +286,13 @@ public static class Program
         .Build(context);
 
     // ---------------------------------------------------------------------------------------------
-    // PHASE 6: MULTI-FRAME IN-FLIGHT SYNCHRONIZATION
+    // PHASE 6: MULTI-FRAME IN-FLIGHT SYNCHRONIZATION & PROFILING
     // ---------------------------------------------------------------------------------------------
     using var frameSync = new FrameSync(context, maxFramesInFlight: 2);
     var commandBuffers = commandPool.AllocateMultiple(frameSync.MaxFramesInFlight);
+    using var gpuTimer = new GpuTimer(context, maxQueriesPerFrame: 64, framesInFlight: frameSync.MaxFramesInFlight);
+    using var imguiBackend = new ImGuiVulkanBackend(context, allocator, uploadManager, window, swapchain.ColorFormat);
+    var debugOverlay = new DebugOverlay();
 
     var colorRange = new VkImageSubresourceRange
     {
@@ -397,6 +416,11 @@ public static class Program
                 camera.PaniniEnabled = true;
                 Console.WriteLine($"[Panini] Distance 'd' increased -> {camera.PaniniDistance:F2} (Effective: ON)");
             }
+            else if (key == GlfwKey.F1)
+            {
+                debugOverlay.IsVisible = !debugOverlay.IsVisible;
+                Console.WriteLine($"[Diagnostics] Debug Overlay HUD: {(debugOverlay.IsVisible ? "VISIBLE" : "HIDDEN")}");
+            }
             else if (key == GlfwKey.Escape)
             {
                 window.Close();
@@ -412,15 +436,17 @@ public static class Program
     Console.WriteLine("================================================================================");
     Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
     Console.WriteLine($" [Vulkan API]    : 1.3 (Dynamic Rendering, Push Constants, Hardware Depth Stencil)");
-    Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Precision)");
+    Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
     Console.WriteLine($" [3D Mesh]       : 3D Colored Cube ({cubeVertices.Length} Vertices, {cubeIndices.Length} Indices, 12 Triangles)");
     Console.WriteLine($" [Push Constants]: 80-byte PushConstantData (64-byte MVP + 16-byte Panini parameters)");
-    Console.WriteLine($" [Camera]        : 3D Perspective (FOV: {camera.FovDegrees}°, Vulkan Y-Inverted NDC, [0,1] Depth)");
+    Console.WriteLine($" [Camera]        : 3D Perspective (FOV: {camera.FovDegrees}°, Vulkan Y-Inverted NDC, Reverse-Z [1,0])");
     Console.WriteLine($" [Panini Proj]   : Active: {(camera.PaniniEnabled ? "YES" : "NO")} | Distance 'd': {camera.PaniniDistance:F2} | Scale: {camera.PaniniScale:F2}");
     Console.WriteLine($" [Swapchain]     : {swapchain.Width}x{swapchain.Height} | Buffers: {swapchain.ImageCount} | Format: {swapchain.ColorFormat}");
     Console.WriteLine($" [Sync Engine]   : {frameSync.MaxFramesInFlight} Frames in Flight (Parallel CPU/GPU Execution)");
+    Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle with [F1])");
     Console.WriteLine("--------------------------------------------------------------------------------");
     Console.WriteLine(" INTERACTIVE HOTKEYS:");
+    Console.WriteLine("   [F1]          : Toggle Diagnostics Telemetry HUD (FPS, Allocations, Pass Times, VRAM)");
     Console.WriteLine("   [P]           : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)");
     Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
     Console.WriteLine("   [-] / [=]     : Fine-tune Panini distance 'd' (-0.1 / +0.1)");
@@ -441,51 +467,73 @@ public static class Program
 
     while (!window.ShouldClose)
     {
+        AllocationTracker.BeginFrame();
+        Profiler.BeginFrame();
+
         // 1. Process OS window events
-        window.PollEvents();
+        using (Profiler.Scope("PollEvents"))
+        {
+            window.PollEvents();
+        }
 
         // Skip rendering while minimized
         if (window.IsMinimized)
+        {
+            Profiler.EndFrame();
+            AllocationTracker.EndFrame();
             continue;
+        }
 
         // 2. Tick high-precision game clock
-        time.Update();
+        using (Profiler.Scope("GameTime"))
+        {
+            time.Update();
+        }
         var dt = time.DeltaTime;
 
         // Interactive manual camera controls when held down
-        if (window.IsKeyDown(GlfwKey.Left))
+        using (Profiler.Scope("CameraUpdate"))
         {
-            cameraController.AutoOrbitEnabled = false;
-            cameraController.Yaw -= 2.0f * dt;
-        }
-        if (window.IsKeyDown(GlfwKey.Right))
-        {
-            cameraController.AutoOrbitEnabled = false;
-            cameraController.Yaw += 2.0f * dt;
-        }
-        if (window.IsKeyDown(GlfwKey.Up))
-        {
-            cameraController.Pitch += 1.5f * dt;
-        }
-        if (window.IsKeyDown(GlfwKey.Down))
-        {
-            cameraController.Pitch -= 1.5f * dt;
-        }
-        if (window.IsKeyDown(GlfwKey.W))
-        {
-            cameraController.Zoom(-3.0f * dt);
-        }
-        if (window.IsKeyDown(GlfwKey.S))
-        {
-            cameraController.Zoom(3.0f * dt);
+            if (window.IsKeyDown(GlfwKey.Left))
+            {
+                cameraController.AutoOrbitEnabled = false;
+                cameraController.Yaw -= 2.0f * dt;
+            }
+            if (window.IsKeyDown(GlfwKey.Right))
+            {
+                cameraController.AutoOrbitEnabled = false;
+                cameraController.Yaw += 2.0f * dt;
+            }
+            if (window.IsKeyDown(GlfwKey.Up))
+            {
+                cameraController.Pitch += 1.5f * dt;
+            }
+            if (window.IsKeyDown(GlfwKey.Down))
+            {
+                cameraController.Pitch -= 1.5f * dt;
+            }
+            if (window.IsKeyDown(GlfwKey.W))
+            {
+                cameraController.Zoom(-3.0f * dt);
+            }
+            if (window.IsKeyDown(GlfwKey.S))
+            {
+                cameraController.Zoom(3.0f * dt);
+            }
+
+            // Update camera position
+            cameraController.Update(dt);
         }
 
-        // Update camera position
-        cameraController.Update(dt);
-
-        // Update live telemetry in the window title
-        var paniniStatus = camera.PaniniEnabled ? $"Panini: ON (d={camera.PaniniDistance:F2})" : "Panini: OFF (Rectilinear)";
-        window.Title = $"Jatayu 3D Vulkan 1.3 | FPS: {time.Fps:F0} ({time.AverageFrameTimeMs:F2} ms) | FOV: {camera.FovDegrees:F0}° | {paniniStatus} | VSync: {(window.VSync ? "ON" : "OFF")} | Frame #{time.FrameCount}";
+        // Prepare ImGui HUD frame
+        if (debugOverlay.IsVisible)
+        {
+            using (Profiler.Scope("ImGuiNewFrame"))
+            {
+                imguiBackend.NewFrame();
+                debugOverlay.Draw(time, camera, window.VSync, vramBudget, Profiler.LatestSnapshot, gpuTimer.LatestSnapshot);
+            }
+        }
 
         // Handle dynamic swapchain / window resize
         if (swapchain.IsOutOfDate)
@@ -493,11 +541,16 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            Profiler.EndFrame();
+            AllocationTracker.EndFrame();
             continue;
         }
 
         // 3. Wait for current frame fence
-        frameSync.WaitForFrameFence();
+        using (Profiler.Scope("WaitForFence"))
+        {
+            frameSync.WaitForFrameFence();
+        }
 
         // 4. Acquire next swapchain image
         var acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out var imageIndex);
@@ -506,6 +559,8 @@ public static class Program
             swapchain.Recreate();
             depthBuffer.Recreate(swapchain.Width, swapchain.Height);
             camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            Profiler.EndFrame();
+            AllocationTracker.EndFrame();
             continue;
         }
 
@@ -516,124 +571,150 @@ public static class Program
         var imageView = swapchain.ImageViews[imageIndex];
 
         // 5. Record GPU Rendering Commands
-        cmd.Reset();
-        cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
-
-        // Transition swapchain image: Undefined -> ColorAttachmentOptimal
-        TransitionColorImage(
-            cmd,
-            image,
-            VkImageLayout.Undefined,
-            VkImageLayout.ColorAttachmentOptimal,
-            VkPipelineStageFlags.ColorAttachmentOutputBit,
-            VkPipelineStageFlags.ColorAttachmentOutputBit,
-            VkAccessFlags.None,
-            VkAccessFlags.ColorAttachmentWriteBit
-        );
-
-        var colorAttachment = new VkRenderingAttachmentInfo
+        using (Profiler.Scope("RecordCommands"))
         {
-            ImageView = imageView,
-            ImageLayout = VkImageLayout.ColorAttachmentOptimal,
-            LoadOp = VkAttachmentLoadOp.Clear,
-            StoreOp = VkAttachmentStoreOp.Store,
-            ClearValue = new VkClearColorValue { Float32 = clearColors[clearColorIndex] },
-        };
+            cmd.Reset();
+            cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
 
-        // Depth Attachment: Clear depth buffer to 1.0 (furthest distance) every frame
-        var depthAttachment = depthBuffer.GetAttachmentInfo(
-            loadOp: VkAttachmentLoadOp.Clear,
-            storeOp: VkAttachmentStoreOp.DontCare,
-            clearDepth: 1.0f
-        );
+            gpuTimer.BeginFrame(cmd, frameSync.CurrentFrame);
 
-        // Begin Modern Vulkan 1.3 Dynamic Rendering with Depth Buffer!
-        cmd.BeginRendering(
-            new VkRenderingInfo
+            // Transition swapchain image: Undefined -> ColorAttachmentOptimal
+            TransitionColorImage(
+                cmd,
+                image,
+                VkImageLayout.Undefined,
+                VkImageLayout.ColorAttachmentOptimal,
+                VkPipelineStageFlags.ColorAttachmentOutputBit,
+                VkPipelineStageFlags.ColorAttachmentOutputBit,
+                VkAccessFlags.None,
+                VkAccessFlags.ColorAttachmentWriteBit
+            );
+
+            var colorAttachment = new VkRenderingAttachmentInfo
             {
-                RenderArea = new VkRect2D(swapchain.Extent),
-                LayerCount = 1,
-                ColorAttachmentCount = 1,
-                ColorAttachments = &colorAttachment,
-                DepthAttachment = &depthAttachment,
+                ImageView = imageView,
+                ImageLayout = VkImageLayout.ColorAttachmentOptimal,
+                LoadOp = VkAttachmentLoadOp.Clear,
+                StoreOp = VkAttachmentStoreOp.Store,
+                ClearValue = new VkClearColorValue { Float32 = clearColors[clearColorIndex] },
+            };
+
+            // Depth Attachment: Reverse-Z clears to DepthConvention.ClearDepth (0.0f)
+            var depthAttachment = depthBuffer.GetAttachmentInfo(
+                loadOp: VkAttachmentLoadOp.Clear,
+                storeOp: VkAttachmentStoreOp.DontCare,
+                clearDepth: DepthConvention.ClearDepth
+            );
+
+            // Begin Modern Vulkan 1.3 Dynamic Rendering with Depth Buffer!
+            cmd.BeginRendering(
+                new VkRenderingInfo
+                {
+                    RenderArea = new VkRect2D(swapchain.Extent),
+                    LayerCount = 1,
+                    ColorAttachmentCount = 1,
+                    ColorAttachments = &colorAttachment,
+                    DepthAttachment = &depthAttachment,
+                }
+            );
+
+            // 1. Draw 3D Cube pass
+            gpuTimer.BeginPass(cmd, "3D Cube");
+            pipeline.Bind(cmd);
+            cmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
+            cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
+
+            // Calculate Model-View-Projection Matrix:
+            var rotTime = (float)time.TotalTime;
+            var model = Matrix4x4.CreateRotationY(rotTime * 0f) *
+                        Matrix4x4.CreateRotationX(rotTime * 0f);
+            var mvp = model * camera.ViewProjection;
+
+            // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
+            var pushData = new PushConstantData
+            {
+                Mvp = mvp,
+                PaniniDistance = camera.EffectivePaniniDistance,
+                PaniniScale = camera.PaniniScale,
+                AspectRatio = camera.AspectRatio,
+                Padding = 0f,
+            };
+
+            // Push MVP Matrix & Panini parameters to GPU via Push Constants (80 bytes)
+            cmd.PushConstants(
+                pipeline.Layout,
+                VkShaderStageFlags.VertexBit,
+                0,
+                new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
+            );
+
+            // Bind Combined Image Sampler Descriptor Set (Set 0)
+            cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, [descriptorSet], []);
+
+            // Bind vertex and index buffers and draw the 36 indices (12 triangles)
+            cmd.BindVertexBuffers(0, [vertexBuffer.Handle], [new ByteSize64(0)]);
+            cmd.BindIndexBuffer(indexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt16);
+            cmd.DrawIndexed(36, 1, 0, 0, 0);
+            gpuTimer.EndPass(cmd, "3D Cube");
+
+            // 2. Draw Diagnostics Overlay (Dear ImGui)
+            if (debugOverlay.IsVisible)
+            {
+                gpuTimer.BeginPass(cmd, "DebugOverlay");
+                imguiBackend.Render(cmd);
+                gpuTimer.EndPass(cmd, "DebugOverlay");
             }
-        );
 
-        // Bind 3D graphics pipeline, set dynamic viewport & scissor
-        pipeline.Bind(cmd);
-        cmd.SetViewport(0, [new VkViewport { Width = swapchain.Width, Height = swapchain.Height, MaxDepth = 1 }]);
-        cmd.SetScissor(0, [new VkRect2D(swapchain.Extent)]);
+            cmd.EndRendering();
 
-        // Calculate Model-View-Projection Matrix:
-        var rotTime = (float)time.TotalTime;
-        var model = Matrix4x4.CreateRotationY(rotTime * 0f) *
-                    Matrix4x4.CreateRotationX(rotTime * 0f);
-        var mvp = model * camera.ViewProjection;
+            // Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
+            TransitionColorImage(
+                cmd,
+                image,
+                VkImageLayout.ColorAttachmentOptimal,
+                VkImageLayout.PresentSrcKHR,
+                VkPipelineStageFlags.ColorAttachmentOutputBit,
+                VkPipelineStageFlags.BottomOfPipeBit,
+                VkAccessFlags.ColorAttachmentWriteBit,
+                VkAccessFlags.None
+            );
 
-        // Populate 80-byte PushConstantData containing MVP matrix and live Panini parameters
-        var pushData = new PushConstantData
-        {
-            Mvp = mvp,
-            PaniniDistance = camera.EffectivePaniniDistance,
-            PaniniScale = camera.PaniniScale,
-            AspectRatio = camera.AspectRatio,
-            Padding = 0f,
-        };
-
-        // Push MVP Matrix & Panini parameters to GPU via Push Constants (80 bytes)
-        cmd.PushConstants(
-            pipeline.Layout,
-            VkShaderStageFlags.VertexBit,
-            0,
-            new ReadOnlySpan<byte>(&pushData, sizeof(PushConstantData))
-        );
-
-        // Bind Combined Image Sampler Descriptor Set (Set 0)
-        cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, pipeline.Layout, 0, [descriptorSet], []);
-
-        // Bind vertex and index buffers and draw the 36 indices (12 triangles)
-        cmd.BindVertexBuffers(0, [vertexBuffer.Handle], [new ByteSize64(0)]);
-        cmd.BindIndexBuffer(indexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt16);
-        cmd.DrawIndexed(36, 1, 0, 0, 0);
-
-        cmd.EndRendering();
-
-        // Transition swapchain image: ColorAttachmentOptimal -> PresentSrcKHR
-        TransitionColorImage(
-            cmd,
-            image,
-            VkImageLayout.ColorAttachmentOptimal,
-            VkImageLayout.PresentSrcKHR,
-            VkPipelineStageFlags.ColorAttachmentOutputBit,
-            VkPipelineStageFlags.BottomOfPipeBit,
-            VkAccessFlags.ColorAttachmentWriteBit,
-            VkAccessFlags.None
-        );
-
-        cmd.End();
-
-        // 6. Submit recorded commands to GPU Graphics Queue
-        var waitSemaphore = frameSync.CurrentImageAvailable;
-        var signalSemaphore = frameSync.CurrentRenderFinished;
-        queue.Submit(
-            [waitSemaphore],
-            [VkPipelineStageFlags.ColorAttachmentOutputBit],
-            [cmd],
-            [signalSemaphore],
-            frameSync.CurrentFence
-        );
-
-        // 7. Present rendered image to the desktop window surface
-        var presentResult = swapchain.Present(queue, signalSemaphore, imageIndex);
-        if (presentResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
-        {
-            swapchain.Recreate();
-            depthBuffer.Recreate(swapchain.Width, swapchain.Height);
-            camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            cmd.End();
         }
 
-        // 8. Advance ring buffer to next frame slot (0 -> 1 -> 0 -> 1)
+        // 6. Submit recorded commands to GPU Graphics Queue
+        var signalSemaphore = frameSync.CurrentRenderFinished;
+        using (Profiler.Scope("QueueSubmit"))
+        {
+            var waitSemaphore = frameSync.CurrentImageAvailable;
+            queue.Submit(
+                [waitSemaphore],
+                [VkPipelineStageFlags.ColorAttachmentOutputBit],
+                [cmd],
+                [signalSemaphore],
+                frameSync.CurrentFence
+            );
+        }
+
+        // 7. Present rendered image to the desktop window surface
+        using (Profiler.Scope("QueuePresent"))
+        {
+            var presentResult = swapchain.Present(queue, signalSemaphore, imageIndex);
+            if (presentResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
+            {
+                swapchain.Recreate();
+                depthBuffer.Recreate(swapchain.Width, swapchain.Height);
+                camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+            }
+        }
+
+        // 8. Retire deferred resource deletions & advance frame ring
+        deletionQueue.Flush((ulong)frameSync.CurrentFrame);
         frameSync.AdvanceFrame();
+
+        Profiler.EndFrame();
+        AllocationTracker.EndFrame();
+        AllocationTracker.AssertZeroAllocations();
     }
 
     // ---------------------------------------------------------------------------------------------

@@ -417,13 +417,7 @@ public sealed class Camera3D
         if (_projDirty)
         {
             var fovRad = _fovDegrees * (MathF.PI / 180f);
-            var proj = Matrix4x4.CreatePerspectiveFieldOfView(fovRad, _aspectRatio, _nearPlane, _farPlane);
-
-            // Invert the Y axis for Vulkan clip space coordinates:
-            // Vulkan NDC has Y pointing downwards, so negating M22 restores standard 3D Up = +Y.
-            proj.M22 = -proj.M22;
-
-            _projectionMatrix = proj;
+            _projectionMatrix = DepthConvention.CreateReverseZInfiniteProjection(fovRad, _aspectRatio, _nearPlane);
             _projDirty = false;
         }
 

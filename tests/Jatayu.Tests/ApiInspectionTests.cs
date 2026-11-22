@@ -55,22 +55,14 @@ public class ApiInspectionTests
     }
 
     [Fact]
-    public void InspectVulkanSamplerAndFeatures()
+    public void InspectImGuiApi()
     {
-        _output.WriteLine("=== Searching all methods for Sampler and Descriptor creation ===");
-        var assemblies = new[] { typeof(Brutal.VulkanApi.Vulkan).Assembly, typeof(Brutal.VulkanApi.Abstractions.DeviceEx).Assembly };
-        foreach (var asm in assemblies)
+        _output.WriteLine("=== Searching ImGui types ===");
+        var imguiAsm = typeof(Brutal.ImGuiApi.ImGui).Assembly;
+        foreach (var t in imguiAsm.GetExportedTypes())
         {
-            foreach (var type in asm.GetExportedTypes())
-            {
-                foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance))
-                {
-                    if (m.Name.Contains("CreateSampler") || m.Name.Contains("CreateDescriptor") || m.Name.Contains("AllocateDescriptor"))
-                    {
-                        _output.WriteLine($"{type.Name}.{m.Name}({string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name))})");
-                    }
-                }
-            }
+            if (t.Name.Contains("Draw") || t.Name.Contains("Vert") || t.Name.Contains("Font"))
+                _output.WriteLine($"Type: {t.FullName}");
         }
     }
 }

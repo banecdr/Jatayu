@@ -340,7 +340,7 @@ public sealed class GpuTexture : IDisposable
         };
     }
 
-    private static VkFormat MapPixelFormat(ImagePixelFormat format)
+    public static VkFormat MapPixelFormat(ImagePixelFormat format)
     {
         return format switch
         {
