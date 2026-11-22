@@ -3,14 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Jatayu – Plan Dashboard</title>
+<title>Jatayu – a Vulkan 1.3 game engine in C#</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 :root{--desk:#08090b;--win:#101216;--tb:#0b0c0f;--tbon:#1f4276;--ink:#e8eaed;--mut:#98a2b3;--line:#434b5c;--frame:#1c2a44;--hdr:#2b4a7d;--hdrh:#35609f;--acc:#4296fa;--done:#6fdc8c;--next:#f5b942;--tab:#1c3157;--tabon:#2f64ad;--row:#ffffff09;
 --ff:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--desk:#aeb8c6;--win:#f0f1f3;--tb:#d4d7dc;--tbon:#9db9e3;--ink:#16181d;--mut:#4d5666;--line:#9aa3b2;--frame:#d9deea;--hdr:#b9cdee;--hdrh:#9dbbe8;--acc:#2a6fd6;--done:#1a7a37;--next:#9a5200;--tab:#c5d3ea;--tabon:#8fb2e6;--row:#00000008;color-scheme:light}}
-:root[data-theme="light"]{--desk:#aeb8c6;--win:#f0f1f3;--tb:#d4d7dc;--tbon:#9db9e3;--ink:#16181d;--mut:#4d5666;--line:#9aa3b2;--frame:#d9deea;--hdr:#b9cdee;--hdrh:#9dbbe8;--acc:#2a6fd6;--done:#1a7a37;--next:#9a5200;--tab:#c5d3ea;--tabon:#8fb2e6;--row:#00000008;color-scheme:light}
 *{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--desk);color:var(--ink);font:13px/1.55 var(--ff)}
 .wrap{max-width:1120px;margin:0 auto;padding:10px 10px 60px}
@@ -46,11 +44,15 @@ input[type=search]{flex:1;min-width:180px;background:var(--frame);color:var(--in
 .sk{height:70px;background:var(--win);border:1px solid var(--line);margin-bottom:8px}
 button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.hero2 h1{font:600 32px/1.1 var(--ff);margin:0 0 8px;letter-spacing:-.02em}.lead{font-size:16px;margin:0 0 8px}.cta{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{font:inherit;color:var(--ink);background:var(--hdr);border-radius:3px;padding:3px 10px;text-decoration:none}.btn:hover{background:var(--hdrh)}
+kbd{font:inherit;background:var(--hdr);border-radius:3px;padding:0 6px;margin-right:2px}
+pre.code{background:var(--frame);border-radius:2px;padding:8px;margin:8px 0;overflow-x:auto;white-space:pre}
 </style>
 </head>
 <body>
 <div class="wrap">
-<header class="menubar"><b>Jatayu</b><button id="reload">Refresh</button><button id="theme">Theme</button><a href="https://github.com/banecdr/Jatayu/blob/main/PLAN.md" target="_blank" rel="noopener">Open PLAN.md</a><span class="meta" id="meta">Loading plan…</span></header>
+<header class="menubar"><b>Jatayu</b><button id="reload">Refresh</button><a href="https://github.com/banecdr/Jatayu/blob/main/PLAN.md" target="_blank" rel="noopener">Open PLAN.md</a><span class="meta" id="meta">Loading plan…</span></header>
 <div id="loadbox"></div>
 <nav class="tabs" id="tabs"></nav>
 <main id="view"><div class="sk"></div><div class="sk"></div><div class="sk"></div></main>
@@ -61,7 +63,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const inline = s => esc(s.replace(/\$/g,"").replace(/\\(text|le|times|cdot|,)\{?/g,"").replace(/\*\*/g,"").replace(/\*/g,"")).replace(/`([^`]+)`/g,"<code>$1</code>");
 const sprintKey = id => { const m = /^(\d+)([ab]?)$/.exec(id)||[0,99,""]; return +m[1]*10 + (m[2]==="b"?2:m[2]==="a"?1:0); };
-let D = null, tab = "overview", filt = "all", q = "";
+let D = null, tab = "home", filt = "all", q = "";
 
 function parse(md){
   const lines = md.split(/\r?\n/), files = [], sprints = [], decs = [], log = [];
@@ -149,11 +151,29 @@ function decView(){
     return `<div class="ent"><b class="acc">${esc(d.id)}</b> ${inline(d.title)} ${d.status?`<span class="${c}">(${esc(d.status.split(/[:.]/)[0].toLowerCase().slice(0,24))})</span>`:""}<span class="mut">${inline(d.text)}</span></div>`}).join("")+`</div></div>`;
 }
 
+const REPO="https://github.com/banecdr/Jatayu",CMD="git clone "+REPO+".git\ncd Jatayu\ndotnet run";
+function home(){
+  const keys=[[["Space"],"Pause or resume the rotation"],[["Arrow keys"],"Orbit the camera"],[["W","S"],"Zoom in or out"],[["P"],"Cycle Panini projection: off, medium, full"],[["F"],"Switch field of view between 60° and 110°"],[["1","2"],"Adjust the Panini curve"],[["V"],"Toggle VSync"],[["C"],"Change the background color"],[["Esc"],"Quit"]];
+  const fb=(l,v)=>bar(Math.round(v/6.94*100),`${l}  ${v.toFixed(2)} ms`);
+  let live=`<p class="mut">Loading live progress from PLAN.md…</p>`;
+  if(D){const a=stats(D.files),n=D.sprints.find(x=>x.status==="next");
+    live=bar(a.p,`${a.d} / ${a.t} files built  (${a.p}%)`)+(n?`<p>Next up: <span class="next">Sprint ${esc(n.id)}</span>, ${inline(n.title)}</p>`:"")+`<p><button data-t="progress">Open build progress</button></p>`;}
+  const hero=`<section class="card hero2"><h1>Jatayu</h1><p class="lead">A 3D game engine in C# on Vulkan 1.3, built with the BRUTAL framework.</p><p class="mut">Today it draws a lit, depth-tested cube you can orbit. The plan is a streamed open-world engine with GPU-driven rendering. The progress on this page is read live from PLAN.md.</p><div class="cta"><a class="btn" href="${REPO}" target="_blank" rel="noopener">View on GitHub</a><button data-t="sprints">See the roadmap</button><a class="btn" href="${REPO}/blob/main/PLAN.md" target="_blank" rel="noopener">Read the plan</a></div></section>`;
+  const start=win("Quick start","",`<ul><li>.NET 10 SDK</li><li>A GPU with Vulkan 1.3 driver support</li></ul><pre class="code">${esc(CMD)}</pre><button data-copy="1">Copy commands</button>`);
+  const ctl=win("Controls","keyboard",`<div style="margin:-8px">${keys.map(([k,d])=>`<div class="ent"><span>${k.map(x=>`<kbd>${x}</kbd>`).join(" ")}</span><span class="mut">${d}</span></div>`).join("")}</div>`);
+  const tech=win("Stack","",`<table class="tbl"><tr><td>Language</td><td>C# 13, .NET 10</td></tr><tr><td>Graphics</td><td>Vulkan 1.3</td></tr><tr><td>Bindings</td><td>Ahwoo.BRUTAL.*</td></tr><tr><td>Windowing</td><td>GLFW</td></tr><tr><td>Shaders</td><td>GLSL via ShaderC</td></tr><tr><td>Platforms</td><td>Windows, Linux</td></tr><tr><td>License</td><td>GPL-2.0</td></tr></table>`);
+  const today=win("Works today","",lis(["Vulkan 1.3 setup with a GLFW window, resizable swapchain and depth buffer","Orbit and zoom camera with perspective projection","Panini projection that keeps wide fields of view from stretching at the edges","Shaders compiled at startup"]));
+  const budget=win("Frame budget","144 FPS target",`${fb("CPU",5.20)}${fb("GPU",5.90)}${fb("Limit",6.94)}<p class="mut">Targets from PLAN.md for the 1080p reference scene. Not measured yet.</p>`);
+  const goals=win("Where it’s headed","",lis(["Streamed worlds of 16 km × 16 km and larger","GPU-driven rendering with bindless resources and reverse-Z depth","Floating-origin precision for huge distances","Jolt physics and OpenAL spatial audio","Zero managed allocations in the frame loop"]));
+  const prog=win("Build progress","live",live);
+  return hero+`<div class="grid2"><div>${start}${ctl}${today}</div><div>${prog}${budget}${tech}${goals}</div></div>`;
+}
+
 function render(){
-  const tabs={overview:"Overview",sprints:"Sprints",files:"Files",decisions:"Decisions"};
+  const tabs={home:"Home",progress:"Progress",sprints:"Sprints",files:"Files",decisions:"Decisions"};
   $("#tabs").innerHTML=Object.entries(tabs).map(([k,v])=>`<button data-t="${k}" class="${tab===k?"on":""}">${v}</button>`).join("");
-  if(!D)return;
-  $("#view").innerHTML={overview,sprints:sprintsView,files:filesView,decisions:decView}[tab]();
+  if(!D&&tab!=="home")return;
+  $("#view").innerHTML={home,progress:overview,sprints:sprintsView,files:filesView,decisions:decView}[tab]();
 }
 
 function load(md, src){
@@ -188,10 +208,8 @@ document.addEventListener("click", e=>{
 document.addEventListener("input", e=>{ if(e.target.id==="q"){ q=e.target.value.toLowerCase(); const p=e.target.selectionStart; render(); const n=$("#q"); n.focus(); n.setSelectionRange(p,p); } });
 document.addEventListener("change",e=>{if(e.target.id==="cd"){sd=e.target.checked;render()}if(e.target.id==="cp"){sp=e.target.checked;render()}});
 document.addEventListener("change", async e=>{ if(e.target.id==="fi" && e.target.files[0]) load(await e.target.files[0].text(), e.target.files[0].name); });
+document.addEventListener("click",async e=>{const c=e.target.closest("[data-copy]");if(!c)return;try{await navigator.clipboard.writeText(CMD);c.textContent="Copied"}catch(x){c.textContent="Copy failed"}setTimeout(()=>{c.textContent="Copy commands"},1500)});
 $("#reload").onclick = fetchPlan;
-const setTheme=t=>{document.documentElement.dataset.theme=t;try{localStorage.setItem("jt",t)}catch(e){}};
-try{const t=localStorage.getItem("jt");if(t)setTheme(t)}catch(e){}
-$("#theme").onclick=()=>setTheme((document.documentElement.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"))==="dark"?"light":"dark");
 render(); fetchPlan();
 </script>
 </body>
