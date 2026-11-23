@@ -89,8 +89,8 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 
 // Directional shadow map evaluation with Reverse-Z comparison and 3x3 PCF
 float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
-    if (uLight.CastsShadows == 0u) {
-        return 1.0;
+    if (uLight.CastsShadows == 0u || NdotL <= 0.0) {
+        return NdotL <= 0.0 ? 0.0 : 1.0;
     }
 
     vec3 projCoords = shadowCoord.xyz / shadowCoord.w;
@@ -105,7 +105,7 @@ float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
     // In Reverse-Z, closer to light is higher depth value (1.0 = near, 0.0 = far).
     // Slope-scaled tangent bias pushes the reference depth closer to the light, preventing grazing shadow acne.
     float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
-    float dynamicBias = clamp(bias * (1.0 + tanTheta * 0.75), bias * 0.5, 0.006);
+    float dynamicBias = clamp(bias * (1.0 + tanTheta * 1.5), bias * 0.5, 0.008);
     float currentDepth = projCoords.z + dynamicBias;
 
     vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
