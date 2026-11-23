@@ -139,12 +139,7 @@ public static class Program
             fovDegrees: 60f,
             nearPlane: 0.1f,
             farPlane: 1000f
-        )
-        {
-            PaniniEnabled = false,
-            PaniniDistance = 0.5f,
-            PaniniScale = 1.0f,
-        };
+        );
 
         var cameraController = new CameraController(camera)
         {
@@ -547,7 +542,6 @@ public static class Program
         bool sunOrbitEnabled = true;
         bool debugWireframeEnabled = true;
         bool atLargeWorldCluster = false;
-        int paniniMode = 0;
         bool flyCamEnabled = false;
         bool autopilotTourEnabled = false;
         double tourTime = 0.0;
@@ -568,24 +562,8 @@ public static class Program
                 }
                 else if (key == GlfwKey.P)
                 {
-                    paniniMode = (paniniMode + 1) % 3;
-                    switch (paniniMode)
-                    {
-                        case 0:
-                            camera.PaniniEnabled = false;
-                            Console.WriteLine("[Panini] Projection: OFF (Standard Rectilinear Perspective)");
-                            break;
-                        case 1:
-                            camera.PaniniEnabled = true;
-                            camera.PaniniDistance = 0.5f;
-                            Console.WriteLine("[Panini] Projection: ON (Moderate d = 0.50 - ideal for 90°-100° FOV)");
-                            break;
-                        case 2:
-                            camera.PaniniEnabled = true;
-                            camera.PaniniDistance = 1.0f;
-                            Console.WriteLine("[Panini] Projection: ON (Full Cylindrical d = 1.00 - ideal for 110°-140° FOV)");
-                            break;
-                    }
+                    lightEnv.HighQualityShadows = !lightEnv.HighQualityShadows;
+                    Console.WriteLine($"[Shadows] Ultra High-Quality Shadows -> {(lightEnv.HighQualityShadows ? "ENABLED (16-Tap Poisson Disk, 2.8x Texel Density Focus)" : "DISABLED (Standard 9-Tap PCF)")}");
                 }
                 else if (key == GlfwKey.F)
                 {
@@ -599,18 +577,6 @@ public static class Program
                         camera.FovDegrees = 60f;
                         Console.WriteLine("[Camera] FOV switched to STANDARD (60° FOV)");
                     }
-                }
-                else if (key == GlfwKey.Minus)
-                {
-                    camera.PaniniDistance = MathF.Max(0.0f, camera.PaniniDistance - 0.1f);
-                    camera.PaniniEnabled = camera.PaniniDistance > 0.001f;
-                    Console.WriteLine($"[Panini] Distance 'd' decreased -> {camera.PaniniDistance:F2}");
-                }
-                else if (key == GlfwKey.Equal)
-                {
-                    camera.PaniniDistance = MathF.Min(2.0f, camera.PaniniDistance + 0.1f);
-                    camera.PaniniEnabled = true;
-                    Console.WriteLine($"[Panini] Distance 'd' increased -> {camera.PaniniDistance:F2}");
                 }
                 else if (key == GlfwKey.F1)
                 {
@@ -742,9 +708,8 @@ public static class Program
         Console.WriteLine("   [L]           : Toggle Sun Light Orbit animation (animates soft shadows)");
         Console.WriteLine("   [B]           : Toggle 3D Wireframe Debug bounds and coordinate axes");
         Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
-        Console.WriteLine("   [P]           : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)");
+        Console.WriteLine("   [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson Disk vs 9-tap PCF)");
         Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
-        Console.WriteLine("   [-] / [=]     : Fine-tune Panini distance 'd' (-0.1 / +0.1)");
         Console.WriteLine("   [Left/Right]  : Manual horizontal orbit (Yaw)");
         Console.WriteLine("   [Up/Down]     : Manual vertical orbit (Pitch)");
         Console.WriteLine("   [W / S]       : Zoom camera in / out");
@@ -1133,7 +1098,7 @@ public static class Program
 
             if (time.FrameCount % 15 == 0)
             {
-                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [G] GPU-Driven: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Foliage: {(foliageEnabled ? "ON (4K)" : "OFF")} | [J] Particles: {(particlesEnabled ? "ON (2K)" : "OFF")}";
+                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [P] HQ Shadows: {(lightEnv.HighQualityShadows ? "ON (16-tap Poisson)" : "OFF (9-tap)")} | [G] Indirect: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Grass: {(foliageEnabled ? "ON" : "OFF")}";
             }
 
             // 6. Immediate-Mode 3D Debug Wireframes

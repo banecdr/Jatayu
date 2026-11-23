@@ -41,40 +41,13 @@ layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
 
-// 80-byte Push Constants: 64-byte MVP matrix + 16-byte Panini parameters
+// 64-byte Push Constants: 64-byte MVP matrix
 layout(push_constant) uniform PushConstants {
     mat4 uMvp;
-    float uPaniniDistance;
-    float uPaniniScale;
-    float uAspect;
-    float uPad;
 };
 
-// TK Sharpless Panini cylindrical projection function
-vec2 ApplyPanini(vec2 ndc, float d, float aspect, float scale) {
-    if (d <= 0.0001)
-        return ndc;
-
-    float u = ndc.x * aspect;
-    float v = ndc.y;
-
-    float denom = 1.0 + d * sqrt(1.0 + u * u);
-    float factor = ((d + 1.0) / denom) * scale;
-
-    return vec2((u * factor) / aspect, v * factor);
-}
-
 void main() {
-    vec4 clip = uMvp * vec4(inPosition, 1.0);
-
-    // Apply Panini projection to clip-space coordinates when enabled
-    if (uPaniniDistance > 0.0001 && clip.w > 0.0) {
-        vec2 ndc = clip.xy / clip.w;
-        vec2 paniniNdc = ApplyPanini(ndc, uPaniniDistance, uAspect, uPaniniScale);
-        clip.xy = paniniNdc * clip.w;
-    }
-
-    gl_Position = clip;
+    gl_Position = uMvp * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;

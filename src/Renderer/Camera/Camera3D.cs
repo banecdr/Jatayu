@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: Camera3D.cs
  * LOCATION: src/Renderer/Camera/Camera3D.cs
  * 
@@ -81,11 +81,6 @@ public sealed class Camera3D
     private Matrix4x4 _viewMatrix;
     private Matrix4x4 _projectionMatrix;
     private Matrix4x4 _viewProjection;
-
-    // Panini Projection parameters
-    private bool _paniniEnabled = false;
-    private float _paniniDistance = 0.5f;
-    private float _paniniScale = 1.0f;
 
     /// <summary>
     /// Gets or sets the camera's position in 3D world space.
@@ -204,41 +199,6 @@ public sealed class Camera3D
     }
 
     /// <summary>
-    /// Gets or sets whether Panini projection is enabled for wide-angle distortion reduction.
-    /// </summary>
-    public bool PaniniEnabled
-    {
-        get => _paniniEnabled;
-        set => _paniniEnabled = value;
-    }
-
-    /// <summary>
-    /// Gets or sets the Panini distance/compression parameter 'd'.
-    /// 0.0 = Standard linear perspective.
-    /// 0.5 = Moderate Panini compression (ideal for 90°–100° FOV).
-    /// 1.0 = Full Panini cylindrical projection (ideal for 110°–140° FOV).
-    /// </summary>
-    public float PaniniDistance
-    {
-        get => _paniniDistance;
-        set => _paniniDistance = Math.Clamp(value, 0.0f, 2.0f);
-    }
-
-    /// <summary>
-    /// Gets or sets the Panini scale/crop factor (default: 1.0).
-    /// </summary>
-    public float PaniniScale
-    {
-        get => _paniniScale;
-        set => _paniniScale = Math.Clamp(value, 0.1f, 5.0f);
-    }
-
-    /// <summary>
-    /// Gets the effective Panini distance parameter submitted to shaders (0.0 when disabled).
-    /// </summary>
-    public float EffectivePaniniDistance => _paniniEnabled ? _paniniDistance : 0.0f;
-
-    /// <summary>
     /// Gets the normalized forward direction vector pointing from the camera toward the target.
     /// </summary>
     public Vector3 Forward => Vector3.Normalize(_target - _position);
@@ -341,66 +301,6 @@ public sealed class Camera3D
         var z = distance * MathF.Cos(clampedPitch) * MathF.Cos(yawRadians);
 
         Position = _target + new Vector3(x, y, z);
-    }
-
-    /// <summary>
-    /// Applies the Panini projection formula to a 2D Normalized Device Coordinate (NDC).
-    /// Used for CPU-side coordinate mapping and verification.
-    /// </summary>
-    /// <param name="ndc">Screen coordinate in NDC range [-1, 1].</param>
-    /// <returns>Panini-projected coordinate in NDC range.</returns>
-    public Vector2 ProjectPanini(Vector2 ndc)
-    {
-        var d = EffectivePaniniDistance;
-        if (d <= 0.0001f)
-            return ndc;
-
-        var u = ndc.X * _aspectRatio;
-        var v = ndc.Y;
-
-        var denom = 1.0f + d * MathF.Sqrt(1.0f + u * u);
-        var factor = ((d + 1.0f) / denom) * _paniniScale;
-
-        return new Vector2((u * factor) / _aspectRatio, v * factor);
-    }
-
-    /// <summary>
-    /// Analytically inverts the Panini projection formula back to linear rectilinear NDC coordinates.
-    /// Essential for accurate mouse picking, 3D object selection, and raycasting.
-    /// </summary>
-    /// <param name="paniniNdc">Panini-warped screen coordinate in range [-1, 1].</param>
-    /// <returns>Original linear perspective NDC coordinate.</returns>
-    public Vector2 UnprojectPanini(Vector2 paniniNdc)
-    {
-        var d = EffectivePaniniDistance;
-        if (d <= 0.0001f || Math.Abs(_paniniScale) < 0.0001f)
-            return paniniNdc;
-
-        var uPrime = (paniniNdc.X * _aspectRatio) / _paniniScale;
-        var vPrime = paniniNdc.Y / _paniniScale;
-
-        var k = uPrime / (d + 1.0f);
-        var k2 = k * k;
-        var d2 = d * d;
-
-        var a = 1.0f - k2 * d2;
-        if (MathF.Abs(a) < 0.0001f)
-            return paniniNdc;
-
-        // Quadratic solution: A u^2 - 2k u + k^2(1 - d^2) = 0
-        var discr = k2 * (1.0f + d2 * (k2 - 1.0f));
-        if (discr < 0f)
-            return paniniNdc;
-
-        var sqrtDiscr = MathF.Sqrt(discr);
-        var u = (k + MathF.Sign(k) * sqrtDiscr) / a;
-
-        // Recompute vertical factor
-        var denom = 1.0f + d * MathF.Sqrt(1.0f + u * u);
-        var factor = (d + 1.0f) / denom;
-        var v = factor > 0.0001f ? (vPrime / factor) : vPrime;
-
-        return new Vector2(u / _aspectRatio, v);
     }
 
     /// <summary>

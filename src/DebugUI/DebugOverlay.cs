@@ -171,18 +171,7 @@ public sealed class DebugOverlay
                         ImGui.Text(buf[..w]);
                     }
 
-                    if (camera.PaniniEnabled)
-                    {
-                        if (Utf8.TryWrite(buf, $"Panini Proj:  ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2}) (Cycle: [P], [-]/[=])", out w))
-                        {
-                            buf[w] = 0;
-                            ImGui.TextColored(_cyan, buf[..w]);
-                        }
-                    }
-                    else
-                    {
-                        ImGui.Text("Panini Proj:  OFF (Rectilinear perspective) (Cycle: [P])"u8);
-                    }
+                    ImGui.Text("Shadows:       [P] Toggle Ultra HQ (16-tap Poisson) vs Standard"u8);
                 }
 
                 if (originShift != null)
@@ -312,10 +301,8 @@ public sealed class DebugOverlay
                 ImGui.Text("  [T]           : Teleport between 0m Origin and 50,000m Cluster"u8);
                 ImGui.Text("  [L]           : Toggle Sun Light Orbit animation"u8);
                 ImGui.Text("  [B]           : Toggle 3D Wireframe Debug bounds & axes"u8);
-                ImGui.Text("  [Space]       : Toggle Camera Auto-Orbit"u8);
-                ImGui.Text("  [P]           : Cycle Panini (OFF -> Moderate d=0.5 -> Full d=1.0)"u8);
+                ImGui.Text("  [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson vs 9-tap)"u8);
                 ImGui.Text("  [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)"u8);
-                ImGui.Text("  [-] / [=]     : Fine-tune Panini distance 'd' (-0.1 / +0.1)"u8);
                 ImGui.Text("  [Left/Right]  : Manual horizontal orbit (Yaw)"u8);
                 ImGui.Text("  [Up/Down]     : Manual vertical orbit (Pitch)"u8);
                 ImGui.Text("  [W / S]       : Zoom camera in / out"u8);

@@ -37,20 +37,29 @@ public sealed class LightEnvironment
     public Vector3 AmbientGroundColor { get; set; } = new(0.1f, 0.08f, 0.05f);
     public float AmbientIntensity { get; set; } = 0.4f;
     public float ShadowBias { get; set; } = 0.0005f;
+    public float ShadowOrthoExtents { get; set; } = 80.0f;
+    public bool HighQualityShadows { get; set; } = false;
 
     /// <summary>
     /// Packs current environment parameters into a GPU-ready struct.
     /// </summary>
     public GpuLightEnvironmentData ToGpuData(in Vector3 cameraPosition)
     {
-        Matrix4x4 lightVp = Sun.CastsShadows ? Sun.ComputeLightViewProjection(cameraPosition) : Matrix4x4.Identity;
+        float extents = HighQualityShadows ? 28.0f : ShadowOrthoExtents;
+        Matrix4x4 lightVp = Sun.CastsShadows ? Sun.ComputeLightViewProjection(cameraPosition, extents) : Matrix4x4.Identity;
+
+        uint shadowQuality = 0u;
+        if (Sun.CastsShadows)
+        {
+            shadowQuality = HighQualityShadows ? 2u : 1u;
+        }
 
         return new GpuLightEnvironmentData
         {
             SunDirection = Sun.Direction,
             SunIntensity = Sun.Intensity,
             SunColor = Sun.Color,
-            CastsShadows = Sun.CastsShadows ? 1u : 0u,
+            CastsShadows = shadowQuality,
             AmbientSkyColor = AmbientSkyColor,
             AmbientIntensity = AmbientIntensity,
             AmbientGroundColor = AmbientGroundColor,
