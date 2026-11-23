@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: FrameSync.cs
  * LOCATION: src/RHI/Vulkan/Sync/FrameSync.cs
  * 
@@ -103,6 +103,11 @@ public sealed class FrameSync : IDisposable
     public VkSemaphore[] RenderFinishedSemaphores { get; }
 
     /// <summary>
+    /// Array of semaphores signaled when GPU rendering finishes (indexed by swapchain image index).
+    /// </summary>
+    public VkSemaphore[] SwapchainRenderFinishedSemaphores { get; private set; }
+
+    /// <summary>
     /// Array of fences used by the CPU to wait for the GPU to finish with this frame slot.
     /// </summary>
     public VkFence[] InFlightFences { get; }
@@ -118,6 +123,16 @@ public sealed class FrameSync : IDisposable
     public VkSemaphore CurrentRenderFinished => RenderFinishedSemaphores[CurrentFrame];
 
     /// <summary>
+    /// Gets the render finished semaphore corresponding to the specified swapchain image index.
+    /// </summary>
+    public VkSemaphore GetRenderFinishedSemaphore(int imageIndex)
+    {
+        if (imageIndex >= 0 && imageIndex < SwapchainRenderFinishedSemaphores.Length)
+            return SwapchainRenderFinishedSemaphores[imageIndex];
+        return CurrentRenderFinished;
+    }
+
+    /// <summary>
     /// Gets the in-flight fence for the current frame slot.
     /// </summary>
     public VkFence CurrentFence => InFlightFences[CurrentFrame];
@@ -127,7 +142,8 @@ public sealed class FrameSync : IDisposable
     /// </summary>
     /// <param name="context">The active VulkanContext.</param>
     /// <param name="maxFramesInFlight">Number of frames in flight (defaults to 2 for double-buffered overlap).</param>
-    public FrameSync(VulkanContext context, int maxFramesInFlight = 2)
+    /// <param name="swapchainImageCount">Number of swapchain images (defaults to 3 for triple buffering).</param>
+    public FrameSync(VulkanContext context, int maxFramesInFlight = 2, int swapchainImageCount = 3)
     {
         Context = context ?? throw new ArgumentNullException(nameof(context));
         if (maxFramesInFlight < 1)
@@ -148,6 +164,13 @@ public sealed class FrameSync : IDisposable
 
             // Create fence initially signaled so frame 0 does not block
             InFlightFences[i] = device.CreateFence(VkFenceCreateFlags.SignaledBit, null);
+        }
+
+        int scCount = Math.Max(maxFramesInFlight, swapchainImageCount);
+        SwapchainRenderFinishedSemaphores = new VkSemaphore[scCount];
+        for (var i = 0; i < scCount; i++)
+        {
+            SwapchainRenderFinishedSemaphores[i] = device.CreateSemaphore(new VkSemaphoreCreateInfo(), null);
         }
     }
 
@@ -198,6 +221,12 @@ public sealed class FrameSync : IDisposable
 
                 if (InFlightFences[i].VkHandle != 0)
                     device.DestroyFence(InFlightFences[i], null);
+            }
+
+            for (var i = 0; i < SwapchainRenderFinishedSemaphores.Length; i++)
+            {
+                if (SwapchainRenderFinishedSemaphores[i].VkHandle != 0)
+                    device.DestroySemaphore(SwapchainRenderFinishedSemaphores[i], null);
             }
 
             _disposed = true;

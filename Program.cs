@@ -451,7 +451,7 @@ public static class Program
         // PHASE 8: MULTI-FRAME IN-FLIGHT SYNCHRONIZATION & PROFILING
         // ---------------------------------------------------------------------------------------------
         using var commandPool = new CommandPoolManager(context, queueFamily);
-        using var frameSync = new FrameSync(context, maxFramesInFlight: 2);
+        using var frameSync = new FrameSync(context, maxFramesInFlight: 2, swapchainImageCount: swapchain.ImageCount);
         var commandBuffers = commandPool.AllocateMultiple(frameSync.MaxFramesInFlight);
         using var gpuTimer = new GpuTimer(context, maxQueriesPerFrame: 64, framesInFlight: frameSync.MaxFramesInFlight);
         using var imguiBackend = new ImGuiVulkanBackend(context, allocator, uploadManager, window, swapchain.ColorFormat);
@@ -888,7 +888,7 @@ public static class Program
             }
 
             // 11. Submit recorded commands to GPU Graphics Queue
-            var signalSemaphore = frameSync.CurrentRenderFinished;
+            var signalSemaphore = frameSync.GetRenderFinishedSemaphore(imageIndex);
             using (Profiler.Scope("QueueSubmit"))
             {
                 var waitSemaphore = frameSync.CurrentImageAvailable;
