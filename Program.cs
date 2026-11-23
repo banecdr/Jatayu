@@ -65,7 +65,9 @@ using Jatayu.Renderer.Graph;
 using Jatayu.Renderer.Lighting;
 using Jatayu.Renderer.Material;
 using Jatayu.Renderer.Mesh;
+using Jatayu.Renderer.Particles;
 using Jatayu.Renderer.Shadows;
+using Jatayu.Renderer.Vegetation;
 using Jatayu.RHI.Vulkan.Commands;
 using Jatayu.RHI.Vulkan.Context;
 using Jatayu.RHI.Vulkan.Descriptors;
@@ -106,7 +108,7 @@ public static class Program
         // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
         // ---------------------------------------------------------------------------------------------
         using var window = new Window(
-            title: "Jatayu Engine - Sprint 5b: Large-World & PBR Forward Renderer",
+            title: "Jatayu Engine - Sprint 7: GPU-Driven Indirect, Wind Foliage & Particles",
             width: InitialWidth,
             height: InitialHeight,
             resizable: true,
@@ -495,6 +497,42 @@ public static class Program
 
         using var textureStreamer = new TextureStreamer(context, allocator, bindlessTable, deletionQueue, vramBudget);
 
+        // ---------------------------------------------------------------------------------------------
+        // SPRINT 7: GPU-DRIVEN RENDERING, PROCEDURAL FOLIAGE & GPU PARTICLES
+        // ---------------------------------------------------------------------------------------------
+        using var instanceBuffer = new InstanceBuffer(context, allocator, 65536);
+        using var indirectDrawBuffer = new IndirectDrawBuffer(context, allocator, 5, 65536);
+        using var hizBuilder = new HiZBuilder(context, allocator, shaderCompiler, (uint)swapchain.Width, (uint)swapchain.Height);
+        using var gpuCuller = new GpuCuller(context, allocator, shaderCompiler);
+
+        // Procedural wind foliage grass field (Sprint 7b)
+        using var foliageSystem = new FoliageSystem(context, allocator, shaderCompiler, swapchain.ColorFormat);
+        var foliageList = new List<FoliageInstanceData>(4096);
+        var foliageRng = new Random(1337);
+        for (int i = 0; i < 4096; i++)
+        {
+            float fx = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
+            float fz = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
+            if (MathF.Abs(fx) < 1.4f && MathF.Abs(fz) < 1.4f) continue;
+            float rot = (float)(foliageRng.NextDouble() * Math.PI * 2.0);
+            float scale = 0.8f + (float)foliageRng.NextDouble() * 0.6f;
+            byte tint = (byte)foliageRng.Next(150, 255);
+            byte windPhase = (byte)foliageRng.Next(0, 256);
+            foliageList.Add(new FoliageInstanceData(new Vector3(fx, -1.0f, fz), rot, scale, tint, windPhase));
+        }
+        foliageSystem.SetInstances(CollectionsMarshal.AsSpan(foliageList));
+
+        // GPU compute particle emitter fountain (Sprint 7b)
+        using var particleSystem = new ParticleSystem(context, allocator, shaderCompiler, swapchain.ColorFormat, maxParticles: 2048)
+        {
+            EmitterPosition = new Vector3(0.0f, 3.2f, 0.0f)
+        };
+
+        var dynInstances = new GpuInstanceData[10];
+        bool gpuDrivenEnabled = true;
+        bool foliageEnabled = true;
+        bool particlesEnabled = true;
+
         using var renderGraph = new RenderGraph();
 
         var waitSemaphores = new VkSemaphore[1];
@@ -647,6 +685,21 @@ public static class Program
                     forwardRenderer.DebugTerrainRingsEnabled = !forwardRenderer.DebugTerrainRingsEnabled;
                     Console.WriteLine($"[Terrain] Clipmap LOD Ring Colors: {(forwardRenderer.DebugTerrainRingsEnabled ? "ENABLED (LOD Bands: Green/Cyan/Yellow/Orange/Red/Purple)" : "DISABLED (PBR Slope Splatting)")}");
                 }
+                else if (key == GlfwKey.G)
+                {
+                    gpuDrivenEnabled = !gpuDrivenEnabled;
+                    Console.WriteLine($"[Renderer] GPU-Driven Indirect Multi-Draw -> {(gpuDrivenEnabled ? "ENABLED (vkCmdDrawIndexedIndirectCount + Hi-Z Culling)" : "DISABLED (CPU Forward Submission)")}");
+                }
+                else if (key == GlfwKey.K)
+                {
+                    foliageEnabled = !foliageEnabled;
+                    Console.WriteLine($"[Foliage] Procedural Wind Grass -> {(foliageEnabled ? $"ENABLED ({foliageSystem.ActiveInstanceCount} grass blades)" : "DISABLED")}");
+                }
+                else if (key == GlfwKey.J)
+                {
+                    particlesEnabled = !particlesEnabled;
+                    Console.WriteLine($"[Particles] GPU Particle Fountain -> {(particlesEnabled ? $"ENABLED ({particleSystem.MaxParticles} particles)" : "DISABLED")}");
+                }
                 else if (key == GlfwKey.Escape)
                 {
                     window.Close();
@@ -658,10 +711,13 @@ public static class Program
         // PRINT DETAILED ENGINE STATUS
         // ---------------------------------------------------------------------------------------------
         Console.WriteLine("================================================================================");
-        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 6b OPEN-WORLD & CLIPMAP TERRAIN       ");
+        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 7: GPU-DRIVEN & SCALABLE LIGHTING     ");
         Console.WriteLine("================================================================================");
         Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
-        Console.WriteLine($" [Renderer]      : ForwardRenderer3D (Shadows + Skybox + PBR Opaque + Terrain + Debug)");
+        Console.WriteLine($" [Renderer]      : ForwardRenderer3D (GPU-Driven Indirect + Shadows + Skybox + Terrain + Foliage + Particles)");
+        Console.WriteLine($" [GPU-Driven]    : Indirect Multi-Draw (Toggle [G]) | vkCmdDrawIndexedIndirectCount + Hi-Z Culling");
+        Console.WriteLine($" [Foliage]       : Procedural Wind Grass (Toggle [K]) | {foliageSystem.ActiveInstanceCount} instanced blades");
+        Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [J]) | {particleSystem.MaxParticles} active billboard particles");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
         Console.WriteLine($" [Shadow Map]    : {shadowMap.Resolution}x{shadowMap.Resolution} D32_SFLOAT (16-tap PCF, Reverse-Z Comparison Sampler)");
         Console.WriteLine($" [Clipmap]       : 6 concentric rings (4,096 vertices/ring), {terrainClipmap.ResidentTileCount} resident 256m tiles");
@@ -673,6 +729,9 @@ public static class Program
         Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle [F1]) | World Radar (Toggle [F2])");
         Console.WriteLine("--------------------------------------------------------------------------------");
         Console.WriteLine(" INTERACTIVE HOTKEYS:");
+        Console.WriteLine("   [G]           : Toggle GPU-Driven Multi-Draw vs CPU Draw (Live rendering comparison!)");
+        Console.WriteLine("   [K]           : Toggle Procedural Foliage Grass Field (4,096 swaying grass blades)");
+        Console.WriteLine("   [J]           : Toggle GPU Particle Fountain (2,048 compute-simulated particles)");
         Console.WriteLine("   [C]           : Toggle 6-DOF Free-Flycam (WASD + Q/E to fly, Shift for 100 m/s boost, Arrows to aim)");
         Console.WriteLine("   [F3]          : Toggle 100 m/s Supersonic Autopilot Drone Tour (360 km/h open-world stress sweep)");
         Console.WriteLine("   [F4]          : Toggle Terrain Clipmap LOD Ring Colors (Green/Cyan/Yellow/Orange/Red/Purple)");
@@ -698,6 +757,33 @@ public static class Program
         var time = new GameTime();
 
         RgTextureHandle currentSwapchainTarget = default;
+        RgTextureHandle currentDepthTarget = default;
+
+        Action<RenderPassBuilder> foliagePassSetup = setup =>
+        {
+            setup.SetColorAttachment(currentSwapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+            setup.SetDepthAttachment(currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        };
+        Action<RenderPassContext> foliagePassExecute = ctx =>
+        {
+            Matrix4x4 cameraRelView = camera.ViewMatrix;
+            cameraRelView.M41 = 0;
+            cameraRelView.M42 = 0;
+            cameraRelView.M43 = 0;
+            Matrix4x4 folVp = cameraRelView * camera.ProjectionMatrix;
+            foliageSystem.Render(ctx.CommandBuffer, folVp, Vector3.Zero, (float)time.TotalTime);
+        };
+
+        Action<RenderPassBuilder> particlePassSetup = setup =>
+        {
+            setup.SetColorAttachment(currentSwapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+            setup.SetDepthAttachment(currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+        };
+        Action<RenderPassContext> particlePassExecute = ctx =>
+        {
+            particleSystem.Render(ctx.CommandBuffer, camera.ViewMatrix, camera.ProjectionMatrix, swapchain.Width, swapchain.Height);
+        };
+
         Action<RenderPassBuilder> imguiPassSetup = setup =>
         {
             setup.SetColorAttachment(currentSwapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
@@ -884,6 +970,171 @@ public static class Program
             streamingManager.Update(dt, in camWorldPos, in camVelocity);
             textureStreamer.Update((ulong)frameSync.CurrentFrame);
 
+            // 5c. Update GPU-Driven Instance Buffer (Sprint 7a)
+            if (gpuDrivenEnabled)
+            {
+                float camX = camera.Position.X;
+                float camY = camera.Position.Y;
+                float camZ = camera.Position.Z;
+
+                // 0: Ground Plane
+                Vector3 groundRel = new Vector3(-camX, -1f - camY, -camZ);
+                Matrix4x4 groundModel = Matrix4x4.CreateTranslation(groundRel);
+                dynInstances[0] = new GpuInstanceData
+                {
+                    CurrentTransform = groundModel,
+                    PreviousTransform = groundModel,
+                    BoundingCenter = groundRel,
+                    BoundingRadius = 142f,
+                    MeshId = groundSlice.MeshId,
+                    MaterialId = groundMatId,
+                    Flags = 0,
+                    LodBias = 0f,
+                };
+
+                // 1: Hero Gold Cube
+                Vector3 heroRel = heroT.Position - camera.Position;
+                Matrix4x4 heroModel = Matrix4x4.CreateFromQuaternion(heroT.Rotation) * Matrix4x4.CreateTranslation(heroRel);
+                dynInstances[1] = new GpuInstanceData
+                {
+                    CurrentTransform = heroModel,
+                    PreviousTransform = heroModel,
+                    BoundingCenter = heroRel,
+                    BoundingRadius = 1.732f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = goldMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 2: Copper Cube
+                Vector3 copperRel = copperT.Position - camera.Position;
+                Matrix4x4 copperModel = Matrix4x4.CreateScale(0.8f) * Matrix4x4.CreateFromQuaternion(copperT.Rotation) * Matrix4x4.CreateTranslation(copperRel);
+                dynInstances[2] = new GpuInstanceData
+                {
+                    CurrentTransform = copperModel,
+                    PreviousTransform = copperModel,
+                    BoundingCenter = copperRel,
+                    BoundingRadius = 1.732f * 0.8f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = copperMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 3: Chrome Cube
+                Vector3 chromeRel = chromeT.Position - camera.Position;
+                Matrix4x4 chromeModel = Matrix4x4.CreateScale(0.8f) * Matrix4x4.CreateFromQuaternion(chromeT.Rotation) * Matrix4x4.CreateTranslation(chromeRel);
+                dynInstances[3] = new GpuInstanceData
+                {
+                    CurrentTransform = chromeModel,
+                    PreviousTransform = chromeModel,
+                    BoundingCenter = chromeRel,
+                    BoundingRadius = 1.732f * 0.8f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = chromeMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 4: Terracotta Cube
+                Vector3 terracottaRel = terracottaT.Position - camera.Position;
+                Matrix4x4 terracottaModel = Matrix4x4.CreateScale(0.8f) * Matrix4x4.CreateFromQuaternion(terracottaT.Rotation) * Matrix4x4.CreateTranslation(terracottaRel);
+                dynInstances[4] = new GpuInstanceData
+                {
+                    CurrentTransform = terracottaModel,
+                    PreviousTransform = terracottaModel,
+                    BoundingCenter = terracottaRel,
+                    BoundingRadius = 1.732f * 0.8f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = terracottaMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 5: Emissive Crystal
+                Vector3 emissiveRel = emissiveT.Position - camera.Position;
+                Matrix4x4 emissiveModel = Matrix4x4.CreateScale(0.5f, 1.5f, 0.5f) * Matrix4x4.CreateFromQuaternion(emissiveT.Rotation) * Matrix4x4.CreateTranslation(emissiveRel);
+                dynInstances[5] = new GpuInstanceData
+                {
+                    CurrentTransform = emissiveModel,
+                    PreviousTransform = emissiveModel,
+                    BoundingCenter = emissiveRel,
+                    BoundingRadius = 1.732f * 1.5f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = emissiveMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 6: Checker Cube
+                Vector3 checkerRel = checkerT.Position - camera.Position;
+                Matrix4x4 checkerModel = Matrix4x4.CreateScale(0.8f) * Matrix4x4.CreateFromQuaternion(checkerT.Rotation) * Matrix4x4.CreateTranslation(checkerRel);
+                dynInstances[6] = new GpuInstanceData
+                {
+                    CurrentTransform = checkerModel,
+                    PreviousTransform = checkerModel,
+                    BoundingCenter = checkerRel,
+                    BoundingRadius = 1.732f * 0.8f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = checkerMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 7: Monolith
+                Vector3 monoRel = new Vector3((float)(monoT.WorldX - camX), (float)(monoT.WorldY - camY), (float)(monoT.WorldZ - camZ));
+                Matrix4x4 monoModel = Matrix4x4.CreateScale(2f, 10f, 2f) * Matrix4x4.CreateFromQuaternion(monoT.Rotation) * Matrix4x4.CreateTranslation(monoRel);
+                dynInstances[7] = new GpuInstanceData
+                {
+                    CurrentTransform = monoModel,
+                    PreviousTransform = monoModel,
+                    BoundingCenter = monoRel,
+                    BoundingRadius = 1.732f * 10f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = goldMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 8: Satellite 1
+                Vector3 sat1Rel = new Vector3((float)(sat1T.WorldX - camX), (float)(sat1T.WorldY - camY), (float)(sat1T.WorldZ - camZ));
+                Matrix4x4 sat1Model = Matrix4x4.CreateScale(1.5f) * Matrix4x4.CreateFromQuaternion(sat1T.Rotation) * Matrix4x4.CreateTranslation(sat1Rel);
+                dynInstances[8] = new GpuInstanceData
+                {
+                    CurrentTransform = sat1Model,
+                    PreviousTransform = sat1Model,
+                    BoundingCenter = sat1Rel,
+                    BoundingRadius = 1.732f * 1.5f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = chromeMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                // 9: Satellite 2
+                Vector3 sat2Rel = new Vector3((float)(sat2T.WorldX - camX), (float)(sat2T.WorldY - camY), (float)(sat2T.WorldZ - camZ));
+                Matrix4x4 sat2Model = Matrix4x4.CreateScale(1.5f) * Matrix4x4.CreateFromQuaternion(sat2T.Rotation) * Matrix4x4.CreateTranslation(sat2Rel);
+                dynInstances[9] = new GpuInstanceData
+                {
+                    CurrentTransform = sat2Model,
+                    PreviousTransform = sat2Model,
+                    BoundingCenter = sat2Rel,
+                    BoundingRadius = 1.732f * 1.5f,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = copperMatId,
+                    Flags = 1,
+                    LodBias = 0f,
+                };
+
+                instanceBuffer.SetDynamicInstances(dynInstances);
+            }
+
+            if (time.FrameCount % 15 == 0)
+            {
+                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [G] GPU-Driven: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Foliage: {(foliageEnabled ? "ON (4K)" : "OFF")} | [J] Particles: {(particlesEnabled ? "ON (2K)" : "OFF")}";
+            }
+
             // 6. Immediate-Mode 3D Debug Wireframes
             if (debugWireframeEnabled)
             {
@@ -988,6 +1239,12 @@ public static class Program
                 cmd.Reset();
                 cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
 
+                // Run GPU particle compute physics simulation (Sprint 7b)
+                if (particlesEnabled)
+                {
+                    particleSystem.Simulate(cmd, (float)dt, (float)time.TotalTime);
+                }
+
                 gpuTimer.BeginFrame(cmd, frameSync.CurrentFrame);
                 renderGraph.Reset();
 
@@ -1015,7 +1272,7 @@ public static class Program
                     VkAccessFlags2.None
                 );
 
-                // ForwardRenderer3D schedules Shadows -> Skybox -> PBR Opaque -> Debug Wireframes passes
+                // ForwardRenderer3D schedules Shadows -> Skybox -> PBR Opaque (GPU-Driven Indirect or CPU Forward) -> Debug Wireframes passes
                 forwardRenderer.Render(
                     renderGraph,
                     scene,
@@ -1032,9 +1289,27 @@ public static class Program
                     originShift,
                     worldGrid,
                     _ => cubeMesh,
-                    terrainClipmap: terrainClipmap
+                    terrainClipmap: terrainClipmap,
+                    instanceBuffer: gpuDrivenEnabled ? instanceBuffer : null,
+                    indirectDrawBuffer: gpuDrivenEnabled ? indirectDrawBuffer : null,
+                    gpuCuller: gpuDrivenEnabled ? gpuCuller : null,
+                    hizBuilder: gpuDrivenEnabled ? hizBuilder : null,
+                    depthBuffer: gpuDrivenEnabled ? depthBuffer : null
                 );
                 currentSwapchainTarget = swapchainTarget;
+                currentDepthTarget = depthTarget;
+
+                // Foliage Pass (Sprint 7b - Procedural Wind Grass Field)
+                if (foliageEnabled && foliageSystem.ActiveInstanceCount > 0)
+                {
+                    renderGraph.AddPass("FoliagePass", foliagePassSetup, foliagePassExecute);
+                }
+
+                // GPU Particle Pass (Sprint 7b - Soft Radial Billboard Particles)
+                if (particlesEnabled)
+                {
+                    renderGraph.AddPass("ParticlePass", particlePassSetup, particlePassExecute);
+                }
 
                 // ImGui Diagnostics HUD Pass
                 if (debugOverlay.IsVisible || streamingOverlay.IsVisible)
