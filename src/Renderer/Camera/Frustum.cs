@@ -75,6 +75,16 @@ public sealed class Frustum
     }
 
     /// <summary>
+    /// Gets the specified frustum plane.
+    /// </summary>
+    public Plane GetPlane(PlaneIndex index) => _planes[(int)index];
+
+    /// <summary>
+    /// Gets a read-only span of the 5 frustum planes.
+    /// </summary>
+    public ReadOnlySpan<Plane> Planes => _planes;
+
+    /// <summary>
     /// Constructs a Frustum from a Camera3D instance.
     /// </summary>
     public static Frustum FromCamera(Camera3D camera, float maxDrawDistance = 8000.0f)

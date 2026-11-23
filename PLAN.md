@@ -304,10 +304,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | :--- | :---: | :--- |
 | `src/Renderer/GpuDriven/GeometryPool.cs` | **DONE** | Monolithic shared vertex/index GPU memory pool enabling draw calls across all static meshes without rebinding buffers. (Sprint 5b basic, 7a full). |
 | `src/Renderer/GpuDriven/DynamicInstanceRing.cs` | **DONE** | Ring-buffered per-frame instance buffer region allowing dynamic ECS entities to feed the GPU-driven renderer with current and previous transforms. (Sprint 5b). |
-| `src/Renderer/GpuDriven/InstanceBuffer.cs` | **PLANNED** | GPU storage buffer holding per-instance data: camera-relative float transforms (current & previous), mesh ID, material ID, bounding sphere. (Sprint 7a). |
-| `src/Renderer/GpuDriven/IndirectDrawBuffer.cs` | **PLANNED** | Indirect command buffer populated by compute shader for `vkCmdDrawIndexedIndirectCount` draws. (Sprint 7a). |
-| `src/Renderer/GpuDriven/GpuCuller.cs` | **PLANNED** | Compute shader dispatcher: executes 5-plane frustum culling, max draw distance clamp, LOD selection, and Hi-Z min-reduction occlusion across 5 views. (Sprint 7a). |
-| `src/Renderer/GpuDriven/HiZBuilder.cs` | **PLANNED** | Generates hierarchical depth mip pyramid (Hi-Z) from the depth pre-pass using MIN reduction filters. (Sprint 7a). |
+| `src/Renderer/GpuDriven/InstanceBuffer.cs` | **DONE** | GPU storage buffer holding per-instance data: camera-relative float transforms (current & previous), mesh ID, material ID, bounding sphere. (Sprint 7a). |
+| `src/Renderer/GpuDriven/IndirectDrawBuffer.cs` | **DONE** | Indirect command buffer populated by compute shader for `vkCmdDrawIndexedIndirectCount` draws. (Sprint 7a). |
+| `src/Renderer/GpuDriven/GpuCuller.cs` | **DONE** | Compute shader dispatcher: executes 5-plane frustum culling, max draw distance clamp, LOD selection, and Hi-Z min-reduction occlusion across 5 views. (Sprint 7a). |
+| `src/Renderer/GpuDriven/HiZBuilder.cs` | **DONE** | Generates hierarchical depth mip pyramid (Hi-Z) from the depth pre-pass using MIN reduction filters. (Sprint 7a). |
 
 ### 2.11 3D Graphics, Lighting & Environment (`src/Renderer/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -442,8 +442,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `assets/shaders/skybox.frag` | **DONE** | Procedural gradient sky or prefiltered cubemap shader. (Sprint 5b). |
 | `assets/shaders/debug_line.vert`| **DONE** | 3D debug wireframe vertex shader. (Sprint 5b). |
 | `assets/shaders/debug_line.frag`| **DONE** | Unlit flat-color fragment shader for physics debug lines and bounds. (Sprint 5b). |
-| `assets/shaders/cull.comp` | **PLANNED** | Compute shader for 5-plane frustum culling, max draw distance clamp, LOD selection, Hi-Z min-reduction occlusion, and indirect command generation across 5 views. (Sprint 7a). |
-| `assets/shaders/hiz_build.comp` | **PLANNED** | Compute shader generating hierarchical depth mip pyramid using MIN reduction for reverse-Z. (Sprint 7a). |
+| `assets/shaders/cull.comp` | **DONE** | Compute shader for 5-plane frustum culling, max draw distance clamp, LOD selection, Hi-Z min-reduction occlusion, and indirect command generation across 5 views. (Sprint 7a). |
+| `assets/shaders/hiz_build.comp` | **DONE** | Compute shader generating hierarchical depth mip pyramid using MIN reduction for reverse-Z. (Sprint 7a). |
 | `assets/shaders/light_cull.comp`| **PLANNED** | Compute shader dividing frustum into 3D clusters and assigning point/spot light indices. (Sprint 7b). |
 | `assets/shaders/particle.vert` | **PLANNED** | GPU particle billboard vertex shader with size attenuation. (Sprint 7b). |
 | `assets/shaders/particle.frag` | **PLANNED** | Soft-particle fragment shader with depth fade against depth buffer. (Sprint 7b). |
@@ -475,8 +475,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 128
-- **Current Completion:** **59.5% (Sprint 6b Complete, Sprint 7 Active)**
+- **Total Completed Files:** 134
+- **Current Completion:** **62.3% (Sprint 7a Complete, Sprint 7b Active)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -489,7 +489,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **World Grid & Streaming** | 7 / 7 | **COMPLETE (WorldGrid, StreamingManager, CellLoader, HLOD, DebugOverlay)** |
 | **Terrain System** | 4 / 4 | **COMPLETE (TerrainTile, TerrainClipmap, TerrainMaterial, HeightPyramid)** |
 | **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
-| **GPU-Driven Rendering** | 2 / 6 | **GeometryPool, DynamicInstanceRing Complete** (Sprint 5b, 7a) |
+| **GPU-Driven Rendering** | 6 / 6 | **COMPLETE (GeometryPool, DynamicInstanceRing, InstanceBuffer, IndirectDrawBuffer, GpuCuller, HiZBuilder)** |
 | **3D Graphics, Lighting & Environment** | 15 / 28 | **ForwardRenderer3D, Skybox, DebugRenderer, ShadowMap, Material, LightEnv Complete** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 7 / 7 | **COMPLETE (Scene, Entity, Transform, MeshRenderer, Camera, Light, RigidBody)** |
@@ -499,7 +499,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
 | **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
-| **Asset Shaders** | 16 / 39 | **terrain.*, pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.* Complete** |
+| **Asset Shaders** | 18 / 39 | **terrain.*, pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.*, cull.comp, hiz_build.comp Complete** |
 
 ---
 
@@ -732,7 +732,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 7a: GPU-Driven Rendering [ACTIVE / IN PROGRESS]                           │
+│ SPRINT 7a: GPU-Driven Rendering [COMPLETED]                                      │
 │  - InstanceBuffer, IndirectDrawBuffer (vkCmdDrawIndexedIndirectCount)           │
 │  - GpuCuller (5 views: main + 4 cascades, LOD selection D24), HiZBuilder         │
 │  - Velocity output in opaque pass with previous-frame transforms (D25)           │
@@ -742,7 +742,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 7b: Scalable Lighting, Foliage & Transparency                             │
+│ SPRINT 7b: Scalable Lighting, Foliage & Transparency [ACTIVE / NEXT]             │
 │  - CascadedShadowMap (4 cascades, texel snapping, alpha-test shadow), SpotLight  │
 │  - ClusteredLightCulling (3D cluster grid compute pass), IblProbe (IBL shaders)  │
 │  - FoliageSystem, FoliageInstanceData, FoliageCooker, lod_dither.glsl            │
@@ -853,3 +853,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-51** | Sprint 6a | Completed Sprint 6a: Implemented CellCoord (fast packing, FNV-1a GUIDs, distance metrics, neighbor iterator), CellFormat (binary structs for CookedCellHeader, instances, colliders, audio), WorldConstants, WorldConfig (rings, velocity lead, 900m prefetch cap), WorldCell lifecycle state machine, WorldGrid 2D sparse spatial hash grid, CellLoader memory-mapped decoder, CellCooker binary payload baker, tools/Jatayu.WorldGen/ procedural generator (.glb models & cell scatter into .jpak), StreamingManager (directional queue prioritization along velocity, 150m hysteresis, 1ms budget finalization), StreamingDebugOverlay 2D radar visualizer, and ForwardRenderer3D cell instance integration. 98/98 unit tests passing and hardware verification passing. |
 | **CL-52** | Sprint 6b | Completed Sprint 6b: Implemented TerrainTile (256m tiles covering 2x2 cells, TileCoord = CellCoord / 2 per D15, bilinear height interpolation, origin shifting, .jtile binary codec), TerrainClipmap (concentric nested grid rings with continuous geomorphing, D22 unified renderer), TerrainMaterial (4-layer splat mapping, triplanar cliff blend parameters), TerrainHeightPyramid (Ring C far-field elevation mip pyramid), HeightfieldCooker (elevation bounds calculation, .jtile payload baking), HlodProxyCluster & HlodManager (Ring B 600m–2,000m proxy activation), HlodCooker (.jhlod binary cooker), ImpostorCooker (8-angle billboard atlas layout and view angle selection), TextureResidencyState & TextureStreamer (step-of-2 mip transitions per D21, permanent resident tail protection <= 64x64 per D5, atomic bindless swaps, VRAM pressure fallback), shaders (terrain.vert & terrain.frag), ForwardRenderer3D terrain pipeline and clipmap draw loop, and 15 new unit tests (113/113 passing) and RenderSmoke CHECK 7 verification passing. |
 | **CL-53** | Sprint 7 | Planned Sprint 7 (GPU-Driven Rendering & Scalable Lighting): Structured into Phase 7a (InstanceBuffer, IndirectDrawBuffer, HiZBuilder, GpuCuller 5-view culling, multidraw indirect conversion) and Phase 7b (CascadedShadowMap, ClusteredLightCulling, IblProbe, FoliageSystem, TransparentPass, ParticleSystem). Updated progress tracking dashboard to 128 / 215 completed files (59.5%). |
+| **CL-54** | Sprint 7a | Completed Sprint 7a: Implemented GPU-Driven Rendering Foundation. Unified 160-byte InstanceBuffer (Current & Previous transforms for continuous TAA velocity vectors per D25, BoundingCenter/Radius, MeshId, MaterialId, Flags, LodBias), multi-view IndirectDrawBuffer (5 views: Main Camera + 4 Cascades, 65,536 draws/view, vkCmdDrawIndexedIndirectCount support, CPU/GPU draw count reset, execution barrier), HiZBuilder with Reverse-Z MIN reduction sampler and compute shader hiz_build.comp, GpuCuller 5-view compute culler with cull.comp (5-plane frustum test, max draw distance clamp, LOD selection per D24, Reverse-Z Hi-Z occlusion test, atomic indirect draw compaction), multi-LOD GeometryPool with MeshLodRecord (48B) and MeshLodBuffer, and conversion of ForwardRenderer3D to vkCmdDrawIndexedIndirectCount with CPU draw fallback. Added GpuDrivenTests (121/121 unit tests passing) and hardware-verified CHECK 8 in Jatayu.RenderSmoke on NVIDIA GeForce RTX 5060 Ti. Updated dashboard to 134 / 215 files (62.3%). |

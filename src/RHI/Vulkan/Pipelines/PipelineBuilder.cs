@@ -251,4 +251,53 @@ public sealed class PipelineBuilder
             }
         }
     }
+
+    /// <summary>
+    /// Builds and creates a native Vulkan compute pipeline.
+    /// </summary>
+    public static unsafe VulkanPipeline CreateComputePipeline(
+        VulkanContext context,
+        VkPipelineLayout layout,
+        VkShaderModule computeShaderModule,
+        string entryPoint = "main",
+        VkPipelineCache cache = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (layout.VkHandle == 0)
+            throw new ArgumentException("PipelineLayout must not be null.", nameof(layout));
+        if (computeShaderModule.VkHandle == 0)
+            throw new ArgumentException("ComputeShaderModule must not be null.", nameof(computeShaderModule));
+
+        byte[] nameBytes = System.Text.Encoding.UTF8.GetBytes(entryPoint + "\0");
+        fixed (byte* pName = nameBytes)
+        {
+            var stageInfo = new VkPipelineShaderStageCreateInfo
+            {
+                Stage = VkShaderStageFlags.ComputeBit,
+                Module = computeShaderModule,
+                Name = (byte*)pName,
+            };
+
+            var createInfo = new VkComputePipelineCreateInfo
+            {
+                Stage = stageInfo,
+                Layout = layout,
+            };
+
+            VkPipeline pipeline;
+            var res = context.Device.PInvoke.vkCreateComputePipelines.Invoke(
+                context.Device.Handle,
+                cache,
+                1,
+                &createInfo,
+                null,
+                &pipeline
+            );
+
+            if (res != VkResult.Success)
+                throw new InvalidOperationException($"Failed to create compute pipeline: {res}");
+
+            return new VulkanPipeline(context, pipeline, layout, VkPipelineBindPoint.Compute);
+        }
+    }
 }

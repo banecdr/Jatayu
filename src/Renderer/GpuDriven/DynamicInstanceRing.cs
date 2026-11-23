@@ -14,15 +14,19 @@ using Jatayu.RHI.Vulkan.Memory;
 namespace Jatayu.Renderer.GpuDriven;
 
 /// <summary>
-/// Packed 144-byte GPU instance data struct holding current and previous camera-relative transforms (D25).
+/// Packed 160-byte GPU instance data struct holding current and previous camera-relative transforms, bounds, mesh/material IDs (D25).
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 144)]
+[StructLayout(LayoutKind.Sequential, Size = 160)]
 public struct GpuInstanceData
 {
     public Matrix4x4 CurrentTransform;  // 64 bytes: Camera-relative float4x4 transform
     public Matrix4x4 PreviousTransform; // 64 bytes: Previous frame transform for TAA motion vectors
     public Vector3 BoundingCenter;      // 12 bytes: Camera-relative bounding center
     public float BoundingRadius;        // 4 bytes: Bounding sphere radius
+    public uint MeshId;                 // 4 bytes: Mesh index in GeometryPool/MeshLodTable
+    public uint MaterialId;             // 4 bytes: Material ID in MaterialTable
+    public uint Flags;                  // 4 bytes: Bit 0 = CastShadow, Bit 1 = Dynamic, Bit 2 = TwoSided
+    public float LodBias;               // 4 bytes: Screen-space LOD bias offset
 }
 
 /// <summary>

@@ -58,7 +58,8 @@ public class StreamingManagerTests
         var config = new WorldConfig
         {
             LoadRadiusRingA = 600f,
-            UnloadRadiusRingA = 750f
+            UnloadRadiusRingA = 750f,
+            MaxConcurrentLoadingJobs = 0
         };
         using var streamer = new StreamingManager(grid, config);
 

@@ -29,6 +29,7 @@ using Jatayu.RHI.Vulkan.Context;
 using Jatayu.RHI.Vulkan.Descriptors;
 using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Pipelines;
+using Jatayu.RHI.Vulkan.Textures;
 using Jatayu.Scene;
 using Jatayu.Scene.Components;
 using Jatayu.AssetFormats;
@@ -39,15 +40,18 @@ using Jatayu.World;
 namespace Jatayu.Renderer;
 
 /// <summary>
-/// Push constants submitted to the PBR vertex & fragment shaders (196 bytes).
+/// Push constants submitted to the PBR vertex & fragment shaders (208 bytes).
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 196)]
+[StructLayout(LayoutKind.Sequential, Size = 208)]
 public struct PbrPushConstants
 {
     public Matrix4x4 ModelMatrix;
     public Matrix4x4 ViewProjMatrix;
     public Matrix4x4 LightViewProj;
     public uint MaterialId;
+    public uint UseInstanceBuffer;
+    public uint Padding0;
+    public uint Padding1;
 }
 
 /// <summary>
@@ -141,6 +145,17 @@ public sealed class ForwardRenderer3D : IDisposable
     private readonly Action<RenderPassContext> _pbrPassExecute;
     private readonly Action<RenderPassBuilder> _debugPassSetup;
     private readonly Action<RenderPassContext> _debugPassExecute;
+    private readonly Action<RenderPassBuilder> _cullPassSetup;
+    private readonly Action<RenderPassContext> _cullPassExecute;
+
+    // GPU-Driven Resources
+    private readonly GpuBuffer _dummyInstanceBuffer;
+    private InstanceBuffer? _currentInstanceBuffer;
+    private IndirectDrawBuffer? _currentIndirectDrawBuffer;
+    private GeometryPool? _currentGeometryPool;
+    private GpuCuller? _currentGpuCuller;
+    private HiZBuilder? _currentHiZBuilder;
+    private DepthBuffer? _currentDepthBuffer;
 
     // Per-frame pass arguments stored on instance to avoid lambda captures
     private RgTextureHandle _currentShadowDepthHandle;
@@ -259,9 +274,14 @@ public sealed class ForwardRenderer3D : IDisposable
         CreatePipelineLayouts(bindlessTable.Layout);
 
         // 4. Compile Shaders & Build Pipelines
-        BuildPipelines(colorFormat);
+        // 5. Allocate dummy instance buffer for fallback (160 bytes, CpuToGpu)
+        _dummyInstanceBuffer = _allocator.CreateBuffer(
+            (ulong)Marshal.SizeOf<GpuInstanceData>(),
+            VkBufferUsageFlags.StorageBufferBit | VkBufferUsageFlags.TransferDstBit,
+            VmaMemoryUsage.CpuToGpu
+        );
 
-        // 5. Preallocate RenderPass Callbacks (0 allocations per frame)
+        // 6. Preallocate RenderPass Callbacks (0 allocations per frame)
         _shadowPassSetup = SetupShadowPass;
         _shadowPassExecute = ExecuteShadowPass;
         _skyboxPassSetup = SetupSkyboxPass;
@@ -270,11 +290,13 @@ public sealed class ForwardRenderer3D : IDisposable
         _pbrPassExecute = ExecutePbrPass;
         _debugPassSetup = SetupDebugPass;
         _debugPassExecute = ExecuteDebugPass;
+        _cullPassSetup = SetupCullPass;
+        _cullPassExecute = ExecuteCullPass;
     }
 
     private unsafe void CreateDescriptorSetLayout()
     {
-        var bindings = stackalloc VkDescriptorSetLayoutBinding[3];
+        var bindings = stackalloc VkDescriptorSetLayoutBinding[4];
 
         // Binding 0: Uniform buffer for LightEnvironment
         bindings[0] = new VkDescriptorSetLayoutBinding
@@ -303,9 +325,18 @@ public sealed class ForwardRenderer3D : IDisposable
             StageFlags = VkShaderStageFlags.FragmentBit,
         };
 
+        // Binding 3: Storage buffer for InstanceBuffer (GPU-driven)
+        bindings[3] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 3,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+        };
+
         var layoutInfo = new VkDescriptorSetLayoutCreateInfo
         {
-            BindingCount = 3,
+            BindingCount = 4,
             Bindings = bindings,
         };
 
@@ -315,7 +346,7 @@ public sealed class ForwardRenderer3D : IDisposable
         var poolSizes = stackalloc VkDescriptorPoolSize[3];
         poolSizes[0] = new VkDescriptorPoolSize { Type = VkDescriptorType.UniformBuffer, DescriptorCount = 2 };
         poolSizes[1] = new VkDescriptorPoolSize { Type = VkDescriptorType.CombinedImageSampler, DescriptorCount = 2 };
-        poolSizes[2] = new VkDescriptorPoolSize { Type = VkDescriptorType.StorageBuffer, DescriptorCount = 2 };
+        poolSizes[2] = new VkDescriptorPoolSize { Type = VkDescriptorType.StorageBuffer, DescriptorCount = 4 };
 
         var poolInfo = new VkDescriptorPoolCreateInfo
         {
@@ -528,7 +559,12 @@ public sealed class ForwardRenderer3D : IDisposable
         OriginShift? originShift = null,
         WorldGrid? worldGrid = null,
         Func<AssetGuid, Mesh.Mesh?>? meshResolver = null,
-        TerrainClipmap? terrainClipmap = null)
+        TerrainClipmap? terrainClipmap = null,
+        InstanceBuffer? instanceBuffer = null,
+        IndirectDrawBuffer? indirectDrawBuffer = null,
+        GpuCuller? gpuCuller = null,
+        HiZBuilder? hizBuilder = null,
+        DepthBuffer? depthBuffer = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(scene);
@@ -567,7 +603,16 @@ public sealed class ForwardRenderer3D : IDisposable
             Range = new ByteSize64((ulong)(sizeof(GpuMaterialData) * materialTable.Count)),
         };
 
-        var writes = stackalloc VkWriteDescriptorSet[3];
+        VkBuffer instBufferHandle = instanceBuffer?.Buffer.Handle ?? _dummyInstanceBuffer.Handle;
+        ulong instBufferSize = instanceBuffer != null ? instanceBuffer.Buffer.SizeInBytes : (ulong)Marshal.SizeOf<GpuInstanceData>();
+        var instBufferInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = instBufferHandle,
+            Offset = new ByteSize64(0),
+            Range = new ByteSize64(instBufferSize),
+        };
+
+        var writes = stackalloc VkWriteDescriptorSet[4];
         writes[0] = new VkWriteDescriptorSet
         {
             DstSet = _frameDescriptorSet,
@@ -592,8 +637,16 @@ public sealed class ForwardRenderer3D : IDisposable
             DescriptorType = VkDescriptorType.StorageBuffer,
             BufferInfo = &materialBufferInfo,
         };
+        writes[3] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 3,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            BufferInfo = &instBufferInfo,
+        };
 
-        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 3, writes, 0, null);
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 4, writes, 0, null);
 
         // 3. Camera-Relative Frustum Culling & Matrix Extraction
         _visibleItems.Clear();
@@ -700,17 +753,29 @@ public sealed class ForwardRenderer3D : IDisposable
         _currentInvVp = _skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
         _currentTerrainClipmap = terrainClipmap;
         _currentCameraPos = camera.Position;
+        _currentInstanceBuffer = instanceBuffer;
+        _currentIndirectDrawBuffer = indirectDrawBuffer;
+        _currentGeometryPool = geometryPool;
+        _currentGpuCuller = gpuCuller;
+        _currentHiZBuilder = hizBuilder;
+        _currentDepthBuffer = depthBuffer;
 
-        // 5. Register Shadow Pass
+        // 5. Register GPU Compute Culling Pass if GPU-driven pipeline is active
+        if (gpuCuller != null && instanceBuffer != null && indirectDrawBuffer != null && instanceBuffer.TotalCount > 0)
+        {
+            graph.AddPass("GpuCullPass", _cullPassSetup, _cullPassExecute);
+        }
+
+        // 6. Register Shadow Pass
         if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
         {
             graph.AddPass("ShadowPass", _shadowPassSetup, _shadowPassExecute);
         }
 
-        // 6. Register Skybox Pass (Renders at Reverse-Z infinity: Z = 0.0)
+        // 7. Register Skybox Pass (Renders at Reverse-Z infinity: Z = 0.0)
         graph.AddPass("SkyboxPass", _skyboxPassSetup, _skyboxPassExecute);
 
-        // 7. Register PBR Opaque Pass
+        // 8. Register PBR Opaque Pass
         graph.AddPass("PbrOpaquePass", _pbrPassSetup, _pbrPassExecute);
 
         // 8. Register Debug Wireframe Pass
@@ -908,15 +973,15 @@ public sealed class ForwardRenderer3D : IDisposable
             );
         }
 
-        for (int i = 0; i < _visibleItems.Count; i++)
+        if (_currentIndirectDrawBuffer != null && _currentInstanceBuffer != null && _currentGeometryPool != null && _currentInstanceBuffer.TotalCount > 0)
         {
-            var item = _visibleItems[i];
             var pc = new PbrPushConstants
             {
-                ModelMatrix = item.CameraRelativeModel,
+                ModelMatrix = Matrix4x4.Identity,
                 ViewProjMatrix = _currentVp,
                 LightViewProj = _currentShadowLightVp,
-                MaterialId = item.MaterialId,
+                MaterialId = 0,
+                UseInstanceBuffer = 1,
             };
 
             CommandBufferExtensions.PushConstants(
@@ -927,12 +992,94 @@ public sealed class ForwardRenderer3D : IDisposable
                 new ReadOnlySpan<PbrPushConstants>(&pc, 1)
             );
 
-            _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-            _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+            _vertexBufferArray[0] = _currentGeometryPool.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(0);
             cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-            cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
-            cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+            cmd.BindIndexBuffer(_currentGeometryPool.IndexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt32);
+
+            ByteSize64 drawOffset = _currentIndirectDrawBuffer.GetCommandOffset(0);
+            ByteSize64 countOffset = _currentIndirectDrawBuffer.GetCountOffset(0);
+            int maxDraws = _currentIndirectDrawBuffer.MaxDrawsPerView;
+            int stride = sizeof(VkDrawIndexedIndirectCommand);
+
+            _context.Device.PInvoke.vkCmdDrawIndexedIndirectCount.Invoke(
+                cmd.Handle,
+                _currentIndirectDrawBuffer.CommandBuffer.Handle,
+                drawOffset,
+                _currentIndirectDrawBuffer.CountBuffer.Handle,
+                countOffset,
+                maxDraws,
+                stride
+            );
         }
+        else
+        {
+            for (int i = 0; i < _visibleItems.Count; i++)
+            {
+                var item = _visibleItems[i];
+                var pc = new PbrPushConstants
+                {
+                    ModelMatrix = item.CameraRelativeModel,
+                    ViewProjMatrix = _currentVp,
+                    LightViewProj = _currentShadowLightVp,
+                    MaterialId = item.MaterialId,
+                    UseInstanceBuffer = 0,
+                };
+
+                CommandBufferExtensions.PushConstants(
+                    cmd,
+                    _pbrPipelineLayout,
+                    VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+                    new ByteSize(0),
+                    new ReadOnlySpan<PbrPushConstants>(&pc, 1)
+                );
+
+                _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+                cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+            }
+        }
+    }
+
+    private void SetupCullPass(RenderPassBuilder builder)
+    {
+        builder.HasSideEffects();
+    }
+
+    private unsafe void ExecuteCullPass(RenderPassContext ctx)
+    {
+        if (_currentGpuCuller == null || _currentInstanceBuffer == null || _currentIndirectDrawBuffer == null || _currentGeometryPool == null)
+            return;
+
+        var cmd = ctx.CommandBuffer.Handle;
+
+        // 1. If HiZBuilder and DepthBuffer are supplied, build Hi-Z depth pyramid
+        if (_currentHiZBuilder != null && _currentDepthBuffer != null)
+        {
+            _currentHiZBuilder.Build(cmd, _currentDepthBuffer);
+        }
+
+        // 2. Clear indirect draw counts on GPU
+        _currentIndirectDrawBuffer.ResetCountsGpu(cmd);
+
+        // 3. Dispatch GPU compute culling for Main Camera (view 0)
+        _currentGpuCuller.CullView(
+            cmd,
+            0,
+            _frustum,
+            _currentCameraPos,
+            5000f,
+            _currentVp,
+            _currentInstanceBuffer,
+            _currentIndirectDrawBuffer,
+            _currentGeometryPool,
+            _currentHiZBuilder
+        );
+
+        // 4. Emit execution barrier ensuring indirect commands and counts are visible to draw calls
+        _currentIndirectDrawBuffer.EmitExecutionBarrier(cmd);
     }
 
     private void SetupDebugPass(RenderPassBuilder builder)
@@ -1012,6 +1159,7 @@ public sealed class ForwardRenderer3D : IDisposable
         if (_frameDescriptorLayout.VkHandle != 0) device.DestroyDescriptorSetLayout(_frameDescriptorLayout, null);
 
         _lightEnvironmentBuffer?.Dispose();
+        _dummyInstanceBuffer?.Dispose();
 
         if (_ownsShaderCompiler)
         {

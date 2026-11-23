@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using Brutal;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Abstractions;
 using Jatayu.RHI.Vulkan.Context;
@@ -155,11 +156,23 @@ public sealed class DescriptorAllocator : IDisposable
     {
         ArgumentNullException.ThrowIfNull(sampler);
         ArgumentNullException.ThrowIfNull(texture);
+        WriteImage(set, binding, sampler.Handle, texture.ImageView, layout);
+    }
 
+    /// <summary>
+    /// Updates a descriptor set binding with a combined image sampler from raw Vulkan handles.
+    /// </summary>
+    public unsafe void WriteImage(
+        VkDescriptorSet set,
+        int binding,
+        VkSampler sampler,
+        VkImageView imageView,
+        VkImageLayout layout = VkImageLayout.ShaderReadOnlyOptimal)
+    {
         var imageInfo = new VkDescriptorImageInfo
         {
-            Sampler = sampler.Handle,
-            ImageView = texture.ImageView,
+            Sampler = sampler,
+            ImageView = imageView,
             ImageLayout = layout,
         };
 
@@ -171,6 +184,78 @@ public sealed class DescriptorAllocator : IDisposable
             DescriptorCount = 1,
             DescriptorType = VkDescriptorType.CombinedImageSampler,
             ImageInfo = &imageInfo,
+        };
+
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(
+            _context.Device.Handle,
+            1,
+            &write,
+            0,
+            null
+        );
+    }
+
+    /// <summary>
+    /// Updates a descriptor set binding with a storage image.
+    /// </summary>
+    public unsafe void WriteStorageImage(
+        VkDescriptorSet set,
+        int binding,
+        VkImageView imageView,
+        VkImageLayout layout = VkImageLayout.General)
+    {
+        var imageInfo = new VkDescriptorImageInfo
+        {
+            Sampler = default,
+            ImageView = imageView,
+            ImageLayout = layout,
+        };
+
+        var write = new VkWriteDescriptorSet
+        {
+            DstSet = set,
+            DstBinding = binding,
+            DstArrayElement = 0,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageImage,
+            ImageInfo = &imageInfo,
+        };
+
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(
+            _context.Device.Handle,
+            1,
+            &write,
+            0,
+            null
+        );
+    }
+
+    /// <summary>
+    /// Updates a descriptor set binding with a storage or uniform buffer.
+    /// </summary>
+    public unsafe void WriteBuffer(
+        VkDescriptorSet set,
+        int binding,
+        VkBuffer buffer,
+        ulong offset = 0,
+        ulong range = ~0UL,
+        VkDescriptorType descriptorType = VkDescriptorType.StorageBuffer)
+    {
+        var bufferInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = buffer,
+            Offset = new ByteSize64(offset),
+            Range = new ByteSize64(range),
+        };
+
+        var write = new VkWriteDescriptorSet
+        {
+            DstSet = set,
+            DstBinding = binding,
+            DstArrayElement = 0,
+            DescriptorCount = 1,
+            DescriptorType = descriptorType,
+            BufferInfo = &bufferInfo,
         };
 
         _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(

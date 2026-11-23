@@ -9,6 +9,8 @@ layout(location = 4) in vec2 vTexCoord;
 layout(location = 5) in vec4 vColor;
 layout(location = 6) in vec4 vShadowCoord;
 layout(location = 7) flat in uint vMaterialId;
+layout(location = 8) in vec4 vCurrClipPos;
+layout(location = 9) in vec4 vPrevClipPos;
 
 layout(location = 0) out vec4 outColor;
 

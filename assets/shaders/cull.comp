@@ -1,0 +1,157 @@
+#version 450
+
+// ==================================================================================================
+// Jatayu Engine - GPU-Driven Architecture
+// Shader: cull.comp
+// Role: 5-Plane frustum culling, distance clamp, LOD selection, and Reverse-Z Hi-Z occlusion culling (Sprint 7a).
+// ==================================================================================================
+
+layout(local_size_x = 64) in;
+
+struct GpuInstanceData {
+    mat4 CurrentTransform;
+    mat4 PreviousTransform;
+    vec3 BoundingCenter;
+    float BoundingRadius;
+    uint MeshId;
+    uint MaterialId;
+    uint Flags;
+    float LodBias;
+};
+
+struct VkDrawIndexedIndirectCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+struct MeshLodLevel {
+    uint indexCount;
+    uint firstIndex;
+    int vertexOffset;
+    float lodThreshold;
+};
+
+struct MeshLodRecord {
+    MeshLodLevel lods[3];
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer InstanceBuffer {
+    GpuInstanceData instances[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer IndirectDrawBuffer {
+    VkDrawIndexedIndirectCommand commands[];
+};
+
+layout(std430, set = 0, binding = 2) buffer DrawCountBuffer {
+    uint drawCounts[];
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer MeshLodBuffer {
+    MeshLodRecord meshLods[];
+};
+
+layout(set = 0, binding = 4) uniform sampler2D u_HiZPyramid;
+
+layout(set = 0, binding = 5) uniform CullUniforms {
+    vec4 FrustumPlanes[5];     // Left, Right, Bottom, Top, Near
+    vec4 CameraPosAndMaxDist;  // xyz = CameraPos, w = MaxDrawDistance
+    mat4 ViewProj;             // Camera-relative View-Projection matrix
+    vec2 HiZScreenSize;        // Hi-Z base dimensions (0 if occlusion disabled)
+    vec2 Padding;
+} u_Uniforms;
+
+layout(push_constant) uniform PushConstants {
+    uint TotalInstanceCount;
+    uint ViewIndex;
+    uint MaxDrawsPerView;
+    uint BaseCommandOffset;
+} u_Push;
+
+void main() {
+    uint threadId = gl_GlobalInvocationID.x;
+    if (threadId >= u_Push.TotalInstanceCount) {
+        return;
+    }
+
+    GpuInstanceData inst = instances[threadId];
+    vec3 center = inst.BoundingCenter;
+    float radius = inst.BoundingRadius;
+
+    // 1. 5-Plane Frustum Culling
+    for (int i = 0; i < 5; i++) {
+        if (dot(u_Uniforms.FrustumPlanes[i].xyz, center) + u_Uniforms.FrustumPlanes[i].w < -radius) {
+            return; // Outside frustum
+        }
+    }
+
+    // 2. Max Draw Distance Clamp
+    float dist = length(center);
+    if (dist - radius > u_Uniforms.CameraPosAndMaxDist.w) {
+        return;
+    }
+
+    // 3. LOD Selection (Decision D24)
+    MeshLodRecord mesh = meshLods[inst.MeshId];
+    uint lodIndex = 0;
+    if (dist > mesh.lods[0].lodThreshold && mesh.lods[1].indexCount > 0) {
+        lodIndex = 1;
+        if (dist > mesh.lods[1].lodThreshold && mesh.lods[2].indexCount > 0) {
+            lodIndex = 2;
+        }
+    }
+
+    MeshLodLevel selectedLod = mesh.lods[lodIndex];
+    if (selectedLod.indexCount == 0) {
+        return;
+    }
+
+    // 4. Hi-Z Occlusion Culling (Reverse-Z MIN reduction)
+    if (u_Uniforms.HiZScreenSize.x > 0.0) {
+        vec4 clipCenter = u_Uniforms.ViewProj * vec4(center, 1.0);
+        if (clipCenter.w > 0.001) {
+            // Projected screen-space radius using projection scaling
+            float projRadius = (radius / clipCenter.w) * abs(u_Uniforms.ViewProj[1][1]);
+            vec2 screenUv = (clipCenter.xy / clipCenter.w) * 0.5 + 0.5;
+
+            vec2 minUv = clamp(screenUv - vec2(projRadius), 0.0, 1.0);
+            vec2 maxUv = clamp(screenUv + vec2(projRadius), 0.0, 1.0);
+            vec2 aabbPixels = (maxUv - minUv) * u_Uniforms.HiZScreenSize;
+
+            float maxDim = max(aabbPixels.x, aabbPixels.y);
+            if (maxDim > 1.0) {
+                float mip = clamp(ceil(log2(maxDim)), 0.0, 12.0);
+
+                // Sample 4 taps covering the projected AABB
+                float s0 = textureLod(u_HiZPyramid, vec2(minUv.x, minUv.y), mip).r;
+                float s1 = textureLod(u_HiZPyramid, vec2(maxUv.x, minUv.y), mip).r;
+                float s2 = textureLod(u_HiZPyramid, vec2(minUv.x, maxUv.y), mip).r;
+                float s3 = textureLod(u_HiZPyramid, vec2(maxUv.x, maxUv.y), mip).r;
+                float hizDepth = min(min(s0, s1), min(s2, s3));
+
+                // Under Reverse-Z, smaller depth = farther away.
+                // Sphere closest point depth in NDC:
+                float sphereNearestZ = (clipCenter.z + radius) / clipCenter.w;
+
+                // If the closest point of our sphere is farther than the furthest occluder, it is fully occluded!
+                if (sphereNearestZ < hizDepth) {
+                    return; // Culled!
+                }
+            }
+        }
+    }
+
+    // 5. Output Surviving Draw Command
+    uint drawIndex = atomicAdd(drawCounts[u_Push.ViewIndex], 1);
+    if (drawIndex < u_Push.MaxDrawsPerView) {
+        uint cmdIdx = u_Push.BaseCommandOffset + drawIndex;
+        commands[cmdIdx].indexCount = selectedLod.indexCount;
+        commands[cmdIdx].instanceCount = 1;
+        commands[cmdIdx].firstIndex = selectedLod.firstIndex;
+        commands[cmdIdx].vertexOffset = selectedLod.vertexOffset;
+        commands[cmdIdx].firstInstance = threadId; // Pass instance index to vertex shader
+    }
+}
