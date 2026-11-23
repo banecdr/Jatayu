@@ -27,7 +27,7 @@ namespace Jatayu.RHI.Vulkan.Sync;
 /// <summary>
 /// Wraps a Vulkan 1.3 Timeline Semaphore for fine-grained 64-bit counter synchronization.
 /// </summary>
-public sealed class TimelineSemaphore : IDisposable
+public sealed class TimelineSemaphore : ITimelineProgress, IDisposable
 {
     private bool _disposed;
 
