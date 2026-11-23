@@ -274,6 +274,8 @@ public sealed class ForwardRenderer3D : IDisposable
         CreatePipelineLayouts(bindlessTable.Layout);
 
         // 4. Compile Shaders & Build Pipelines
+        BuildPipelines(colorFormat);
+
         // 5. Allocate dummy instance buffer for fallback (160 bytes, CpuToGpu)
         _dummyInstanceBuffer = _allocator.CreateBuffer(
             (ulong)Marshal.SizeOf<GpuInstanceData>(),
