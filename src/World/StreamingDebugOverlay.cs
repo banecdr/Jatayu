@@ -67,39 +67,69 @@ public sealed class StreamingDebugOverlay
             if (ImGui.CollapsingHeader("Streaming Metrics"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
                 if (Utf8.TryWrite(buf, $"Speed:           {streamingManager.CurrentSpeedMps:F1} m/s ({streamingManager.CurrentSpeedMps * 3.6f:F1} km/h)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"Effective Radius: {streamingManager.EffectiveLoadRadius:F0} m (Base: {config.LoadRadiusRingA:F0}m, Cap: {config.PrefetchRadiusCap:F0}m)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"Active Cells:    {streamingManager.ActiveCellCount} / {grid.TotalCellCount}", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(_colGreen, buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"In-Flight Loads: {streamingManager.InFlightCount}", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(streamingManager.InFlightCount > 0 ? _colYellow : _colCyan, buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"Pending Finalize:{streamingManager.ReadyToFinalizeCount}", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"Streaming Tick:  {streamingManager.LastStreamingTimeMs:F3} ms", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(_colCyan, buf[..w]);
+                }
             }
 
             // 1b. Terrain Clipmap Telemetry (Sprint 6b)
             if (terrainClipmap != null && ImGui.CollapsingHeader("Terrain Clipmap Telemetry"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
                 if (Utf8.TryWrite(buf, $"Clipmap Rings:   {Jatayu.Terrain.TerrainClipmap.DefaultRingCount} (256m - 8,192m span)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"Resident Tiles:  {terrainClipmap.ResidentTileCount} (256m tiles)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(_colGreen, buf[..w]);
+                }
 
                 float elev = terrainClipmap.SampleElevation(playerPos.X, playerPos.Z);
                 if (Utf8.TryWrite(buf, $"Ground Elevation: {elev:F1} m (Bilinear/Pyramid)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(_colCyan, buf[..w]);
+                }
 
                 if (Utf8.TryWrite(buf, $"LOD Ring Colors:  {(ringDebugColors ? "ENABLED [F4]" : "OFF (PBR Splat) [F4]")}", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(ringDebugColors ? _colYellow : _colCyan, buf[..w]);
+                }
             }
 
             // 2. 2D Streaming Mini-Map

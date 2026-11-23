@@ -704,7 +704,7 @@ public static class Program
         };
         Action<RenderPassContext> imguiPassExecute = ctx =>
         {
-            imguiBackend.Render(ctx.CommandBuffer);
+            imguiBackend.Render(ctx.CommandBuffer, frameSync.CurrentFrame);
         };
 
         Action<RenderPassBuilder> presentPassSetup = setup =>

@@ -15,6 +15,7 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in float inMorphFactor;
 layout(location = 4) in float inRingIndex;
+layout(location = 5) in vec2 inGridPos;
 
 layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     vec3 SunDirection;
@@ -51,8 +52,18 @@ vec3 getRingColor(int r)
 
 void main()
 {
+    // Eliminate Z-fighting by discarding the inner region of outer rings (already drawn by finer ring)
+    if (inRingIndex > 0.5)
+    {
+        vec2 absGrid = abs(inGridPos);
+        if (absGrid.x < 0.245 && absGrid.y < 0.245)
+        {
+            discard;
+        }
+    }
+
     vec3 N = normalize(inNormal);
-    vec3 L = normalize(uLight.SunDirection);
+    vec3 L = normalize(-uLight.SunDirection); // Direction pointing towards sunlight source
 
     // Multi-layer procedural splat blending based on slope (N.y)
     float slope = clamp(1.0 - N.y, 0.0, 1.0);
@@ -69,15 +80,16 @@ void main()
     if (pc.TerrainParams.y > 0.5)
     {
         vec3 ringColor = getRingColor(int(inRingIndex + 0.5));
-        albedo = mix(albedo, ringColor, 0.65);
+        albedo = mix(albedo, ringColor, 0.75);
     }
 
-    // Directional diffuse
+    // Directional diffuse (calibrated for viewport dynamic range)
     float NdotL = max(dot(N, L), 0.0);
-    vec3 diffuse = uLight.SunColor * NdotL * uLight.SunIntensity;
+    vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
+    vec3 diffuse = lightRadiance * NdotL;
 
-    // Hemispherical ambient
-    vec3 ambient = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, N.y * 0.5 + 0.5) * uLight.AmbientIntensity;
+    // Hemispherical ambient (calibrated for clear visibility in shaded valleys)
+    vec3 ambient = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, N.y * 0.5 + 0.5) * (uLight.AmbientIntensity * 2.2);
 
     vec3 finalColor = albedo * (diffuse + ambient);
     outColor = vec4(finalColor, 1.0);

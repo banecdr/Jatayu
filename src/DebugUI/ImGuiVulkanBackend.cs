@@ -54,10 +54,11 @@ public sealed class ImGuiVulkanBackend : IDisposable
     private readonly VkPipelineLayout _pipelineLayout;
     private readonly VulkanPipeline _pipeline;
 
-    private GpuBuffer? _vertexBuffer;
-    private GpuBuffer? _indexBuffer;
-    private int _vertexCount;
-    private int _indexCount;
+    public const int MaxFramesInFlight = 2;
+    private readonly GpuBuffer?[] _vertexBuffers = new GpuBuffer?[MaxFramesInFlight];
+    private readonly GpuBuffer?[] _indexBuffers = new GpuBuffer?[MaxFramesInFlight];
+    private readonly int[] _vertexCounts = new int[MaxFramesInFlight];
+    private readonly int[] _indexCounts = new int[MaxFramesInFlight];
     private bool _disposed;
 
     /// <summary>
@@ -178,7 +179,7 @@ public sealed class ImGuiVulkanBackend : IDisposable
     /// <summary>
     /// Renders ImGui draw commands into an active Vulkan 1.3 Dynamic Rendering pass.
     /// </summary>
-    public unsafe void Render(CommandBuffer cmd)
+    public unsafe void Render(CommandBuffer cmd, int frameIndex = 0)
     {
         ThrowIfDisposed();
 
@@ -196,12 +197,17 @@ public sealed class ImGuiVulkanBackend : IDisposable
         if (fbWidth <= 0 || fbHeight <= 0)
             return;
 
-        // 1. Ensure vertex and index buffer capacity
-        EnsureBufferCapacity(drawData.TotalVtxCount, drawData.TotalIdxCount);
+        int fi = Math.Clamp(frameIndex, 0, MaxFramesInFlight - 1);
+
+        // 1. Ensure vertex and index buffer capacity for current frame
+        EnsureBufferCapacity(fi, drawData.TotalVtxCount, drawData.TotalIdxCount);
+
+        var curVtxBuf = _vertexBuffers[fi]!;
+        var curIdxBuf = _indexBuffers[fi]!;
 
         // 2. Upload vertex and index data sequentially into host-visible mapped buffers
-        var vtxDst = (ImDrawVert*)_vertexBuffer!.MappedData;
-        var idxDst = (ushort*)_indexBuffer!.MappedData;
+        var vtxDst = (ImDrawVert*)curVtxBuf.MappedData;
+        var idxDst = (ushort*)curIdxBuf.MappedData;
 
         for (int n = 0; n < drawData.CmdListsCount; n++)
         {
@@ -215,13 +221,13 @@ public sealed class ImGuiVulkanBackend : IDisposable
                 Buffer.MemoryCopy(
                     pVtx,
                     vtxDst,
-                    (long)(_vertexBuffer.SizeInBytes - (ulong)((byte*)vtxDst - (byte*)_vertexBuffer.MappedData)),
+                    (long)(curVtxBuf.SizeInBytes - (ulong)((byte*)vtxDst - (byte*)curVtxBuf.MappedData)),
                     (long)(vtxSpan.Length * sizeof(ImDrawVert))
                 );
                 Buffer.MemoryCopy(
                     pIdx,
                     idxDst,
-                    (long)(_indexBuffer.SizeInBytes - (ulong)((byte*)idxDst - (byte*)_indexBuffer.MappedData)),
+                    (long)(curIdxBuf.SizeInBytes - (ulong)((byte*)idxDst - (byte*)curIdxBuf.MappedData)),
                     (long)(idxSpan.Length * sizeof(ushort))
                 );
             }
@@ -234,8 +240,8 @@ public sealed class ImGuiVulkanBackend : IDisposable
         _pipeline.Bind(cmd);
 
         // 4. Bind Vertex and Index buffers
-        cmd.BindVertexBuffers(0, [_vertexBuffer.Handle], [new ByteSize64(0)]);
-        cmd.BindIndexBuffer(_indexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt16);
+        cmd.BindVertexBuffers(0, [curVtxBuf.Handle], [new ByteSize64(0)]);
+        cmd.BindIndexBuffer(curIdxBuf.Handle, new ByteSize64(0), VkIndexType.UInt16);
 
         // 5. Set Viewport matching framebuffer dimensions
         var viewport = new VkViewport
@@ -348,26 +354,26 @@ public sealed class ImGuiVulkanBackend : IDisposable
         }
     }
 
-    private unsafe void EnsureBufferCapacity(int vertexCount, int indexCount)
+    private unsafe void EnsureBufferCapacity(int fi, int vertexCount, int indexCount)
     {
-        if (_vertexBuffer == null || _vertexCount < vertexCount)
+        if (_vertexBuffers[fi] == null || _vertexCounts[fi] < vertexCount)
         {
-            _vertexBuffer?.Dispose();
-            _vertexCount = vertexCount + 5000;
-            _vertexBuffer = _allocator.CreateBuffer(
-                (ulong)(_vertexCount * sizeof(ImDrawVert)),
+            _vertexBuffers[fi]?.Dispose();
+            _vertexCounts[fi] = vertexCount + 5000;
+            _vertexBuffers[fi] = _allocator.CreateBuffer(
+                (ulong)(_vertexCounts[fi] * sizeof(ImDrawVert)),
                 VkBufferUsageFlags.VertexBufferBit,
                 VmaMemoryUsage.CpuToGpu,
                 VmaAllocationCreateFlags.MappedBit
             );
         }
 
-        if (_indexBuffer == null || _indexCount < indexCount)
+        if (_indexBuffers[fi] == null || _indexCounts[fi] < indexCount)
         {
-            _indexBuffer?.Dispose();
-            _indexCount = indexCount + 10000;
-            _indexBuffer = _allocator.CreateBuffer(
-                (ulong)(_indexCount * sizeof(ushort)),
+            _indexBuffers[fi]?.Dispose();
+            _indexCounts[fi] = indexCount + 10000;
+            _indexBuffers[fi] = _allocator.CreateBuffer(
+                (ulong)(_indexCounts[fi] * sizeof(ushort)),
                 VkBufferUsageFlags.IndexBufferBit,
                 VmaMemoryUsage.CpuToGpu,
                 VmaAllocationCreateFlags.MappedBit
@@ -387,8 +393,12 @@ public sealed class ImGuiVulkanBackend : IDisposable
 
         _context.WaitIdle();
 
-        _vertexBuffer?.Dispose();
-        _indexBuffer?.Dispose();
+        for (int i = 0; i < MaxFramesInFlight; i++)
+        {
+            _vertexBuffers[i]?.Dispose();
+            _indexBuffers[i]?.Dispose();
+        }
+
         _pipeline.Dispose();
 
         _descriptorAllocator.Dispose();
