@@ -4,19 +4,20 @@
  * 
  * WHAT THIS FILE DOES:
  *   Coordinates asynchronous GPU memory uploads from CPU host memory to device-local VRAM.
- *   Uses a dedicated transfer queue, circular StagingRing buffer, and Vulkan 1.3 Timeline Semaphore.
+ *   Uses a dedicated transfer queue, circular StagingRing buffer, ring of reset command pools,
+ *   and Vulkan 1.3 Timeline Semaphore.
  *
  * HOW IT WORKS INTERNALLY:
  *   1. CPU-to-GPU Staging:
  *      Allocates contiguous memory inside StagingRing (zero GC allocations).
- *   2. Command Recording:
- *      Records vkCmdCopyBuffer or vkCmdCopyBufferToImage on a dedicated transfer command buffer.
- *   3. Timeline Progression:
- *      Submits work to TransferQueue and signals a monotonically increasing timeline semaphore value.
- *      Callers can query or wait on this value to know when resources are ready on the GPU.
- *   4. Replaces D14 temporary synchronous uploads:
- *      Eliminates blocking vkQueueWaitIdle / fence waits on the main thread during texture and
- *      buffer streaming.
+ *   2. Command Recording & Batching:
+ *      Records vkCmdCopyBuffer or vkCmdCopyBufferToImage into batched transfer command buffers
+ *      allocated from a circular ring of CommandPoolManagers.
+ *   3. Command Pool Recycling:
+ *      Recycles and resets command pools after the associated batch timeline value has retired
+ *      on the GPU timeline, eliminating command buffer leaks without per-frame allocations.
+ *   4. Timeline Progression:
+ *      Submits batched commands to TransferQueue with monotonically increasing timeline signals.
  * ================================================================================================= */
 
 using System;
@@ -33,16 +34,38 @@ using Jatayu.RHI.Vulkan.Textures;
 namespace Jatayu.RHI.Vulkan.Upload;
 
 /// <summary>
-/// Asynchronous GPU transfer coordinator using a dedicated transfer queue and staging ring.
+/// Asynchronous GPU transfer coordinator using a dedicated transfer queue, staging ring, and recycled command pools.
 /// </summary>
 public sealed class UploadManager : IDisposable
 {
+    private sealed class CommandPoolSlot : IDisposable
+    {
+        public readonly CommandPoolManager Pool;
+        public CommandBuffer? ActiveCommandBuffer;
+        public ulong RetiredTimelineValue;
+
+        public CommandPoolSlot(VulkanContext context, int queueFamily)
+        {
+            Pool = new CommandPoolManager(context, queueFamily, VkCommandPoolCreateFlags.ResetCommandBufferBit);
+            ActiveCommandBuffer = null;
+            RetiredTimelineValue = 0;
+        }
+
+        public void Dispose()
+        {
+            Pool.Dispose();
+        }
+    }
+
     private readonly VulkanContext _context;
     private readonly GpuAllocator _allocator;
     private readonly StagingRing _stagingRing;
     private readonly TimelineSemaphore _timelineSemaphore;
-    private readonly CommandPoolManager _commandPool;
     private readonly Queue _transferQueue;
+    private readonly CommandPoolSlot[] _poolSlots;
+    private readonly object _lock = new();
+
+    private int _currentSlotIndex;
     private ulong _currentTimelineValue;
     private bool _disposed;
 
@@ -67,7 +90,7 @@ public sealed class UploadManager : IDisposable
     public ulong LastSubmittedValue => _currentTimelineValue;
 
     /// <summary>
-    /// Initializes a new UploadManager.
+    /// Initializes a new UploadManager with a ring of recycled command pools.
     /// </summary>
     public UploadManager(VulkanContext context, GpuAllocator allocator, ulong stagingRingBytes = 64 * 1024 * 1024)
     {
@@ -79,7 +102,15 @@ public sealed class UploadManager : IDisposable
 
         var queueFamily = context.QueueFamilies.TransferFamily ?? context.QueueFamilies.GraphicsFamily!.Value;
         _transferQueue = context.TransferQueue;
-        _commandPool = new CommandPoolManager(context, queueFamily);
+
+        const int poolCount = 4;
+        _poolSlots = new CommandPoolSlot[poolCount];
+        for (int i = 0; i < poolCount; i++)
+        {
+            _poolSlots[i] = new CommandPoolSlot(context, queueFamily);
+        }
+
+        _currentSlotIndex = 0;
         _currentTimelineValue = 0;
     }
 
@@ -109,35 +140,29 @@ public sealed class UploadManager : IDisposable
             Buffer.MemoryCopy(srcPtr, mappedPtr, size, size);
         }
 
-        // 3. Record transfer command
-        var cmd = _commandPool.Allocate(VkCommandBufferLevel.Primary);
-        cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
-
-        var copyRegion = new VkBufferCopy
+        lock (_lock)
         {
-            SrcOffset = new ByteSize64(stagingOffset),
-            DstOffset = new ByteSize64(dstOffset),
-            Size = new ByteSize64(size)
-        };
+            var cmd = GetOrCreateActiveCommandBuffer();
 
-        _context.Device.PInvoke.vkCmdCopyBuffer.Invoke(
-            cmd.Handle,
-            _stagingRing.BufferHandle,
-            target.Handle,
-            1,
-            &copyRegion
-        );
+            var copyRegion = new VkBufferCopy
+            {
+                SrcOffset = new ByteSize64(stagingOffset),
+                DstOffset = new ByteSize64(dstOffset),
+                Size = new ByteSize64(size)
+            };
 
-        cmd.End();
+            _context.Device.PInvoke.vkCmdCopyBuffer.Invoke(
+                cmd.Handle,
+                _stagingRing.BufferHandle,
+                target.Handle,
+                1,
+                &copyRegion
+            );
 
-        // 4. Submit to TransferQueue with TimelineSemaphore signal
-        _currentTimelineValue++;
-        SubmitTransferCommand(cmd.Handle, _currentTimelineValue);
-
-        // 5. Track in-flight slice in StagingRing
-        _stagingRing.SubmitSlice(stagingOffset, size, _currentTimelineValue);
-
-        return _currentTimelineValue;
+            _currentTimelineValue++;
+            SubmitBatch_Locked(cmd, _currentTimelineValue, stagingOffset, size);
+            return _currentTimelineValue;
+        }
     }
 
     /// <summary>
@@ -157,7 +182,7 @@ public sealed class UploadManager : IDisposable
 
         var size = (ulong)pixelData.Length;
 
-        // 1. Allocate staging memory with 256-byte alignment (optimal for image pitch)
+        // 1. Allocate staging memory with 256-byte alignment
         _stagingRing.Allocate(size, 256, out var stagingOffset, out var mappedPtr);
 
         // 2. Copy pixels into staging buffer
@@ -166,63 +191,57 @@ public sealed class UploadManager : IDisposable
             Buffer.MemoryCopy(src, mappedPtr, size, size);
         }
 
-        // 3. Record transfer commands
-        var cmd = _commandPool.Allocate(VkCommandBufferLevel.Primary);
-        cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
-
-        // Transition image Undefined -> TransferDstOptimal
-        texture.TransitionLayout(
-            cmd,
-            VkImageLayout.TransferDstOptimal,
-            VkPipelineStageFlags.TopOfPipeBit,
-            VkPipelineStageFlags.TransferBit
-        );
-
-        var region = new VkBufferImageCopy
+        lock (_lock)
         {
-            BufferOffset = new ByteSize64(stagingOffset),
-            BufferRowLength = 0,
-            BufferImageHeight = 0,
-            ImageSubresource = new VkImageSubresourceLayers
+            var cmd = GetOrCreateActiveCommandBuffer();
+
+            // Transition image Undefined -> TransferDstOptimal
+            texture.TransitionLayout(
+                cmd,
+                VkImageLayout.TransferDstOptimal,
+                VkPipelineStageFlags.TopOfPipeBit,
+                VkPipelineStageFlags.TransferBit
+            );
+
+            var region = new VkBufferImageCopy
             {
-                AspectMask = VkImageAspectFlags.ColorBit,
-                MipLevel = 0,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
-            },
-            ImageOffset = new VkOffset3D(0, 0, 0),
-            ImageExtent = new VkExtent3D(texture.Width, texture.Height, 1),
-        };
+                BufferOffset = new ByteSize64(stagingOffset),
+                BufferRowLength = 0,
+                BufferImageHeight = 0,
+                ImageSubresource = new VkImageSubresourceLayers
+                {
+                    AspectMask = VkImageAspectFlags.ColorBit,
+                    MipLevel = 0,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1,
+                },
+                ImageOffset = new VkOffset3D(0, 0, 0),
+                ImageExtent = new VkExtent3D(texture.Width, texture.Height, 1),
+            };
 
-        _context.Device.PInvoke.vkCmdCopyBufferToImage.Invoke(
-            cmd.Handle,
-            _stagingRing.BufferHandle,
-            texture.Image,
-            VkImageLayout.TransferDstOptimal,
-            1,
-            &region
-        );
+            _context.Device.PInvoke.vkCmdCopyBufferToImage.Invoke(
+                cmd.Handle,
+                _stagingRing.BufferHandle,
+                texture.Image,
+                VkImageLayout.TransferDstOptimal,
+                1,
+                &region
+            );
 
-        // Transition image TransferDstOptimal -> finalLayout
-        // On transfer queue families, fragment/compute shader stages are invalid.
-        // Use TransferBit or BottomOfPipeBit for valid transfer family synchronization.
-        texture.TransitionLayout(
-            cmd,
-            finalLayout,
-            VkPipelineStageFlags.TransferBit,
-            VkPipelineStageFlags.TransferBit
-        );
+            // Transition image TransferDstOptimal -> finalLayout
+            // On transfer queue families, fragment/compute shader stages are invalid.
+            // Use TransferBit for valid transfer queue pipeline synchronization.
+            texture.TransitionLayout(
+                cmd,
+                finalLayout,
+                VkPipelineStageFlags.TransferBit,
+                VkPipelineStageFlags.TransferBit
+            );
 
-        cmd.End();
-
-        // 4. Submit to TransferQueue with TimelineSemaphore signal
-        _currentTimelineValue++;
-        SubmitTransferCommand(cmd.Handle, _currentTimelineValue);
-
-        // 5. Track in-flight slice in StagingRing
-        _stagingRing.SubmitSlice(stagingOffset, size, _currentTimelineValue);
-
-        return _currentTimelineValue;
+            _currentTimelineValue++;
+            SubmitBatch_Locked(cmd, _currentTimelineValue, stagingOffset, size);
+            return _currentTimelineValue;
+        }
     }
 
     /// <summary>
@@ -268,8 +287,39 @@ public sealed class UploadManager : IDisposable
         return _timelineSemaphore.GetCurrentValue() >= timelineValue;
     }
 
-    private unsafe void SubmitTransferCommand(VkCommandBuffer cmdHandle, ulong signalValue)
+    private CommandBuffer GetOrCreateActiveCommandBuffer()
     {
+        var slot = _poolSlots[_currentSlotIndex];
+        if (slot.ActiveCommandBuffer.HasValue)
+        {
+            return slot.ActiveCommandBuffer.Value;
+        }
+
+        // Check if this slot was previously submitted and wait/reset if needed
+        if (slot.RetiredTimelineValue > 0)
+        {
+            if (_timelineSemaphore.GetCurrentValue() < slot.RetiredTimelineValue)
+            {
+                _timelineSemaphore.Wait(slot.RetiredTimelineValue);
+            }
+            slot.Pool.Reset(VkCommandPoolResetFlags.None);
+        }
+
+        var cmd = slot.Pool.Allocate(VkCommandBufferLevel.Primary);
+        cmd.Begin(VkCommandBufferUsageFlags.OneTimeSubmitBit);
+        slot.ActiveCommandBuffer = cmd;
+        return cmd;
+    }
+
+    private unsafe void SubmitBatch_Locked(CommandBuffer cmd, ulong signalValue, ulong stagingOffset, ulong size)
+    {
+        cmd.End();
+
+        var slot = _poolSlots[_currentSlotIndex];
+        slot.ActiveCommandBuffer = null;
+        slot.RetiredTimelineValue = signalValue;
+
+        var cmdHandle = cmd.Handle;
         var sem = _timelineSemaphore.Handle;
         var sigVal = (nint)signalValue;
 
@@ -291,6 +341,12 @@ public sealed class UploadManager : IDisposable
         var res = _context.Device.PInvoke.vkQueueSubmit.Invoke(_transferQueue.Handle, 1, &submitInfo, default);
         if (res != VkResult.Success)
             throw new InvalidOperationException($"vkQueueSubmit failed on transfer queue: {res}");
+
+        // Track in-flight slice in StagingRing
+        _stagingRing.SubmitSlice(stagingOffset, size, signalValue);
+
+        // Advance to next command pool slot in the ring
+        _currentSlotIndex = (_currentSlotIndex + 1) % _poolSlots.Length;
     }
 
     private void ThrowIfDisposed()
@@ -300,12 +356,20 @@ public sealed class UploadManager : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
 
-        _context.WaitIdle();
-        _commandPool.Dispose();
-        _stagingRing.Dispose();
-        _timelineSemaphore.Dispose();
+            _context.WaitIdle();
+
+            for (int i = 0; i < _poolSlots.Length; i++)
+            {
+                _poolSlots[i].Dispose();
+            }
+
+            _stagingRing.Dispose();
+            _timelineSemaphore.Dispose();
+        }
     }
 }
