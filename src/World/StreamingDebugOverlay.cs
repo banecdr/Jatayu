@@ -47,7 +47,9 @@ public sealed class StreamingDebugOverlay
     public void Draw(
         StreamingManager streamingManager,
         in WorldPosition playerPos,
-        in Vector3 playerVelocity)
+        in Vector3 playerVelocity,
+        Jatayu.Terrain.TerrainClipmap? terrainClipmap = null,
+        bool ringDebugColors = false)
     {
         if (!_isOpen || streamingManager == null)
             return;
@@ -55,7 +57,7 @@ public sealed class StreamingDebugOverlay
         Span<byte> buf = stackalloc byte[256];
         int w;
 
-        ImGui.SetNextWindowSize(new float2(380f, 480f), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new float2(380f, 520f), ImGuiCond.FirstUseEver);
         if (ImGui.Begin("World Streaming Radar"u8, ref _isOpen))
         {
             var config = streamingManager.Config;
@@ -81,6 +83,23 @@ public sealed class StreamingDebugOverlay
 
                 if (Utf8.TryWrite(buf, $"Streaming Tick:  {streamingManager.LastStreamingTimeMs:F3} ms", out w))
                     ImGui.TextColored(_colCyan, buf[..w]);
+            }
+
+            // 1b. Terrain Clipmap Telemetry (Sprint 6b)
+            if (terrainClipmap != null && ImGui.CollapsingHeader("Terrain Clipmap Telemetry"u8, ImGuiTreeNodeFlags.DefaultOpen))
+            {
+                if (Utf8.TryWrite(buf, $"Clipmap Rings:   {Jatayu.Terrain.TerrainClipmap.DefaultRingCount} (256m - 8,192m span)", out w))
+                    ImGui.Text(buf[..w]);
+
+                if (Utf8.TryWrite(buf, $"Resident Tiles:  {terrainClipmap.ResidentTileCount} (256m tiles)", out w))
+                    ImGui.TextColored(_colGreen, buf[..w]);
+
+                float elev = terrainClipmap.SampleElevation(playerPos.X, playerPos.Z);
+                if (Utf8.TryWrite(buf, $"Ground Elevation: {elev:F1} m (Bilinear/Pyramid)", out w))
+                    ImGui.TextColored(_colCyan, buf[..w]);
+
+                if (Utf8.TryWrite(buf, $"LOD Ring Colors:  {(ringDebugColors ? "ENABLED [F4]" : "OFF (PBR Splat) [F4]")}", out w))
+                    ImGui.TextColored(ringDebugColors ? _colYellow : _colCyan, buf[..w]);
             }
 
             // 2. 2D Streaming Mini-Map

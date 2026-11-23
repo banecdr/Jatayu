@@ -205,4 +205,40 @@ public sealed class TerrainTile
 
         return true;
     }
+
+    /// <summary>
+    /// Generates a procedural terrain tile matching the terrain.vert multi-frequency elevation formula.
+    /// </summary>
+    public static TerrainTile CreateProcedural(int tileX, int tileZ, uint samples = 65, float maxElevation = 45.0f, float tileSize = WorldConstants.TileSize)
+    {
+        var coord = new TileCoord(tileX, tileZ);
+        coord.GetWorldOrigin(tileSize, out double ox, out double oz);
+
+        var heights = new float[samples * samples];
+        float minH = float.MaxValue;
+        float maxH = float.MinValue;
+        float step = tileSize / (samples - 1);
+
+        for (int z = 0; z < samples; z++)
+        {
+            double wz = oz + z * step;
+            for (int x = 0; x < samples; x++)
+            {
+                double wx = ox + x * step;
+                float fx = (float)wx;
+                float fz = (float)wz;
+
+                float h1 = MathF.Sin(fx * 0.005f) * MathF.Cos(fz * 0.005f) * maxElevation;
+                float h2 = MathF.Sin(fx * 0.015f + 1.2f) * MathF.Sin(fz * 0.015f + 0.8f) * (maxElevation * 0.35f);
+                float h3 = MathF.Cos(fx * 0.04f - 0.5f) * MathF.Sin(fz * 0.04f + 1.7f) * (maxElevation * 0.1f);
+                float h = h1 + h2 + h3;
+
+                heights[z * samples + x] = h;
+                if (h < minH) minH = h;
+                if (h > maxH) maxH = h;
+            }
+        }
+
+        return new TerrainTile(coord, samples, samples, heights, minH, maxH, tileSize: tileSize);
+    }
 }

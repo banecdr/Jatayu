@@ -155,6 +155,12 @@ public sealed class ForwardRenderer3D : IDisposable
     private uint _currentDebugVertexCount;
     private GpuBuffer _currentDebugBuffer = null!;
     private TerrainClipmap? _currentTerrainClipmap;
+    private Vector3 _currentCameraPos;
+
+    /// <summary>
+    /// Gets or sets whether terrain concentric clipmap rings are rendered with distinct LOD debug colors.
+    /// </summary>
+    public bool DebugTerrainRingsEnabled { get; set; }
 
     private bool _disposed;
 
@@ -693,6 +699,7 @@ public sealed class ForwardRenderer3D : IDisposable
         _currentVp = vp;
         _currentInvVp = _skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
         _currentTerrainClipmap = terrainClipmap;
+        _currentCameraPos = camera.Position;
 
         // 5. Register Shadow Pass
         if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
@@ -875,8 +882,8 @@ public sealed class ForwardRenderer3D : IDisposable
                 var tpc = new TerrainPushConstants
                 {
                     ViewProjMatrix = _currentVp,
-                    CameraRelativeOrigin = Vector4.Zero,
-                    TerrainParams = new Vector4(ringScale, 0f, 200f, r)
+                    CameraRelativeOrigin = new Vector4(_currentCameraPos.X, _currentCameraPos.Y, _currentCameraPos.Z, 0f),
+                    TerrainParams = new Vector4(ringScale, DebugTerrainRingsEnabled ? 1.0f : 0.0f, 200f, r)
                 };
 
                 CommandBufferExtensions.PushConstants(

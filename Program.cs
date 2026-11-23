@@ -475,6 +475,24 @@ public static class Program
 
         // Sprint 6b: Terrain Clipmap (D22) & Texture Mip Streamer (D5, D21)
         using var terrainClipmap = new TerrainClipmap(context, allocator);
+        for (int tz = -2; tz <= 1; tz++)
+        {
+            for (int tx = -2; tx <= 1; tx++)
+            {
+                terrainClipmap.RegisterTile(TerrainTile.CreateProcedural(tx, tz));
+            }
+        }
+        terrainClipmap.HeightPyramid.Initialize((wx, wz) =>
+        {
+            float fx = (float)wx;
+            float fz = (float)wz;
+            float maxElev = 45.0f;
+            float h1 = MathF.Sin(fx * 0.005f) * MathF.Cos(fz * 0.005f) * maxElev;
+            float h2 = MathF.Sin(fx * 0.015f + 1.2f) * MathF.Sin(fz * 0.015f + 0.8f) * (maxElev * 0.35f);
+            float h3 = MathF.Cos(fx * 0.04f - 0.5f) * MathF.Sin(fz * 0.04f + 1.7f) * (maxElev * 0.1f);
+            return h1 + h2 + h3;
+        });
+
         using var textureStreamer = new TextureStreamer(context, allocator, bindlessTable, deletionQueue, vramBudget);
 
         using var renderGraph = new RenderGraph();
@@ -491,6 +509,9 @@ public static class Program
         bool debugWireframeEnabled = true;
         bool atLargeWorldCluster = false;
         int paniniMode = 0;
+        bool flyCamEnabled = false;
+        bool autopilotTourEnabled = false;
+        double tourTime = 0.0;
 
         window.KeyAction += (key, action) =>
         {
@@ -592,6 +613,40 @@ public static class Program
                         Console.WriteLine("[Teleport] Teleported back to Origin (X=0, Y=0, Z=0)");
                     }
                 }
+                else if (key == GlfwKey.C)
+                {
+                    flyCamEnabled = !flyCamEnabled;
+                    if (flyCamEnabled)
+                    {
+                        autopilotTourEnabled = false;
+                        cameraController.AutoOrbitEnabled = false;
+                        Console.WriteLine("[Camera] Mode: 6-DOF FREE-FLYCAM (WASD/QE to fly, Shift for 100 m/s boost, Arrows to aim)");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Camera] Mode: ORBIT CAM (Target-centered)");
+                    }
+                }
+                else if (key == GlfwKey.F3)
+                {
+                    autopilotTourEnabled = !autopilotTourEnabled;
+                    if (autopilotTourEnabled)
+                    {
+                        flyCamEnabled = false;
+                        cameraController.AutoOrbitEnabled = false;
+                        tourTime = 0.0;
+                        Console.WriteLine("[Autopilot] 100 m/s Supersonic Drone Tour ENGAGED (360 km/h streaming stress sweep)");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Autopilot] Supersonic Drone Tour DISENGAGED");
+                    }
+                }
+                else if (key == GlfwKey.F4)
+                {
+                    forwardRenderer.DebugTerrainRingsEnabled = !forwardRenderer.DebugTerrainRingsEnabled;
+                    Console.WriteLine($"[Terrain] Clipmap LOD Ring Colors: {(forwardRenderer.DebugTerrainRingsEnabled ? "ENABLED (LOD Bands: Green/Cyan/Yellow/Orange/Red/Purple)" : "DISABLED (PBR Slope Splatting)")}");
+                }
                 else if (key == GlfwKey.Escape)
                 {
                     window.Close();
@@ -603,24 +658,29 @@ public static class Program
         // PRINT DETAILED ENGINE STATUS
         // ---------------------------------------------------------------------------------------------
         Console.WriteLine("================================================================================");
-        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 5b LARGE-WORLD & PBR PIPELINE         ");
+        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 6b OPEN-WORLD & CLIPMAP TERRAIN       ");
         Console.WriteLine("================================================================================");
         Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
-        Console.WriteLine($" [Renderer]      : ForwardRenderer3D (Shadows + Skybox + PBR Opaque + Debug Wireframes)");
+        Console.WriteLine($" [Renderer]      : ForwardRenderer3D (Shadows + Skybox + PBR Opaque + Terrain + Debug)");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
         Console.WriteLine($" [Shadow Map]    : {shadowMap.Resolution}x{shadowMap.Resolution} D32_SFLOAT (16-tap PCF, Reverse-Z Comparison Sampler)");
+        Console.WriteLine($" [Clipmap]       : 6 concentric rings (4,096 vertices/ring), {terrainClipmap.ResidentTileCount} resident 256m tiles");
         Console.WriteLine($" [Bindless]      : BindlessTable active ({bindlessTable.MaxTextures} slots) | Checkerboard Slot: #{checkerSlot}");
         Console.WriteLine($" [MaterialTable] : {materialTable.Count} PBR materials registered in GPU Storage Buffer");
         Console.WriteLine($" [GeometryPool]  : Monolithic shared pool active (Ground Plane + Unit Cube meshes)");
         Console.WriteLine($" [Large World]   : 64-bit precision WorldPosition active (Monolith cluster at 50,000m)");
         Console.WriteLine($" [Origin Shift]  : Snapped to 256m terrain tile multiple (Threshold: {originShift.ThresholdDistance:F0}m)");
-        Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle [F1]) | 3D Wireframe Debug (Toggle [B])");
+        Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle [F1]) | World Radar (Toggle [F2])");
         Console.WriteLine("--------------------------------------------------------------------------------");
         Console.WriteLine(" INTERACTIVE HOTKEYS:");
+        Console.WriteLine("   [C]           : Toggle 6-DOF Free-Flycam (WASD + Q/E to fly, Shift for 100 m/s boost, Arrows to aim)");
+        Console.WriteLine("   [F3]          : Toggle 100 m/s Supersonic Autopilot Drone Tour (360 km/h open-world stress sweep)");
+        Console.WriteLine("   [F4]          : Toggle Terrain Clipmap LOD Ring Colors (Green/Cyan/Yellow/Orange/Red/Purple)");
+        Console.WriteLine("   [F2]          : Toggle World Streaming Radar & Clipmap Telemetry HUD");
+        Console.WriteLine("   [F1]          : Toggle Diagnostics Telemetry HUD");
         Console.WriteLine("   [T]           : Teleport between Origin (0m) and 50,000m Monolith Cluster");
         Console.WriteLine("   [L]           : Toggle Sun Light Orbit animation (animates soft shadows)");
         Console.WriteLine("   [B]           : Toggle 3D Wireframe Debug bounds and coordinate axes");
-        Console.WriteLine("   [F1]          : Toggle Diagnostics Telemetry HUD");
         Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
         Console.WriteLine("   [P]           : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)");
         Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
@@ -684,37 +744,93 @@ public static class Program
             }
             var dt = time.DeltaTime;
 
-            // Interactive manual camera controls when held down
+            // Interactive camera controls (Autopilot Drone Tour, 6-DOF Flycam, or Target-Centered Orbit)
             using (Profiler.Scope("CameraUpdate"))
             {
-                if (window.IsKeyDown(GlfwKey.Left))
+                if (autopilotTourEnabled)
                 {
-                    cameraController.AutoOrbitEnabled = false;
-                    cameraController.Yaw -= 2.0f * dt;
-                }
-                if (window.IsKeyDown(GlfwKey.Right))
-                {
-                    cameraController.AutoOrbitEnabled = false;
-                    cameraController.Yaw += 2.0f * dt;
-                }
-                if (window.IsKeyDown(GlfwKey.Up))
-                {
-                    cameraController.Pitch += 1.5f * dt;
-                }
-                if (window.IsKeyDown(GlfwKey.Down))
-                {
-                    cameraController.Pitch -= 1.5f * dt;
-                }
-                if (window.IsKeyDown(GlfwKey.W))
-                {
-                    cameraController.Zoom(-4.0f * dt);
-                }
-                if (window.IsKeyDown(GlfwKey.S))
-                {
-                    cameraController.Zoom(4.0f * dt);
-                }
+                    tourTime += dt;
+                    // Drone travels along wide circuit across cell and tile boundaries
+                    // Speed is 100 m/s = 360 km/h
+                    double s = tourTime * 100.0;
+                    double droneX = Math.Sin(s * 0.001) * 1200.0;
+                    double droneZ = Math.Cos(s * 0.0007) * 1200.0;
 
-                cameraController.Update(dt);
+                    float groundElev = terrainClipmap.SampleElevation(droneX, droneZ);
+                    float targetY = groundElev + 45.0f;
+                    float droneY = camera.Position.Y + (targetY - camera.Position.Y) * Math.Min(1.0f, (float)dt * 6.0f);
+                    camera.Position = new Vector3((float)droneX, droneY, (float)droneZ);
+
+                    double aheadS = s + 50.0;
+                    double nextX = Math.Sin(aheadS * 0.001) * 1200.0;
+                    double nextZ = Math.Cos(aheadS * 0.0007) * 1200.0;
+                    float nextElev = terrainClipmap.SampleElevation(nextX, nextZ);
+                    Vector3 lookDir = Vector3.Normalize(new Vector3((float)(nextX - droneX), (nextElev + 45.0f) - droneY, (float)(nextZ - droneZ)));
+                    camera.Target = camera.Position + lookDir * 100.0f;
+                }
+                else if (flyCamEnabled)
+                {
+                    float speed = (window.IsKeyDown(GlfwKey.LeftShift) || window.IsKeyDown(GlfwKey.RightShift)) ? 100.0f : 25.0f;
+                    cameraController.MoveSpeed = speed;
+
+                    if (window.IsKeyDown(GlfwKey.W)) cameraController.MoveForward((float)dt);
+                    if (window.IsKeyDown(GlfwKey.S)) cameraController.MoveBackward((float)dt);
+                    if (window.IsKeyDown(GlfwKey.A)) cameraController.MoveLeft((float)dt);
+                    if (window.IsKeyDown(GlfwKey.D)) cameraController.MoveRight((float)dt);
+                    if (window.IsKeyDown(GlfwKey.Space) || window.IsKeyDown(GlfwKey.E)) cameraController.MoveUp((float)dt);
+                    if (window.IsKeyDown(GlfwKey.LeftControl) || window.IsKeyDown(GlfwKey.Q)) cameraController.MoveDown((float)dt);
+
+                    var fwd = camera.Forward;
+                    var right = camera.Right;
+                    if (window.IsKeyDown(GlfwKey.Left))
+                    {
+                        fwd = Vector3.TransformNormal(fwd, Matrix4x4.CreateRotationY(2.0f * (float)dt));
+                    }
+                    if (window.IsKeyDown(GlfwKey.Right))
+                    {
+                        fwd = Vector3.TransformNormal(fwd, Matrix4x4.CreateRotationY(-2.0f * (float)dt));
+                    }
+                    if (window.IsKeyDown(GlfwKey.Up))
+                    {
+                        fwd = Vector3.TransformNormal(fwd, Matrix4x4.CreateFromAxisAngle(right, 1.5f * (float)dt));
+                    }
+                    if (window.IsKeyDown(GlfwKey.Down))
+                    {
+                        fwd = Vector3.TransformNormal(fwd, Matrix4x4.CreateFromAxisAngle(right, -1.5f * (float)dt));
+                    }
+                    camera.Target = camera.Position + Vector3.Normalize(fwd) * 10.0f;
+                }
+                else
+                {
+                    if (window.IsKeyDown(GlfwKey.Left))
+                    {
+                        cameraController.AutoOrbitEnabled = false;
+                        cameraController.Yaw -= 2.0f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Right))
+                    {
+                        cameraController.AutoOrbitEnabled = false;
+                        cameraController.Yaw += 2.0f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Up))
+                    {
+                        cameraController.Pitch += 1.5f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Down))
+                    {
+                        cameraController.Pitch -= 1.5f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.W))
+                    {
+                        cameraController.Zoom(-4.0f * dt);
+                    }
+                    if (window.IsKeyDown(GlfwKey.S))
+                    {
+                        cameraController.Zoom(4.0f * dt);
+                    }
+
+                    cameraController.Update(dt);
+                }
             }
 
             // 3. Animate Sun Light Direction
@@ -820,7 +936,13 @@ public static class Program
 
                     if (streamingOverlay.IsVisible)
                     {
-                        streamingOverlay.Draw(streamingManager, in camWorldPos, in camVelocity);
+                        streamingOverlay.Draw(
+                            streamingManager,
+                            in camWorldPos,
+                            in camVelocity,
+                            terrainClipmap: terrainClipmap,
+                            ringDebugColors: forwardRenderer.DebugTerrainRingsEnabled
+                        );
                     }
                 }
             }
