@@ -89,10 +89,16 @@ public sealed class DebugOverlay
             var frameColor = dtMs <= 6.94f ? _green : (dtMs <= 16.67f ? _yellow : _red);
 
             if (Utf8.TryWrite(buf, $"FPS: {fps:F1} ({dtMs:F2} ms)", out w))
+            {
+                buf[w] = 0;
                 ImGui.TextColored(frameColor, buf[..w]);
+            }
             ImGui.SameLine(180f);
             if (Utf8.TryWrite(buf, $"Frame: #{gameTime.FrameCount}", out w))
+            {
+                buf[w] = 0;
                 ImGui.Text(buf[..w]);
+            }
 
             if (vsync)
                 ImGui.TextColored(_green, "V-Sync: ON (Locked to display) [V]"u8);
@@ -104,9 +110,15 @@ public sealed class DebugOverlay
             ImGui.Text("Steady-State GC Allocations:"u8);
             ImGui.SameLine();
             if (Utf8.TryWrite(buf, $"{gcAllocated} B", out w))
+            {
+                buf[w] = 0;
                 ImGui.TextColored(allocColor, buf[..w]);
+            }
             if (Utf8.TryWrite(buf, $"Zero-Alloc Frame Rate: {AllocationTracker.ZeroAllocationPercent:F1}%", out w))
+            {
+                buf[w] = 0;
                 ImGui.Text(buf[..w]);
+            }
 
             if (vramBudget != null)
             {
@@ -116,7 +128,10 @@ public sealed class DebugOverlay
                 float fraction = stats.BudgetUsagePercent;
 
                 if (Utf8.TryWrite(buf, $"VRAM: {usedMb:F0} MB / {budgetMb:F0} MB ({fraction * 100f:F1}%)", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
                 ImGui.ProgressBar(fraction, new float2(320f, 0f), ""u8);
             }
             ImGui.Separator();
@@ -141,16 +156,28 @@ public sealed class DebugOverlay
                     var tgt = camera.Target;
                     float dist = Vector3.Distance(pos, tgt);
                     if (Utf8.TryWrite(buf, $"Camera Pos:   ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1}) m", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     if (Utf8.TryWrite(buf, $"Camera Target:({tgt.X:F1}, {tgt.Y:F1}, {tgt.Z:F1}) m | Dist: {dist:F1} m", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     if (Utf8.TryWrite(buf, $"Camera FOV:   {camera.FovDegrees:F0}° (Toggle: [F])", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
 
                     if (camera.PaniniEnabled)
                     {
                         if (Utf8.TryWrite(buf, $"Panini Proj:  ON (d={camera.PaniniDistance:F2}, scale={camera.PaniniScale:F2}) (Cycle: [P], [-]/[=])", out w))
+                        {
+                            buf[w] = 0;
                             ImGui.TextColored(_cyan, buf[..w]);
+                        }
                     }
                     else
                     {
@@ -162,9 +189,15 @@ public sealed class DebugOverlay
                 {
                     var orig = originShift.CurrentOrigin;
                     if (Utf8.TryWrite(buf, $"Floating Origin: ({orig.X:F1}, {orig.Y:F1}, {orig.Z:F1}) m", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     if (Utf8.TryWrite(buf, $"Shift Threshold: {originShift.ThresholdDistance:F0} m (Snapped to 256m tiles)", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                 }
             }
 
@@ -174,7 +207,10 @@ public sealed class DebugOverlay
             if (ImGui.CollapsingHeader("Scene ECS & PBR Materials"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
                 if (Utf8.TryWrite(buf, $"Entities: {totalEntities} Total | {visibleEntities} In Frustum | {shadowCasters} Shadow Casters", out w))
+                {
+                    buf[w] = 0;
                     ImGui.Text(buf[..w]);
+                }
                 ImGui.Text("Active PBR Materials:"u8);
                 ImGui.TextColored(_gold, "  #1 Gold:          Metallic 1.00, Roughness 0.15"u8);
                 ImGui.TextColored(_orange, "  #2 Copper:        Metallic 0.95, Roughness 0.25"u8);
@@ -194,11 +230,20 @@ public sealed class DebugOverlay
                 {
                     var dir = lightEnv.Sun.Direction;
                     if (Utf8.TryWrite(buf, $"Sun Direction: ({dir.X:F2}, {dir.Y:F2}, {dir.Z:F2})", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     if (Utf8.TryWrite(buf, $"Sun Light Orbit: {(sunOrbiting ? "ANIMATING" : "PAUSED")} (Toggle: [L])", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.TextColored(sunOrbiting ? _green : _yellow, buf[..w]);
+                    }
                     if (Utf8.TryWrite(buf, $"Sun Illuminance: {lightEnv.Sun.Intensity:F0} Lux", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     ImGui.Text("Shadow Map:    2048x2048 D32_SFLOAT (Reverse-Z Comparison, 16-tap PCF)"u8);
                     ImGui.Text("Skybox:        Reverse-Z Procedural Atmosphere (Z = 0.0 Infinity)"u8);
                 }
@@ -210,7 +255,10 @@ public sealed class DebugOverlay
             if (ImGui.CollapsingHeader("3D Wireframe Diagnostics"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
                 if (Utf8.TryWrite(buf, $"3D Wireframes: {(debugWireframe ? "VISIBLE" : "HIDDEN")} (Toggle: [B])", out w))
+                {
+                    buf[w] = 0;
                     ImGui.TextColored(debugWireframe ? _green : _yellow, buf[..w]);
+                }
                 ImGui.Text("  Axes:   Red = +X, Green = +Y, Blue = +Z (3m origin gizmo)"u8);
                 ImGui.Text("  Bounds: Yellow/Orange/Cyan AABB wireframe bounding boxes"u8);
             }
@@ -224,10 +272,16 @@ public sealed class DebugOverlay
                 {
                     var zone = cpuZones[i];
                     if (Utf8.TryWrite(buf, $"  {zone.Name}:", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     ImGui.SameLine(180f);
                     if (Utf8.TryWrite(buf, $"{zone.DurationMs:F3} ms", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.TextColored(_cyan, buf[..w]);
+                    }
                 }
             }
 
@@ -237,10 +291,16 @@ public sealed class DebugOverlay
                 {
                     var pass = gpuPasses[i];
                     if (Utf8.TryWrite(buf, $"  {pass.Name}:", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.Text(buf[..w]);
+                    }
                     ImGui.SameLine(180f);
                     if (Utf8.TryWrite(buf, $"{pass.DurationMs:F3} ms", out w))
+                    {
+                        buf[w] = 0;
                         ImGui.TextColored(_cyan, buf[..w]);
+                    }
                 }
             }
 
