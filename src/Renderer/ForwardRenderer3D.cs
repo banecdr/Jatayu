@@ -1001,7 +1001,6 @@ public sealed class ForwardRenderer3D : IDisposable
         _terrainPipeline?.Dispose();
         _debugPipeline?.Dispose();
 
-        if (_terrainPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_terrainPipelineLayout, null);
         if (_frameDescriptorPool.VkHandle != 0) device.DestroyDescriptorPool(_frameDescriptorPool, null);
         if (_frameDescriptorLayout.VkHandle != 0) device.DestroyDescriptorSetLayout(_frameDescriptorLayout, null);
 
