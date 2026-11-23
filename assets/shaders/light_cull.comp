@@ -1,0 +1,154 @@
+#version 460 core
+
+// ==================================================================================================
+// Jatayu Engine - Clustered Forward Shading
+// Shader: light_cull.comp
+// Role: Computes view-space cluster frustum AABBs and assigns Point/Spot lights to each cluster.
+// ==================================================================================================
+
+layout(local_size_x = 16, local_size_y = 8, local_size_z = 1) in;
+
+struct PointLight {
+    vec3 Position;
+    float Radius;
+    vec3 Color;
+    float Intensity;
+};
+
+struct SpotLight {
+    vec3 Position;
+    float Range;
+    vec3 Direction;
+    float CosInner;
+    vec3 Color;
+    float CosOuter;
+};
+
+struct ClusterRecord {
+    uint Offset;
+    uint Count;
+};
+
+layout(std140, set = 0, binding = 0) uniform ClusterUniforms {
+    mat4 InvProj;
+    mat4 View;
+    vec4 ScreenSizeAndNearFar; // X=Width, Y=Height, Z=NearZ, W=FarZ
+    uvec4 ClusterGridDim;      // X=16, Y=8, Z=24, W=TotalClusters
+    uint PointLightCount;
+    uint SpotLightCount;
+    uint MaxLightsPerCluster;
+    uint Padding;
+} ubo;
+
+layout(std430, set = 0, binding = 1) readonly buffer PointLightSSBO {
+    PointLight pointLights[];
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer SpotLightSSBO {
+    SpotLight spotLights[];
+};
+
+layout(std430, set = 0, binding = 3) writeonly buffer ClusterRecordSSBO {
+    ClusterRecord clusterRecords[];
+};
+
+layout(std430, set = 0, binding = 4) buffer LightIndexSSBO {
+    uint globalIndexCounter;
+    uint globalLightIndices[];
+};
+
+vec3 ScreenToView(vec4 screen) {
+    vec4 view = ubo.InvProj * screen;
+    return view.xyz / view.w;
+}
+
+void main() {
+    uvec3 clusterCoord = gl_GlobalInvocationID;
+    if (clusterCoord.x >= ubo.ClusterGridDim.x ||
+        clusterCoord.y >= ubo.ClusterGridDim.y ||
+        clusterCoord.z >= ubo.ClusterGridDim.z) {
+        return;
+    }
+
+    uint clusterIndex = clusterCoord.x +
+                        clusterCoord.y * ubo.ClusterGridDim.x +
+                        clusterCoord.z * (ubo.ClusterGridDim.x * ubo.ClusterGridDim.y);
+
+    float nearZ = ubo.ScreenSizeAndNearFar.z;
+    float farZ = ubo.ScreenSizeAndNearFar.w;
+
+    // Logarithmic view-Z slicing matching Reverse-Z depth distribution
+    float sliceNearZ = -nearZ * pow(farZ / nearZ, float(clusterCoord.z) / float(ubo.ClusterGridDim.z));
+    float sliceFarZ  = -nearZ * pow(farZ / nearZ, float(clusterCoord.z + 1u) / float(ubo.ClusterGridDim.z));
+
+    // Screen-space cluster tile normalized bounds [0, 1]
+    vec2 tileMin = vec2(clusterCoord.xy) / vec2(ubo.ClusterGridDim.xy);
+    vec2 tileMax = vec2(clusterCoord.xy + uvec2(1u, 1u)) / vec2(ubo.ClusterGridDim.xy);
+
+    // Convert tile bounds to NDC [-1, 1]
+    vec4 ndcMin = vec4(tileMin.x * 2.0 - 1.0, (1.0 - tileMax.y) * 2.0 - 1.0, 1.0, 1.0);
+    vec4 ndcMax = vec4(tileMax.x * 2.0 - 1.0, (1.0 - tileMin.y) * 2.0 - 1.0, 1.0, 1.0);
+
+    vec3 p0 = ScreenToView(vec4(ndcMin.x, ndcMin.y, 1.0, 1.0));
+    vec3 p1 = ScreenToView(vec4(ndcMax.x, ndcMin.y, 1.0, 1.0));
+    vec3 p2 = ScreenToView(vec4(ndcMin.x, ndcMax.y, 1.0, 1.0));
+    vec3 p3 = ScreenToView(vec4(ndcMax.x, ndcMax.y, 1.0, 1.0));
+
+    // Scale view-space rays to slice near and far Z planes
+    vec3 v0 = p0 * (sliceNearZ / p0.z);
+    vec3 v1 = p1 * (sliceNearZ / p1.z);
+    vec3 v2 = p2 * (sliceNearZ / p2.z);
+    vec3 v3 = p3 * (sliceNearZ / p3.z);
+
+    vec3 v4 = p0 * (sliceFarZ / p0.z);
+    vec3 v5 = p1 * (sliceFarZ / p1.z);
+    vec3 v6 = p2 * (sliceFarZ / p2.z);
+    vec3 v7 = p3 * (sliceFarZ / p3.z);
+
+    vec3 aabbMin = min(min(min(v0, v1), min(v2, v3)), min(min(v4, v5), min(v6, v7)));
+    vec3 aabbMax = max(max(max(v0, v1), max(v2, v3)), max(max(v4, v5), max(v6, v7)));
+
+    // Test lights against cluster AABB
+    uint localLightCount = 0u;
+    uint localLightIndices[64];
+
+    // 1. Point Lights
+    for (uint i = 0u; i < ubo.PointLightCount && localLightCount < ubo.MaxLightsPerCluster; ++i) {
+        PointLight pl = pointLights[i];
+        vec3 lightPosView = (ubo.View * vec4(pl.Position, 1.0)).xyz;
+
+        // Closest point on AABB to sphere center
+        vec3 closestPoint = clamp(lightPosView, aabbMin, aabbMax);
+        vec3 delta = closestPoint - lightPosView;
+        if (dot(delta, delta) <= (pl.Radius * pl.Radius)) {
+            localLightIndices[localLightCount++] = i;
+        }
+    }
+
+    // 2. Spot Lights (tested as spheres bounding the cone)
+    for (uint j = 0u; j < ubo.SpotLightCount && localLightCount < ubo.MaxLightsPerCluster; ++j) {
+        SpotLight sl = spotLights[j];
+        vec3 lightPosView = (ubo.View * vec4(sl.Position, 1.0)).xyz;
+
+        vec3 closestPoint = clamp(lightPosView, aabbMin, aabbMax);
+        vec3 delta = closestPoint - lightPosView;
+        if (dot(delta, delta) <= (sl.Range * sl.Range)) {
+            // Encode spot light index with high bit (bit 31) set
+            localLightIndices[localLightCount++] = (j | 0x80000000u);
+        }
+    }
+
+    // Allocate range in global light index buffer
+    if (localLightCount > 0u) {
+        uint baseOffset = atomicAdd(globalIndexCounter, localLightCount);
+        for (uint k = 0u; k < localLightCount; ++k) {
+            globalLightIndices[baseOffset + k] = localLightIndices[k];
+        }
+
+        clusterRecords[clusterIndex].Offset = baseOffset;
+        clusterRecords[clusterIndex].Count = localLightCount;
+    } else {
+        clusterRecords[clusterIndex].Offset = 0u;
+        clusterRecords[clusterIndex].Count = 0u;
+    }
+}

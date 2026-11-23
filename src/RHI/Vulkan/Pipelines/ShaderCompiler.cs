@@ -58,6 +58,8 @@ public sealed class ShaderCompiler : IDisposable
     {
         ArgumentNullException.ThrowIfNull(source);
 
+        source = ResolveIncludes(source, sourceFileName);
+
         byte[] sourceBytes = Encoding.UTF8.GetBytes(source);
 
         // Check on-disk cache if directory is configured
@@ -146,6 +148,40 @@ public sealed class ShaderCompiler : IDisposable
         string hashStr = Convert.ToHexString(hash)[..16];
         string safeName = Path.GetFileNameWithoutExtension(fileName);
         return Path.Combine(_cacheDirectory, $"{safeName}_{kind}_{hashStr}.spv");
+    }
+
+    private static string ResolveIncludes(string source, string sourceFileName)
+    {
+        if (!source.Contains("#include")) return source;
+
+        var lines = source.Split('\n');
+        var sb = new StringBuilder();
+        string baseDir = "assets/shaders";
+        if (File.Exists(sourceFileName))
+        {
+            baseDir = Path.GetDirectoryName(sourceFileName) ?? baseDir;
+        }
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("#include \"") && trimmed.EndsWith("\""))
+            {
+                string includeRel = trimmed.Substring(10, trimmed.Length - 11);
+                string fullPath = Path.Combine(baseDir, includeRel);
+                if (!File.Exists(fullPath))
+                {
+                    fullPath = Path.Combine(AppContext.BaseDirectory, "assets", "shaders", includeRel);
+                }
+                if (File.Exists(fullPath))
+                {
+                    sb.AppendLine(File.ReadAllText(fullPath));
+                    continue;
+                }
+            }
+            sb.AppendLine(line);
+        }
+        return sb.ToString();
     }
 
     /// <summary>

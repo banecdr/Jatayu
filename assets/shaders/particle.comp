@@ -1,0 +1,75 @@
+#version 460 core
+
+// ==================================================================================================
+// Jatayu Engine - GPU Particle Simulation
+// Shader: particle.comp
+// Role: Computes particle physics update (integration, gravity, lifetime, emission) via compute shader.
+// ==================================================================================================
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct Particle {
+    vec3 Position;
+    float Age;
+    vec3 Velocity;
+    float Lifetime;
+    vec4 Color;
+    float Size;
+    float Padding0;
+    float Padding1;
+    float Padding2;
+};
+
+layout(std430, set = 0, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
+
+layout(push_constant) uniform ParticlePushConstants {
+    vec4 EmitterPosition; // xyz = position, w = emit rate
+    vec4 GravityAndDrag;   // xyz = gravity, w = drag
+    float DeltaTime;
+    float TotalTime;
+    uint MaxParticles;
+    float DefaultLifetime;
+} pc;
+
+// Simple hash-based PRNG
+float Hash(uint n) {
+    n = (n << 13u) ^ n;
+    n = n * (n * n * 15731u + 789221u) + 1376312589u;
+    return float(n & 0x7FFFFFFFu) / float(0x7FFFFFFF);
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.MaxParticles) return;
+
+    Particle p = particles[id];
+    p.Age += pc.DeltaTime;
+
+    if (p.Age >= p.Lifetime) {
+        // Respawn particle at emitter position with pseudo-random velocity
+        uint seed = id + uint(pc.TotalTime * 1000.0);
+        float rx = Hash(seed) * 2.0 - 1.0;
+        float ry = Hash(seed + 1u) * 2.0 - 0.5;
+        float rz = Hash(seed + 2u) * 2.0 - 1.0;
+
+        p.Position = pc.EmitterPosition.xyz + vec3(rx, 0.0, rz) * 0.5;
+        p.Velocity = vec3(rx * 2.5, abs(ry) * 6.0 + 2.0, rz * 2.5);
+        p.Age = 0.0;
+        p.Lifetime = pc.DefaultLifetime * (0.8 + Hash(seed + 3u) * 0.4);
+        p.Size = 0.25 + Hash(seed + 4u) * 0.25;
+        p.Color = vec4(1.0, 0.6 + Hash(seed + 5u) * 0.3, 0.1, 1.0);
+    } else {
+        // Physical integration
+        p.Velocity += pc.GravityAndDrag.xyz * pc.DeltaTime;
+        p.Velocity *= (1.0 - pc.GravityAndDrag.w * pc.DeltaTime);
+        p.Position += p.Velocity * pc.DeltaTime;
+
+        // Fade out alpha as age approaches lifetime
+        float normalizedAge = p.Age / p.Lifetime;
+        p.Color.a = 1.0 - normalizedAge;
+    }
+
+    particles[id] = p;
+}

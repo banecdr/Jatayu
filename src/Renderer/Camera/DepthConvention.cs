@@ -148,4 +148,42 @@ public static class DepthConvention
             M44 = 0.0f,
         };
     }
+
+    /// <summary>
+    /// Constructs a Vulkan-tailored Reverse-Z orthographic projection matrix.
+    /// Maps nearPlane -> 1.0f and farPlane -> 0.0f.
+    /// Automatically applies Vulkan NDC Y-axis flipping.
+    /// </summary>
+    public static Matrix4x4 CreateReverseZOrthographic(float width, float height, float nearPlane, float farPlane)
+    {
+        if (width <= 0.0f || height <= 0.0f)
+            throw new ArgumentException("Width and height must be positive.");
+        if (farPlane <= nearPlane)
+            throw new ArgumentException("farPlane must be greater than nearPlane.");
+
+        float fRange = farPlane - nearPlane;
+
+        return new Matrix4x4
+        {
+            M11 = 2.0f / width,
+            M12 = 0.0f,
+            M13 = 0.0f,
+            M14 = 0.0f,
+
+            M21 = 0.0f,
+            M22 = -2.0f / height, // Vulkan NDC Y-axis flip
+            M23 = 0.0f,
+            M24 = 0.0f,
+
+            M31 = 0.0f,
+            M32 = 0.0f,
+            M33 = 1.0f / fRange,
+            M34 = 0.0f,
+
+            M41 = 0.0f,
+            M42 = 0.0f,
+            M43 = farPlane / fRange,
+            M44 = 1.0f,
+        };
+    }
 }

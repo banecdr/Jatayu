@@ -260,7 +260,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **DONE** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
 | `tools/Jatayu.Cooker/HlodCooker.cs` | **DONE** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |
 | `tools/Jatayu.Cooker/ImpostorCooker.cs` | **DONE** | Generates 8-angle billboard impostor texture atlases for far-distance vegetation and props. (Sprint 6b). |
-| `tools/Jatayu.Cooker/FoliageCooker.cs` | **PLANNED** | Evaluates procedural density splat maps to generate per-cell foliage instance buffers. (Sprint 7b). |
+| `tools/Jatayu.Cooker/FoliageCooker.cs` | **DONE** | Evaluates procedural jittered distribution and terrain height/slope to bake 16-byte packed foliage instance buffers. (Sprint 7b). |
 | `tools/Jatayu.Cooker/NavMeshCooker.cs` | **PLANNED** | Bakes per-cell Recast navigation mesh tiles from static geometry colliders. (Sprint 10). |
 | `tools/Jatayu.Cooker/ShaderCooker.cs` | **PLANNED** | Precompiles all runtime GLSL shaders into SPIR-V bytecode blobs and initializes pipeline cache files. (Sprint 10). |
 | `tools/Jatayu.WorldGen/Program.cs` | **DONE** | Procedural world generator: bakes Reference Scene terrain heightmaps, scatter tables, foliage maps, and procedural placeholder glTF models (rocks, buildings, trees, grass cards) into assets/generated/. (Sprint 6a). |
@@ -322,18 +322,18 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Renderer/Material/Material.cs` | **DONE** | PBR material binding albedo, normal, metallic-roughness, AO, emissive textures and scalar factors. (Sprint 5b). |
 | `src/Renderer/Material/MaterialTable.cs` | **DONE** | GPU storage buffer containing all active material parameters indexed by material ID for bindless draws. (Sprint 5b). |
 | `src/Renderer/Lighting/DirectionalLight.cs` | **DONE** | Sunlight parameters: Direction, Color, Intensity, Cascaded shadow configuration. (Sprint 5b). |
-| `src/Renderer/Lighting/PointLight.cs` | **PLANNED** | Point light parameters: Camera-relative position, Color, Intensity, Attenuation radius. (Sprint 7b). |
-| `src/Renderer/Lighting/SpotLight.cs` | **PLANNED** | Spot light parameters: Position, Direction, Inner/Outer cone angles, Color, Intensity. (Sprint 7b). |
+| `src/Renderer/Lighting/PointLight.cs` | **DONE** | Point light parameters: Camera-relative position, Color, Intensity, Attenuation radius (32 bytes). (Sprint 7b). |
+| `src/Renderer/Lighting/SpotLight.cs` | **DONE** | Spot light parameters: Position, Direction, Inner/Outer cone angles, Color, Range (48 bytes). (Sprint 7b). |
 | `src/Renderer/Lighting/LightEnvironment.cs` | **DONE** | Scene lighting container holding sun light, ambient sky light, and active clustered light arrays. (Sprint 5b). |
-| `src/Renderer/Lighting/ClusteredLightCulling.cs`| **PLANNED** | 3D view-frustum cluster grid allocator and compute pass assigning point/spot lights to 3D clusters. (Sprint 7b). |
-| `src/Renderer/Lighting/IblProbe.cs` | **PLANNED** | Image-based lighting probe: diffuse irradiance cubemap, specular prefiltered reflection map, BRDF LUT. (Sprint 7b). |
+| `src/Renderer/Lighting/ClusteredLightCulling.cs`| **DONE** | 3D view-frustum cluster grid allocator and compute pass assigning point/spot lights to 3D clusters (16x8x24). (Sprint 7b). |
+| `src/Renderer/Lighting/IblProbe.cs` | **DONE** | Image-based lighting probe: diffuse irradiance cubemap, specular prefiltered reflection map, BRDF LUT. (Sprint 7b). |
 | `src/Renderer/Shadows/ShadowMap.cs` | **DONE** | Depth render target and light view-projection for single directional/spot shadow passes. (Sprint 5b). |
-| `src/Renderer/Shadows/CascadedShadowMap.cs` | **PLANNED** | 4-cascade shadow map renderer with texel snapping to prevent edge shimmering during camera translation. (Sprint 7b). |
-| `src/Renderer/Shadows/ShadowCascade.cs` | **PLANNED** | Individual cascade bounds, projection matrix, split distance, and depth bias calculations. (Sprint 7b). |
-| `src/Renderer/Vegetation/FoliageSystem.cs` | **PLANNED** | GPU instancing manager for grass, shrubs, and trees with wind vertex animation and distance LOD dithering. (Sprint 7b). |
-| `src/Renderer/Vegetation/FoliageInstanceData.cs`| **PLANNED** | Packed instance representation (16 bytes: position offset, scale, rotation, color tint). (Sprint 7b). |
-| `src/Renderer/Transparent/TransparentPass.cs` | **PLANNED** | Sorted or weighted-blended order-independent transparency pass for glass, effects, and particles. (Sprint 7b). |
-| `src/Renderer/Particles/ParticleSystem.cs` | **PLANNED** | GPU particle simulation (compute update, indirect draw) with soft particle depth fading. (Sprint 7b). |
+| `src/Renderer/Shadows/CascadedShadowMap.cs` | **DONE** | 4-cascade shadow map 2D array texture renderer with texel snapping to prevent edge shimmering during camera translation. (Sprint 7b). |
+| `src/Renderer/Shadows/ShadowCascade.cs` | **DONE** | Individual cascade bounds, projection matrix, split distance, and light-space texel snapping. (Sprint 7b). |
+| `src/Renderer/Vegetation/FoliageSystem.cs` | **DONE** | GPU instancing manager for grass, shrubs, and trees with wind vertex animation and distance LOD dithering. (Sprint 7b). |
+| `src/Renderer/Vegetation/FoliageInstanceData.cs`| **DONE** | Packed instance representation (16 bytes: position offset, scale, rotation, color tint & wind phase). (Sprint 7b). |
+| `src/Renderer/Transparent/TransparentPass.cs` | **DONE** | Weighted, blended order-independent transparency (WBOIT) pass for glass, effects, and particles. (Sprint 7b). |
+| `src/Renderer/Particles/ParticleSystem.cs` | **DONE** | GPU particle simulation (compute update, billboard draw) with soft particle depth fading (64 bytes std430). (Sprint 7b). |
 | `src/Renderer/Sky/Atmosphere.cs` | **PLANNED** | Analytical Rayleigh/Mie atmospheric scattering shader simulation and aerial perspective fog. (Sprint 9). |
 | `src/Renderer/Sky/TimeOfDay.cs` | **PLANNED** | 24-hour sun/moon orbit simulation driving directional light vector, sky color, and ambient tones. (Sprint 9). |
 | `src/Renderer/Skybox/Skybox.cs` | **DONE** | Procedural atmospheric or cubemap background drawn at reverse-Z infinity ($Z = 0.0$). (Sprint 5b). |
@@ -444,19 +444,19 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `assets/shaders/debug_line.frag`| **DONE** | Unlit flat-color fragment shader for physics debug lines and bounds. (Sprint 5b). |
 | `assets/shaders/cull.comp` | **DONE** | Compute shader for 5-plane frustum culling, max draw distance clamp, LOD selection, Hi-Z min-reduction occlusion, and indirect command generation across 5 views. (Sprint 7a). |
 | `assets/shaders/hiz_build.comp` | **DONE** | Compute shader generating hierarchical depth mip pyramid using MIN reduction for reverse-Z. (Sprint 7a). |
-| `assets/shaders/light_cull.comp`| **PLANNED** | Compute shader dividing frustum into 3D clusters and assigning point/spot light indices. (Sprint 7b). |
-| `assets/shaders/particle.vert` | **PLANNED** | GPU particle billboard vertex shader with size attenuation. (Sprint 7b). |
-| `assets/shaders/particle.frag` | **PLANNED** | Soft-particle fragment shader with depth fade against depth buffer. (Sprint 7b). |
-| `assets/shaders/particle.comp` | **PLANNED** | Compute shader updating GPU particle positions, velocities, lifetimes. (Sprint 7b). |
-| `assets/shaders/lod_dither.glsl`| **PLANNED** | GLSL include file providing screen-door stipple transparency for seamless LOD cross-fading. (Sprint 7b). |
-| `assets/shaders/transparent_composite.frag` | **PLANNED** | Fullscreen composite shader blending sorted transparent passes over opaque HDR color. (Sprint 7b). |
-| `assets/shaders/ibl_irradiance.comp` | **PLANNED** | Compute shader generating diffuse irradiance cubemap from environment map. (Sprint 7b). |
-| `assets/shaders/ibl_prefilter.comp` | **PLANNED** | Compute shader generating specular prefiltered environment cubemap mips. (Sprint 7b). |
-| `assets/shaders/brdf_lut.comp` | **PLANNED** | Compute shader pre-integrating split-sum 2D BRDF LUT for PBR specular reflections. (Sprint 7b). |
+| `assets/shaders/light_cull.comp`| **DONE** | Compute shader dividing frustum into 3D clusters (16x8x24) and assigning point/spot light indices. (Sprint 7b). |
+| `assets/shaders/particle.vert` | **DONE** | GPU particle billboard vertex shader with camera-facing quad expansion. (Sprint 7b). |
+| `assets/shaders/particle.frag` | **DONE** | Soft-particle fragment shader with radial alpha falloff. (Sprint 7b). |
+| `assets/shaders/particle.comp` | **DONE** | Compute shader updating GPU particle positions, velocities, lifetimes (64 bytes std430). (Sprint 7b). |
+| `assets/shaders/lod_dither.glsl`| **DONE** | GLSL include file providing 4x4 Bayer matrix stipple transparency for seamless LOD cross-fading. (Sprint 7b). |
+| `assets/shaders/transparent_composite.frag` | **DONE** | Fullscreen composite shader blending WBOIT transparent accumulation over opaque HDR color. (Sprint 7b). |
+| `assets/shaders/ibl_irradiance.comp` | **DONE** | Compute shader generating diffuse irradiance cubemap from environment map. (Sprint 7b). |
+| `assets/shaders/ibl_prefilter.comp` | **DONE** | Compute shader generating specular prefiltered environment cubemap mips via GGX importance sampling. (Sprint 7b). |
+| `assets/shaders/brdf_lut.comp` | **DONE** | Compute shader pre-integrating split-sum 2D BRDF LUT for PBR specular reflections. (Sprint 7b). |
 | `assets/shaders/terrain.vert` | **DONE** | Terrain clipmap vertex shader with continuous geomorphing and normal generation from heightmaps. (Sprint 6b). |
 | `assets/shaders/terrain.frag` | **DONE** | Multi-layer splat material shader with triplanar projection for cliff slopes. (Sprint 6b). |
-| `assets/shaders/foliage.vert` | **PLANNED** | GPU-instanced vegetation vertex shader with procedural wind vertex oscillation. (Sprint 7b). |
-| `assets/shaders/foliage.frag` | **PLANNED** | Foliage fragment shader with alpha-to-coverage and subsurface scattering approximation. (Sprint 7b). |
+| `assets/shaders/foliage.vert` | **DONE** | GPU-instanced vegetation vertex shader with procedural wind vertex oscillation and distance fade. (Sprint 7b). |
+| `assets/shaders/foliage.frag` | **DONE** | Foliage fragment shader with Bayer dither fade and subsurface scattering backlighting approximation. (Sprint 7b). |
 | `assets/shaders/atmosphere.frag`| **PLANNED** | Analytical Rayleigh/Mie scattering atmosphere and sun disc shader. (Sprint 9). |
 | `assets/shaders/water.vert` | **PLANNED** | Water surface displacement shader using Gerstner waves. (Sprint 9). |
 | `assets/shaders/water.frag` | **PLANNED** | Water lighting with depth color gradient, normal blending, Fresnel reflection and refraction. (Sprint 9). |
@@ -475,8 +475,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 134
-- **Current Completion:** **62.3% (Sprint 7a Complete, Sprint 7b Active)**
+- **Total Completed Files:** 156
+- **Current Completion:** **72.6% (Sprint 7 COMPLETE: 7a GPU-Driven & 7b Scalable Lighting)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -485,12 +485,12 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
 | **Modern Vulkan 1.3 RHI** | 22 / 23 | **BindlessTable, Async Uploads, Timeline, DeletionQueue Added** |
 | **Shared Formats & Runtime Assets** | 12 / 12 | **COMPLETE (TextureStreamer, MipResidency, Formats Added)** |
-| **Cooker & World Generator** | 10 / 13 | **HeightfieldCooker, HlodCooker, ImpostorCooker, CellCooker Added** |
+| **Cooker & World Generator** | 11 / 13 | **FoliageCooker, HeightfieldCooker, HlodCooker, ImpostorCooker, CellCooker Complete** |
 | **World Grid & Streaming** | 7 / 7 | **COMPLETE (WorldGrid, StreamingManager, CellLoader, HLOD, DebugOverlay)** |
 | **Terrain System** | 4 / 4 | **COMPLETE (TerrainTile, TerrainClipmap, TerrainMaterial, HeightPyramid)** |
 | **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
 | **GPU-Driven Rendering** | 6 / 6 | **COMPLETE (GeometryPool, DynamicInstanceRing, InstanceBuffer, IndirectDrawBuffer, GpuCuller, HiZBuilder)** |
-| **3D Graphics, Lighting & Environment** | 15 / 28 | **ForwardRenderer3D, Skybox, DebugRenderer, ShadowMap, Material, LightEnv Complete** |
+| **3D Graphics, Lighting & Environment** | 25 / 28 | **COMPLETE (CSM, ClusteredLightCulling, IBL, Foliage, Particles, WBOIT, ForwardRenderer3D, Skybox)** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 7 / 7 | **COMPLETE (Scene, Entity, Transform, MeshRenderer, Camera, Light, RigidBody)** |
 | **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
@@ -499,7 +499,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
 | **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
-| **Asset Shaders** | 18 / 39 | **terrain.*, pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.*, cull.comp, hiz_build.comp Complete** |
+| **Asset Shaders** | 29 / 39 | **COMPLETE (light_cull, ibl_*, brdf_lut, foliage.*, particle.*, transparent_composite, cull.comp, hiz_build.comp)** |
 
 ---
 
@@ -854,3 +854,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-52** | Sprint 6b | Completed Sprint 6b: Implemented TerrainTile (256m tiles covering 2x2 cells, TileCoord = CellCoord / 2 per D15, bilinear height interpolation, origin shifting, .jtile binary codec), TerrainClipmap (concentric nested grid rings with continuous geomorphing, D22 unified renderer), TerrainMaterial (4-layer splat mapping, triplanar cliff blend parameters), TerrainHeightPyramid (Ring C far-field elevation mip pyramid), HeightfieldCooker (elevation bounds calculation, .jtile payload baking), HlodProxyCluster & HlodManager (Ring B 600m–2,000m proxy activation), HlodCooker (.jhlod binary cooker), ImpostorCooker (8-angle billboard atlas layout and view angle selection), TextureResidencyState & TextureStreamer (step-of-2 mip transitions per D21, permanent resident tail protection <= 64x64 per D5, atomic bindless swaps, VRAM pressure fallback), shaders (terrain.vert & terrain.frag), ForwardRenderer3D terrain pipeline and clipmap draw loop, and 15 new unit tests (113/113 passing) and RenderSmoke CHECK 7 verification passing. |
 | **CL-53** | Sprint 7 | Planned Sprint 7 (GPU-Driven Rendering & Scalable Lighting): Structured into Phase 7a (InstanceBuffer, IndirectDrawBuffer, HiZBuilder, GpuCuller 5-view culling, multidraw indirect conversion) and Phase 7b (CascadedShadowMap, ClusteredLightCulling, IblProbe, FoliageSystem, TransparentPass, ParticleSystem). Updated progress tracking dashboard to 128 / 215 completed files (59.5%). |
 | **CL-54** | Sprint 7a | Completed Sprint 7a: Implemented GPU-Driven Rendering Foundation. Unified 160-byte InstanceBuffer (Current & Previous transforms for continuous TAA velocity vectors per D25, BoundingCenter/Radius, MeshId, MaterialId, Flags, LodBias), multi-view IndirectDrawBuffer (5 views: Main Camera + 4 Cascades, 65,536 draws/view, vkCmdDrawIndexedIndirectCount support, CPU/GPU draw count reset, execution barrier), HiZBuilder with Reverse-Z MIN reduction sampler and compute shader hiz_build.comp, GpuCuller 5-view compute culler with cull.comp (5-plane frustum test, max draw distance clamp, LOD selection per D24, Reverse-Z Hi-Z occlusion test, atomic indirect draw compaction), multi-LOD GeometryPool with MeshLodRecord (48B) and MeshLodBuffer, and conversion of ForwardRenderer3D to vkCmdDrawIndexedIndirectCount with CPU draw fallback. Added GpuDrivenTests (121/121 unit tests passing) and hardware-verified CHECK 8 in Jatayu.RenderSmoke on NVIDIA GeForce RTX 5060 Ti. Updated dashboard to 134 / 215 files (62.3%). |
+| **CL-55** | Sprint 7b | Completed Sprint 7b: Scalable Lighting, Foliage & Transparency. Implemented 4-split Cascaded Shadow Maps with light-space texel snapping and Reverse-Z orthographic projection (ShadowCascade, CascadedShadowMap); 3D Clustered Light Culling (16x8x24 grid = 3072 clusters, PointLight 32B, SpotLight 48B, ClusterUniforms 176B, light_cull.comp); Split-Sum IBL probe pre-integration (brdf_lut.comp, ibl_irradiance.comp, ibl_prefilter.comp, IblProbe); Procedural Foliage System (FoliageInstanceData 16B packed, FoliageCooker cell baker, FoliageSystem procedural grass blade generator, foliage.vert with procedural wind oscillation, foliage.frag with Bayer stipple dissolve and subsurface scattering); GPU Particles (GpuParticle 64B std430, ParticleSystem emitter, particle.comp simulation, particle.vert camera-facing quad expansion, particle.frag soft radial falloff); and Weighted, Blended Order-Independent Transparency (TransparentPass, transparent_composite.frag). Added LightingAndFoliageTests (129/129 unit tests passing) and hardware offscreen CHECK 9 in Jatayu.RenderSmoke verifying all 10 shaders cleanly compiling to SPIR-V and running on NVIDIA GeForce RTX 5060 Ti. Dashboard updated to 156 / 215 files (72.6%). |
