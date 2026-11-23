@@ -1,0 +1,208 @@
+/* =================================================================================================
+ * FILE: TerrainTile.cs
+ * LOCATION: src/Terrain/TerrainTile.cs
+ * 
+ * WHAT THIS FILE DOES:
+ *   Represents a 256m x 256m streamed terrain chunk covering 2x2 cells (keyed by TileCoord = CellCoord / 2)
+ *   per architectural decision D15.
+ *   - Owns high-resolution elevation height data (e.g. 65x65 samples = 4m quad spacing).
+ *   - Computes double-precision world origins invariant across floating-origin shifts.
+ *   - Computes local surface normals and bilinear height interpolation for ground clamping.
+ * ================================================================================================= */
+
+using System;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Jatayu.AssetFormats;
+using Jatayu.AssetFormats.World;
+using Jatayu.Core.Mathematics;
+
+namespace Jatayu.Terrain;
+
+/// <summary>
+/// 2D integer tile coordinate identifying a 256m terrain chunk.
+/// </summary>
+public readonly struct TileCoord : IEquatable<TileCoord>, IComparable<TileCoord>
+{
+    public readonly int X;
+    public readonly int Z;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TileCoord(int x, int z)
+    {
+        X = x;
+        Z = z;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TileCoord FromCell(in CellCoord cell)
+    {
+        var (tx, tz) = WorldConstants.GetTileCoordForCell(in cell);
+        return new TileCoord(tx, tz);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TileCoord FromWorld(double worldX, double worldZ, float tileSize = WorldConstants.TileSize)
+    {
+        int tx = (int)Math.Floor(worldX / tileSize);
+        int tz = (int)Math.Floor(worldZ / tileSize);
+        return new TileCoord(tx, tz);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void GetWorldOrigin(float tileSize, out double ox, out double oz)
+    {
+        ox = (double)X * tileSize;
+        oz = (double)Z * tileSize;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Equals(TileCoord other) => X == other.X && Z == other.Z;
+
+    public override bool Equals(object? obj) => obj is TileCoord other && Equals(other);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override int GetHashCode() => unchecked((X * 73856093) ^ (Z * 19349663));
+
+    public int CompareTo(TileCoord other)
+    {
+        int cmp = Z.CompareTo(other.Z);
+        return cmp != 0 ? cmp : X.CompareTo(other.X);
+    }
+
+    public override string ToString() => $"Tile({X}, {Z})";
+
+    public static bool operator ==(TileCoord left, TileCoord right) => left.Equals(right);
+    public static bool operator !=(TileCoord left, TileCoord right) => !left.Equals(right);
+}
+
+/// <summary>
+/// Encapsulates a 256m streamed terrain chunk and its resident elevation dataset.
+/// </summary>
+public sealed class TerrainTile
+{
+    public TileCoord Coord { get; }
+    public AssetGuid TileGuid { get; }
+
+    /// <summary>
+    /// Double-precision world origin coordinate (minimum corner) of this tile.
+    /// </summary>
+    public WorldPosition Origin { get; private set; }
+
+    /// <summary>
+    /// Raw elevation sample array (SamplesX * SamplesZ).
+    /// </summary>
+    public float[] Heights { get; }
+
+    public uint SamplesX { get; }
+    public uint SamplesZ { get; }
+
+    public float MinHeight { get; }
+    public float MaxHeight { get; }
+
+    public AssetGuid NormalMapGuid { get; }
+    public AssetGuid SplatMapGuid { get; }
+
+    public TerrainTile(
+        TileCoord coord,
+        uint samplesX,
+        uint samplesZ,
+        float[] heights,
+        float minHeight,
+        float maxHeight,
+        AssetGuid normalMapGuid = default,
+        AssetGuid splatMapGuid = default,
+        float tileSize = WorldConstants.TileSize)
+    {
+        Coord = coord;
+        ulong packedTile = ((ulong)(uint)coord.X << 32) | (uint)coord.Z;
+        TileGuid = new AssetGuid(packedTile ^ 0x54494C455F54494CUL);
+
+        coord.GetWorldOrigin(tileSize, out double ox, out double oz);
+        Origin = new WorldPosition(ox, 0.0, oz);
+
+        SamplesX = samplesX;
+        SamplesZ = samplesZ;
+        Heights = heights ?? throw new ArgumentNullException(nameof(heights));
+        MinHeight = minHeight;
+        MaxHeight = maxHeight;
+        NormalMapGuid = normalMapGuid;
+        SplatMapGuid = splatMapGuid;
+    }
+
+    /// <summary>
+    /// Updates double-precision origin during a floating-origin rebase.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ShiftOrigin(double deltaX, double deltaY, double deltaZ)
+    {
+        Origin = new WorldPosition(Origin.X + deltaX, Origin.Y + deltaY, Origin.Z + deltaZ);
+    }
+
+    /// <summary>
+    /// Evaluates bilinearly interpolated height at tile-local coordinates (0..256m).
+    /// </summary>
+    public float SampleHeightLocal(float localX, float localZ, float tileSize = WorldConstants.TileSize)
+    {
+        float clampedX = Math.Clamp(localX, 0f, tileSize);
+        float clampedZ = Math.Clamp(localZ, 0f, tileSize);
+
+        float fx = (clampedX / tileSize) * (SamplesX - 1);
+        float fz = (clampedZ / tileSize) * (SamplesZ - 1);
+
+        int x0 = (int)MathF.Floor(fx);
+        int z0 = (int)MathF.Floor(fz);
+        int x1 = Math.Min(x0 + 1, (int)SamplesX - 1);
+        int z1 = Math.Min(z0 + 1, (int)SamplesZ - 1);
+
+        float tx = fx - x0;
+        float tz = fz - z0;
+
+        float h00 = Heights[z0 * SamplesX + x0];
+        float h10 = Heights[z0 * SamplesX + x1];
+        float h01 = Heights[z1 * SamplesX + x0];
+        float h11 = Heights[z1 * SamplesX + x1];
+
+        float h0 = MathF.FusedMultiplyAdd(h10 - h00, tx, h00);
+        float h1 = MathF.FusedMultiplyAdd(h11 - h01, tx, h01);
+        return MathF.FusedMultiplyAdd(h1 - h0, tz, h0);
+    }
+
+    /// <summary>
+    /// Decodes a CookedTerrainTileHeader and height array from a raw byte span (.jtile).
+    /// </summary>
+    public static bool TryDecodeTile(ReadOnlySpan<byte> data, out TerrainTile? tile)
+    {
+        tile = null;
+        int headerSize = Marshal.SizeOf<CookedTerrainTileHeader>();
+        if (data.Length < headerSize)
+            return false;
+
+        var header = MemoryMarshal.Read<CookedTerrainTileHeader>(data[..headerSize]);
+        if (!header.IsValid)
+            return false;
+
+        int totalSamples = (int)(header.HeightSamplesX * header.HeightSamplesZ);
+        int expectedBytes = totalSamples * sizeof(float);
+        if (header.HeightDataOffset + (ulong)expectedBytes > (ulong)data.Length)
+            return false;
+
+        var heightSpan = MemoryMarshal.Cast<byte, float>(data.Slice((int)header.HeightDataOffset, expectedBytes));
+        var heights = heightSpan.ToArray();
+
+        var coord = new TileCoord(header.TileX, header.TileZ);
+        tile = new TerrainTile(
+            coord,
+            header.HeightSamplesX,
+            header.HeightSamplesZ,
+            heights,
+            header.MinHeight,
+            header.MaxHeight,
+            header.NormalMapGuid,
+            header.SplatMapGuid
+        );
+
+        return true;
+    }
+}

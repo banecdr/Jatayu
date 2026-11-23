@@ -179,6 +179,8 @@ public static class Program
                 ".jtex" => AssetType.Texture,
                 ".jmat" => AssetType.Material,
                 ".jcell" => AssetType.WorldCell,
+                ".jtile" => AssetType.TerrainTile,
+                ".jhlod" => AssetType.HlodProxy,
                 _ => AssetType.Unknown,
             };
 

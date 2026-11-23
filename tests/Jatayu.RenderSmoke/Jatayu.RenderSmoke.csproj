@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Jatayu.csproj" SkipGetTargetFrameworkProperties="true" />
     <ProjectReference Include="..\..\src\Jatayu.AssetFormats\Jatayu.AssetFormats.csproj" />
+    <ProjectReference Include="..\..\tools\Jatayu.Cooker\Jatayu.Cooker.csproj" />
   </ItemGroup>
 
 </Project>

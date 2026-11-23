@@ -164,6 +164,34 @@ public sealed class BindlessTable : IDisposable
     }
 
     /// <summary>
+    /// Updates an existing slot in-place with a new image view and sampler (D21 atomic swap).
+    /// </summary>
+    public unsafe void UpdateSlot(uint slot, VkImageView imageView, VkSampler sampler)
+    {
+        if (slot >= _maxTextures)
+            throw new ArgumentOutOfRangeException(nameof(slot));
+
+        var imageInfo = new VkDescriptorImageInfo
+        {
+            Sampler = sampler,
+            ImageView = imageView,
+            ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
+        };
+
+        var write = new VkWriteDescriptorSet
+        {
+            DstSet = _descriptorSet,
+            DstBinding = 0,
+            DstArrayElement = (int)slot,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            ImageInfo = &imageInfo,
+        };
+
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 1, &write, 0, null);
+    }
+
+    /// <summary>
     /// Unregisters a texture slot and reclaims it for reuse.
     /// </summary>
     public void UnregisterTexture(uint slot)

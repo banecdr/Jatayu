@@ -27,6 +27,9 @@ public enum AssetType : byte
     WorldCell = 4,
     Shader = 5,
     Audio = 6,
+    TerrainTile = 7,
+    HeightPyramid = 8,
+    HlodProxy = 9,
 }
 
 /// <summary>
@@ -214,6 +217,69 @@ public struct CookedMaterialRecord
     public float BaseColorG;
     public float BaseColorB;
     public float BaseColorA;
+
+    public readonly bool IsValid => Magic == MagicValue && Version == CurrentVersion;
+}
+
+/// <summary>
+/// Binary header for a 256m terrain tile (.jtile) covering 2x2 cells (TileCoord = CellCoord / 2).
+/// Contains height sample counts, min/max heights, normal map GUID, and splat map GUID.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct CookedTerrainTileHeader
+{
+    public const uint MagicValue = 0x544C4954; // "TILT" ("TIL" + 'T')
+    public const uint CurrentVersion = 1;
+
+    public uint Magic;
+    public uint Version;
+    public AssetGuid Guid;
+    public int TileX;
+    public int TileZ;
+
+    // Grid resolution (e.g. 65x65 height samples across 256m tile)
+    public uint HeightSamplesX;
+    public uint HeightSamplesZ;
+
+    // Elevation range for rapid AABB culling and quantization
+    public float MinHeight;
+    public float MaxHeight;
+
+    // Associated streaming textures
+    public AssetGuid NormalMapGuid;
+    public AssetGuid SplatMapGuid;
+
+    // Byte offsets relative to header start
+    public ulong HeightDataOffset;
+    public uint HeightDataSize;
+
+    public readonly bool IsValid => Magic == MagicValue && Version == CurrentVersion;
+}
+
+/// <summary>
+/// Binary header for an HLOD proxy mesh cluster (.jhlod) covering distant world cells in Ring B.
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public struct CookedHlodHeader
+{
+    public const uint MagicValue = 0x444F4C48; // "HLOD"
+    public const uint CurrentVersion = 1;
+
+    public uint Magic;
+    public uint Version;
+    public AssetGuid Guid;
+    public AssetGuid ProxyMeshGuid;
+    public AssetGuid ImpostorAtlasGuid;
+
+    // Center world coordinates in double precision
+    public double CenterX;
+    public double CenterY;
+    public double CenterZ;
+    public float BoundingRadius;
+
+    // LOD transition distances
+    public float MinDistance;
+    public float MaxDistance;
 
     public readonly bool IsValid => Magic == MagicValue && Version == CurrentVersion;
 }

@@ -80,6 +80,8 @@ using Jatayu.Scene;
 using Jatayu.Scene.Components;
 using Jatayu.AssetFormats.World;
 using Jatayu.Assets;
+using Jatayu.Assets.Textures;
+using Jatayu.Terrain;
 using Jatayu.World;
 
 namespace Jatayu;
@@ -471,6 +473,10 @@ public static class Program
         using var streamingManager = new StreamingManager(worldGrid, worldConfig, worldPack, vramBudget: vramBudget);
         Vector3 prevCamPos = camera.Position;
 
+        // Sprint 6b: Terrain Clipmap (D22) & Texture Mip Streamer (D5, D21)
+        using var terrainClipmap = new TerrainClipmap(context, allocator);
+        using var textureStreamer = new TextureStreamer(context, allocator, bindlessTable, deletionQueue, vramBudget);
+
         using var renderGraph = new RenderGraph();
 
         var waitSemaphores = new VkSemaphore[1];
@@ -756,10 +762,11 @@ public static class Program
             var camWorldPos = new WorldPosition(camera.Position.X, camera.Position.Y, camera.Position.Z);
             originShift.CheckAndShift(camWorldPos, out _);
 
-            // 5b. Open-World Region Streaming (Sprint 6a)
+            // 5b. Open-World Region Streaming (Sprint 6a) & Texture Mip Streaming (Sprint 6b)
             Vector3 camVelocity = (camera.Position - prevCamPos) / Math.Max(0.0001f, (float)dt);
             prevCamPos = camera.Position;
             streamingManager.Update(dt, in camWorldPos, in camVelocity);
+            textureStreamer.Update((ulong)frameSync.CurrentFrame);
 
             // 6. Immediate-Mode 3D Debug Wireframes
             if (debugWireframeEnabled)
@@ -902,7 +909,8 @@ public static class Program
                     depthTarget,
                     originShift,
                     worldGrid,
-                    _ => cubeMesh
+                    _ => cubeMesh,
+                    terrainClipmap: terrainClipmap
                 );
                 currentSwapchainTarget = swapchainTarget;
 

@@ -33,6 +33,7 @@ using Jatayu.Scene;
 using Jatayu.Scene.Components;
 using Jatayu.AssetFormats;
 using Jatayu.AssetFormats.World;
+using Jatayu.Terrain;
 using Jatayu.World;
 
 namespace Jatayu.Renderer;
@@ -101,12 +102,14 @@ public sealed class ForwardRenderer3D : IDisposable
     private VkPipelineLayout _shadowPipelineLayout;
     private VkPipelineLayout _skyboxPipelineLayout;
     private VkPipelineLayout _pbrPipelineLayout;
+    private VkPipelineLayout _terrainPipelineLayout;
     private VkPipelineLayout _debugPipelineLayout;
 
     // Graphics Pipelines
     private VulkanPipeline _shadowPipeline = null!;
     private VulkanPipeline _skyboxPipeline = null!;
     private VulkanPipeline _pbrPipeline = null!;
+    private VulkanPipeline _terrainPipeline = null!;
     private VulkanPipeline _debugPipeline = null!;
 
     // Reusable culling lists to eliminate GC allocations
@@ -122,6 +125,7 @@ public sealed class ForwardRenderer3D : IDisposable
     private readonly VkViewport[] _viewports = new VkViewport[1];
     private readonly VkRect2D[] _scissors = new VkRect2D[1];
     private readonly VkDescriptorSet[] _pbrDescriptorSets = new VkDescriptorSet[2];
+    private readonly VkDescriptorSet[] _terrainDescriptorSets = new VkDescriptorSet[1];
     private readonly VkBuffer[] _vertexBufferArray = new VkBuffer[1];
     private readonly ByteSize64[] _vertexOffsetArray = new ByteSize64[1];
 
@@ -150,6 +154,7 @@ public sealed class ForwardRenderer3D : IDisposable
     private Matrix4x4 _currentCameraViewProj;
     private uint _currentDebugVertexCount;
     private GpuBuffer _currentDebugBuffer = null!;
+    private TerrainClipmap? _currentTerrainClipmap;
 
     private bool _disposed;
 
@@ -370,6 +375,15 @@ public sealed class ForwardRenderer3D : IDisposable
             Size = new ByteSize32((uint)Marshal.SizeOf<PbrPushConstants>()),
         };
         _pbrPipelineLayout = device.CreatePipelineLayout([_frameDescriptorLayout, bindlessLayout], [pbrPushConstant], null);
+
+        // Terrain Pipeline Layout: Set 0 (Frame) + 96 bytes push constants
+        var terrainPushConstant = new VkPushConstantRange
+        {
+            StageFlags = VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+            Offset = new ByteSize32(0),
+            Size = new ByteSize32((uint)Marshal.SizeOf<TerrainPushConstants>()),
+        };
+        _terrainPipelineLayout = device.CreatePipelineLayout([_frameDescriptorLayout], [terrainPushConstant], null);
     }
 
     private unsafe void BuildPipelines(VkFormat colorFormat)
@@ -456,6 +470,29 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetPipelineLayout(_debugPipelineLayout)
                 .Build(_context);
         }
+
+        // 5. Build Terrain Clipmap Pipeline
+        var terrainVert = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/terrain.vert"), ShaderKind.VertexShader);
+        var terrainFrag = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/terrain.frag"), ShaderKind.FragmentShader);
+        using (var terrainStages = new ShaderStages(device, [Presets.ShaderStage.Vertex(terrainVert), Presets.ShaderStage.Fragment(terrainFrag)], null))
+        {
+            var terrainVertexInput = new VertexInput(1, 3);
+            terrainVertexInput.AddBinding(0, new ByteSize((uint)sizeof(TerrainVertex)), VkVertexInputRate.Vertex);
+            terrainVertexInput.AddAttribute(0, 0, VkFormat.R32G32B32SFloat, new ByteSize(0));  // Position
+            terrainVertexInput.AddAttribute(1, 0, VkFormat.R32G32B32SFloat, new ByteSize(12)); // Normal
+            terrainVertexInput.AddAttribute(2, 0, VkFormat.R32G32SFloat, new ByteSize(24));    // TexCoord
+
+            _terrainPipeline = PipelineBuilder.Create()
+                .SetShaderStages(terrainStages)
+                .SetVertexInput(terrainVertexInput)
+                .SetColorAttachmentFormat(colorFormat)
+                .SetDepthAttachmentFormat(DepthConvention.DepthFormat)
+                .SetDepthTest(depthTestEnable: true, depthWriteEnable: true, compareOp: DepthConvention.DepthCompareOp)
+                .SetRasterization(Presets.Rasterization.Fill.CullBack)
+                .SetColorBlend(Presets.BlendState.BlendNone)
+                .SetPipelineLayout(_terrainPipelineLayout)
+                .Build(_context);
+        }
     }
 
     private unsafe void UpdateLightBuffer(in GpuLightEnvironmentData data)
@@ -484,7 +521,8 @@ public sealed class ForwardRenderer3D : IDisposable
         RgTextureHandle depthTarget,
         OriginShift? originShift = null,
         WorldGrid? worldGrid = null,
-        Func<AssetGuid, Mesh.Mesh?>? meshResolver = null)
+        Func<AssetGuid, Mesh.Mesh?>? meshResolver = null,
+        TerrainClipmap? terrainClipmap = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(scene);
@@ -654,6 +692,7 @@ public sealed class ForwardRenderer3D : IDisposable
         _currentShadowLightVp = shadowLightVp;
         _currentVp = vp;
         _currentInvVp = _skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
+        _currentTerrainClipmap = terrainClipmap;
 
         // 5. Register Shadow Pass
         if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
@@ -812,6 +851,56 @@ public sealed class ForwardRenderer3D : IDisposable
             Span<ByteSize32>.Empty
         );
 
+        // Render terrain clipmap if present (D22 unified renderer)
+        if (_currentTerrainClipmap != null)
+        {
+            cmd.BindPipeline(VkPipelineBindPoint.Graphics, _terrainPipeline.Handle);
+            _terrainDescriptorSets[0] = _frameDescriptorSet;
+            cmd.BindDescriptorSets(
+                VkPipelineBindPoint.Graphics,
+                _terrainPipelineLayout,
+                0,
+                _terrainDescriptorSets,
+                Span<ByteSize32>.Empty
+            );
+
+            _vertexBufferArray[0] = _currentTerrainClipmap.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(0);
+            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+            cmd.BindIndexBuffer(_currentTerrainClipmap.IndexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt32);
+
+            for (int r = 0; r < TerrainClipmap.DefaultRingCount; r++)
+            {
+                float ringScale = 256.0f * (1 << r);
+                var tpc = new TerrainPushConstants
+                {
+                    ViewProjMatrix = _currentVp,
+                    CameraRelativeOrigin = Vector4.Zero,
+                    TerrainParams = new Vector4(ringScale, 0f, 200f, r)
+                };
+
+                CommandBufferExtensions.PushConstants(
+                    cmd,
+                    _terrainPipelineLayout,
+                    VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+                    new ByteSize(0),
+                    new ReadOnlySpan<TerrainPushConstants>(&tpc, 1)
+                );
+
+                cmd.DrawIndexed((int)_currentTerrainClipmap.IndexCount, 1, 0, 0, 0);
+            }
+
+            // Restore PBR pipeline and descriptors for static items
+            cmd.BindPipeline(VkPipelineBindPoint.Graphics, _pbrPipeline.Handle);
+            cmd.BindDescriptorSets(
+                VkPipelineBindPoint.Graphics,
+                _pbrPipelineLayout,
+                0,
+                _pbrDescriptorSets,
+                Span<ByteSize32>.Empty
+            );
+        }
+
         for (int i = 0; i < _visibleItems.Count; i++)
         {
             var item = _visibleItems[i];
@@ -909,8 +998,10 @@ public sealed class ForwardRenderer3D : IDisposable
         _shadowPipeline?.Dispose();
         _skyboxPipeline?.Dispose();
         _pbrPipeline?.Dispose();
+        _terrainPipeline?.Dispose();
         _debugPipeline?.Dispose();
 
+        if (_terrainPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_terrainPipelineLayout, null);
         if (_frameDescriptorPool.VkHandle != 0) device.DestroyDescriptorPool(_frameDescriptorPool, null);
         if (_frameDescriptorLayout.VkHandle != 0) device.DestroyDescriptorSetLayout(_frameDescriptorLayout, null);
 

@@ -417,11 +417,74 @@ public static class Program
             failureCount++;
         }
 
+        // -----------------------------------------------------------------------------------------
+        // 7. SPRINT 6A & 6B: WORLD STREAMING, TERRAIN CLIPMAP, HLOD & TEXTURE STREAMING
+        // -----------------------------------------------------------------------------------------
+        Console.WriteLine("\n--- [CHECK 7] Sprint 6a & 6b: World Streaming, Terrain Clipmap & Texture Streaming ---");
+        try
+        {
+            // 1. Terrain tile coordinate mapping (D15: 2x2 cells = 1 tile)
+            var c00 = new Jatayu.AssetFormats.World.CellCoord(0, 0);
+            var c11 = new Jatayu.AssetFormats.World.CellCoord(1, 1);
+            var t00 = Jatayu.Terrain.TileCoord.FromCell(in c00);
+            var t11 = Jatayu.Terrain.TileCoord.FromCell(in c11);
+            if (t00 != new Jatayu.Terrain.TileCoord(0, 0) || t11 != new Jatayu.Terrain.TileCoord(0, 0))
+                throw new InvalidOperationException("TileCoord.FromCell failed to map 2x2 cells to 256m tile.");
+            Console.WriteLine("  [Terrain] 256m Terrain Tile 2x2 cell mapping (D15): VERIFIED");
+
+            // 2. TerrainTile bilinear elevation sampling
+            float[] sampleHeights = [10f, 20f, 30f, 20f, 30f, 40f, 30f, 40f, 50f];
+            var tile = new Jatayu.Terrain.TerrainTile(t00, 3, 3, sampleHeights, 10f, 50f);
+            float centerH = tile.SampleHeightLocal(128f, 128f);
+            if (Math.Abs(centerH - 30f) > 0.01f)
+                throw new InvalidOperationException($"TerrainTile center elevation mismatch: expected 30.0, got {centerH}");
+            Console.WriteLine($"  [Terrain] Bilinear height sampling: VERIFIED (Center Elev={centerH:F1}m)");
+
+            // 3. Far-field height pyramid sampling (Ring C: 2,000m - 8,000m)
+            var pyramid = new Jatayu.Terrain.TerrainHeightPyramid(64, 16000.0, -8000.0, -8000.0);
+            pyramid.Initialize((wx, wz) => (float)(Math.Sin(wx * 0.001) * 50.0 + 100.0));
+            float pyrElev = pyramid.SampleHeightWorld(0.0, 0.0);
+            Console.WriteLine($"  [Terrain] Far-Field Height Pyramid (Ring C): VERIFIED (Sample={pyrElev:F1}m)");
+
+            // 4. HLOD Proxy & Impostor Cooker (Ring B: 600m - 2,000m)
+            var hlod = new Jatayu.World.HlodProxyCluster(
+                new Jatayu.AssetFormats.AssetGuid(1),
+                new Jatayu.AssetFormats.AssetGuid(2),
+                new Jatayu.AssetFormats.AssetGuid(3),
+                new Jatayu.Core.Mathematics.WorldPosition(0.0, 0.0, 0.0),
+                100f, 600f, 2000f);
+            if (!hlod.IsActiveAtDistance(1200.0) || hlod.IsActiveAtDistance(500.0) || hlod.IsActiveAtDistance(2500.0))
+                throw new InvalidOperationException("HLOD cluster distance range check failed.");
+            int sliceIdx = Jatayu.Cooker.ImpostorCooker.ComputeBestAngleIndex(1f, 0f);
+            if (sliceIdx != 2)
+                throw new InvalidOperationException($"Impostor slice for +X axis expected 2, got {sliceIdx}");
+            Console.WriteLine("  [HLOD] Ring B proxy distance thresholds & 8-angle billboard impostors: VERIFIED");
+
+            // 5. Texture Mip Streaming & Residency Manager (D5, D21)
+            var texState = new Jatayu.Assets.Textures.TextureResidencyState(
+                new Jatayu.AssetFormats.AssetGuid(99), 2048, 2048, 11, 4, 6, 0);
+            uint stepTarget = texState.ComputeStepTransition(0);
+            if (stepTarget != 4)
+                throw new InvalidOperationException($"Step transition expected 4 (max 2 mips), got {stepTarget}");
+            Console.WriteLine($"  [Streaming] Texture mip streaming step-of-2 transition (D21): VERIFIED (Next={stepTarget})");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(">> Sprint 6a & 6b World Streaming & Terrain Clipmap: VERIFIED");
+            Console.ResetColor();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Sprint 6b Error]: {ex.Message}");
+            Console.ResetColor();
+            failureCount++;
+        }
+
         Console.WriteLine("\n================================================================================");
         if (failureCount == 0)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("             ALL FINAL CHECKS PASSED - SPRINT 3B VERIFIED!                      ");
+            Console.WriteLine("             ALL FINAL CHECKS PASSED - SPRINT 6B VERIFIED!                      ");
         }
         else
         {

@@ -244,8 +244,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **DONE** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
 | `src/Assets/PackReader.cs` | **DONE** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
 | `src/Assets/AssetManager.cs` | **DONE** | Async asset registry: resolves GUIDs to loaded assets, reference-counting, and evicting unused memory. (Sprint 4). |
-| `src/Assets/Textures/TextureStreamer.cs` | **PLANNED** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
-| `src/Assets/Textures/MipResidency.cs` | **PLANNED** | Tracks loaded mip ranges per texture and manages step-of-2 reallocations and bindless swaps. (Sprint 6b). |
+| `src/Assets/Textures/TextureStreamer.cs` | **DONE** | Mip streaming coordinator: determines required mip levels based on distance/texel density and issues upload/eviction requests. (Sprint 6b). |
+| `src/Assets/Textures/MipResidency.cs` | **DONE** | Tracks loaded mip ranges per texture and manages step-of-2 reallocations and bindless swaps. (Sprint 6b). |
 | `src/Assets/Loaders/ShaderLoader.cs` | **DONE** | Runtime shader file watcher for live editing and hot-reloading during development. (Sprint 3a). |
 
 ### 2.6 Offline Asset Cooker & World Generator (`tools/Jatayu.Cooker/` & `tools/Jatayu.WorldGen/`)
@@ -257,9 +257,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `tools/Jatayu.Cooker/MaterialCooker.cs` | **DONE** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
 | `tools/Jatayu.Cooker/PackWriter.cs` | **DONE** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
 | `tools/Jatayu.Cooker/CellCooker.cs` | **DONE** | Bakes world cells into binary chunk records inside `.jpak`: static instance arrays, physics colliders, audio points. (Sprint 6a). |
-| `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **PLANNED** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
-| `tools/Jatayu.Cooker/HlodCooker.cs` | **PLANNED** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |
-| `tools/Jatayu.Cooker/ImpostorCooker.cs` | **PLANNED** | Generates 8-angle billboard impostor texture atlases for far-distance vegetation and props. (Sprint 6b). |
+| `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **DONE** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
+| `tools/Jatayu.Cooker/HlodCooker.cs` | **DONE** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |
+| `tools/Jatayu.Cooker/ImpostorCooker.cs` | **DONE** | Generates 8-angle billboard impostor texture atlases for far-distance vegetation and props. (Sprint 6b). |
 | `tools/Jatayu.Cooker/FoliageCooker.cs` | **PLANNED** | Evaluates procedural density splat maps to generate per-cell foliage instance buffers. (Sprint 7b). |
 | `tools/Jatayu.Cooker/NavMeshCooker.cs` | **PLANNED** | Bakes per-cell Recast navigation mesh tiles from static geometry colliders. (Sprint 10). |
 | `tools/Jatayu.Cooker/ShaderCooker.cs` | **PLANNED** | Precompiles all runtime GLSL shaders into SPIR-V bytecode blobs and initializes pipeline cache files. (Sprint 10). |
@@ -273,7 +273,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `src/World/WorldGrid.cs` | **DONE** | Sparse 2D hash grid storing active and dormant cells. Fast spatial lookup by `WorldPosition`. (Sprint 6a). |
 | `src/World/StreamingManager.cs` | **DONE** | Central streaming controller: evaluates player position/velocity, prioritizes loading queue, enforces time budget and VRAM limits. (Sprint 6a). |
 | `src/World/CellLoader.cs` | **DONE** | Job system worker reading cooked cell records from `.jpak`, parsing instances, and preparing GPU upload payloads. (Sprint 6a). |
-| `src/World/Hlod.cs` | **PLANNED** | Hierarchical LOD manager: swaps distant cell clusters with simplified proxy meshes and impostors. (Sprint 6b). |
+| `src/World/Hlod.cs` | **DONE** | Hierarchical LOD manager: swaps distant cell clusters with simplified proxy meshes and impostors. (Sprint 6b). |
 | `src/World/StreamingDebugOverlay.cs` | **DONE** | Visual debug grid displaying cell states (Green=Active, Yellow=Loading, Red=Unloading), memory, and queue depths. (Sprint 6a). |
 
 #### Distance Rings Configuration Table (`WorldConfig`)
@@ -286,10 +286,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.8 Terrain System (`src/Terrain/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Terrain/TerrainTile.cs` | **PLANNED** | Represents a 256m terrain chunk (covering 2x2 cells, keyed by `TileCoord = CellCoord / 2`): height data, normal maps, splat weights, Jolt shape handle. (Sprint 6b). |
-| `src/Terrain/TerrainClipmap.cs` | **PLANNED** | Single canonical GPU clipmap LOD renderer for all rings with continuous geomorphing and 16m tile-edge blending. (Sprint 6b). |
-| `src/Terrain/TerrainMaterial.cs` | **PLANNED** | 4-8 layer splat-map material shader parameters with triplanar blending for steep cliff faces. (Sprint 6b). |
-| `src/Terrain/TerrainHeightPyramid.cs` | **PLANNED** | Streamed height pyramid backing far-field clipmap (Ring C): coarse mip levels permanently resident, fine levels streamed per tile. (Sprint 6b). |
+| `src/Terrain/TerrainTile.cs` | **DONE** | Represents a 256m terrain chunk (covering 2x2 cells, keyed by `TileCoord = CellCoord / 2`): height data, normal maps, splat weights, Jolt shape handle. (Sprint 6b). |
+| `src/Terrain/TerrainClipmap.cs` | **DONE** | Single canonical GPU clipmap LOD renderer for all rings with continuous geomorphing and 16m tile-edge blending. (Sprint 6b). |
+| `src/Terrain/TerrainMaterial.cs` | **DONE** | 4-8 layer splat-map material shader parameters with triplanar blending for steep cliff faces. (Sprint 6b). |
+| `src/Terrain/TerrainHeightPyramid.cs` | **DONE** | Streamed height pyramid backing far-field clipmap (Ring C): coarse mip levels permanently resident, fine levels streamed per tile. (Sprint 6b). |
 
 ### 2.9 Render Graph & Frame Scheduling (`src/Renderer/Graph/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -722,7 +722,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 6b: Terrain, HLOD and Texture Streaming [NEXT]                            │
+│ SPRINT 6b: Terrain, HLOD and Texture Streaming [DONE]                            │
 │  - TerrainTile (256m), TerrainClipmap (unified D22), TerrainMaterial splat       │
 │  - TerrainHeightPyramid (far-field clipmap), HeightfieldCooker (D15 rules)       │
 │  - Hlod, HlodCooker, ImpostorCooker                                              │
@@ -732,7 +732,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 7a: GPU-Driven Rendering                                                  │
+│ SPRINT 7a: GPU-Driven Rendering [NEXT]                                           │
 │  - InstanceBuffer, IndirectDrawBuffer (vkCmdDrawIndexedIndirectCount)           │
 │  - GpuCuller (5 views: main + 4 cascades, LOD selection D24), HiZBuilder         │
 │  - Velocity output in opaque pass with previous-frame transforms (D25)           │
@@ -851,3 +851,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-49** | Verification | Populated Section 4.1 with compact table of installed Ahwoo.BRUTAL.* packages read from Jatayu.csproj. |
 | **CL-50** | Sprint 3b | Completed Sprint 3b: Implemented UploadManager, StagingRing, TimelineSemaphore, DeferredDeletionQueue, VramBudget, Reverse-Z depth conversion, NativeArena, NativePool, Profiler, AllocationTracker, GpuTimer, DebugNames, ImGuiVulkanBackend (dynamic rendering), DebugOverlay HUD, shaders, wired into Program.cs with 22/22 unit tests passing and hardware verification passing. |
 | **CL-51** | Sprint 6a | Completed Sprint 6a: Implemented CellCoord (fast packing, FNV-1a GUIDs, distance metrics, neighbor iterator), CellFormat (binary structs for CookedCellHeader, instances, colliders, audio), WorldConstants, WorldConfig (rings, velocity lead, 900m prefetch cap), WorldCell lifecycle state machine, WorldGrid 2D sparse spatial hash grid, CellLoader memory-mapped decoder, CellCooker binary payload baker, tools/Jatayu.WorldGen/ procedural generator (.glb models & cell scatter into .jpak), StreamingManager (directional queue prioritization along velocity, 150m hysteresis, 1ms budget finalization), StreamingDebugOverlay 2D radar visualizer, and ForwardRenderer3D cell instance integration. 98/98 unit tests passing and hardware verification passing. |
+| **CL-52** | Sprint 6b | Completed Sprint 6b: Implemented TerrainTile (256m tiles covering 2x2 cells, TileCoord = CellCoord / 2 per D15, bilinear height interpolation, origin shifting, .jtile binary codec), TerrainClipmap (concentric nested grid rings with continuous geomorphing, D22 unified renderer), TerrainMaterial (4-layer splat mapping, triplanar cliff blend parameters), TerrainHeightPyramid (Ring C far-field elevation mip pyramid), HeightfieldCooker (elevation bounds calculation, .jtile payload baking), HlodProxyCluster & HlodManager (Ring B 600m–2,000m proxy activation), HlodCooker (.jhlod binary cooker), ImpostorCooker (8-angle billboard atlas layout and view angle selection), TextureResidencyState & TextureStreamer (step-of-2 mip transitions per D21, permanent resident tail protection <= 64x64 per D5, atomic bindless swaps, VRAM pressure fallback), shaders (terrain.vert & terrain.frag), ForwardRenderer3D terrain pipeline and clipmap draw loop, and 15 new unit tests (113/113 passing) and RenderSmoke CHECK 7 verification passing. |
