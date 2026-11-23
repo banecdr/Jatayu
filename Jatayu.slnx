@@ -4,4 +4,5 @@
   <Project Path="tests/Jatayu.Tests/Jatayu.Tests.csproj" />
   <Project Path="tests/Jatayu.RenderSmoke/Jatayu.RenderSmoke.csproj" />
   <Project Path="tools/Jatayu.Cooker/Jatayu.Cooker.csproj" />
+  <Project Path="tools/Jatayu.WorldGen/Jatayu.WorldGen.csproj" />
 </Solution>

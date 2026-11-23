@@ -7,6 +7,7 @@
 using System.Runtime.CompilerServices;
 using Arch.Core;
 using Arch.Core.Extensions;
+using ArchWorld = Arch.Core.World;
 using Jatayu.Renderer.Camera;
 using Jatayu.Scene.Components;
 
@@ -18,20 +19,20 @@ namespace Jatayu.Scene;
 /// </summary>
 public sealed class Scene : IDisposable
 {
-    private readonly World _world;
+    private readonly ArchWorld _world;
     private bool _isDisposed;
 
     /// <summary>
     /// Gets the underlying Arch World instance.
     /// </summary>
-    public World World => _world;
+    public ArchWorld World => _world;
 
     /// <summary>
     /// Creates a new empty scene with an initialized ECS world.
     /// </summary>
     public Scene()
     {
-        _world = World.Create();
+        _world = ArchWorld.Create();
     }
 
     /// <summary>
@@ -151,7 +152,7 @@ public sealed class Scene : IDisposable
     {
         if (!_isDisposed)
         {
-            World.Destroy(_world);
+            ArchWorld.Destroy(_world);
             _isDisposed = true;
         }
     }
