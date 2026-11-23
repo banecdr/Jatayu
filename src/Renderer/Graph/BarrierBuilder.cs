@@ -51,7 +51,9 @@ public sealed class BarrierBuilder
         VkPipelineStageFlags2 srcStage,
         VkAccessFlags2 srcAccess,
         VkPipelineStageFlags2 dstStage,
-        VkAccessFlags2 dstAccess)
+        VkAccessFlags2 dstAccess,
+        int srcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+        int dstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED)
     {
         if (_imageBarrierCount >= _imageBarriers.Length)
         {
@@ -66,8 +68,8 @@ public sealed class BarrierBuilder
             DstAccessMask = dstAccess,
             OldLayout = oldLayout,
             NewLayout = newLayout,
-            SrcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-            DstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+            SrcQueueFamilyIndex = srcQueueFamilyIndex,
+            DstQueueFamilyIndex = dstQueueFamilyIndex,
             Image = image,
             SubresourceRange = new VkImageSubresourceRange
             {

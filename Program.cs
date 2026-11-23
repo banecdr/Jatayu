@@ -892,17 +892,60 @@ public static class Program
             using (Profiler.Scope("QueueSubmit"))
             {
                 var waitSemaphore = frameSync.CurrentImageAvailable;
-                waitSemaphores[0] = waitSemaphore;
-                submitCmds[0] = cmd;
-                signalSemaphores[0] = signalSemaphore;
+                var uploadSem = uploadManager.Timeline.Handle;
+                ulong requiredUploadVal = uploadManager.LastSubmittedValue;
 
-                queue.Submit(
-                    waitSemaphores,
-                    waitStages,
-                    submitCmds,
-                    signalSemaphores,
-                    frameSync.CurrentFence
-                );
+                if (requiredUploadVal > 0)
+                {
+                    // Graphics queue waits on both swapchain image available AND upload timeline completion
+                    Span<VkSemaphore> pWaitSems = [waitSemaphore, uploadSem];
+                    Span<VkPipelineStageFlags> pWaitStages = [
+                        VkPipelineStageFlags.ColorAttachmentOutputBit,
+                        VkPipelineStageFlags.AllCommandsBit
+                    ];
+                    nint waitVal0 = 0;
+                    nint waitVal1 = (nint)requiredUploadVal;
+                    Span<nint> pWaitVals = [waitVal0, waitVal1];
+
+                    var timelineSubmitInfo = new VkTimelineSemaphoreSubmitInfo
+                    {
+                        WaitSemaphoreValueCount = 2,
+                        WaitSemaphoreValues = (nint*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref pWaitVals[0])
+                    };
+
+                    var cmdHandle = cmd.Handle;
+                    var sigSemHandle = signalSemaphore;
+
+                    var submitInfo = new VkSubmitInfo
+                    {
+                        Next = &timelineSubmitInfo,
+                        WaitSemaphoreCount = 2,
+                        WaitSemaphores = (VkSemaphore*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref pWaitSems[0]),
+                        WaitDstStageMask = (VkPipelineStageFlags*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref pWaitStages[0]),
+                        CommandBufferCount = 1,
+                        CommandBuffers = &cmdHandle,
+                        SignalSemaphoreCount = 1,
+                        SignalSemaphores = &sigSemHandle
+                    };
+
+                    var submitRes = context.Device.PInvoke.vkQueueSubmit.Invoke(queue.Handle, 1, &submitInfo, frameSync.CurrentFence);
+                    if (submitRes != VkResult.Success)
+                        throw new InvalidOperationException($"vkQueueSubmit failed: {submitRes}");
+                }
+                else
+                {
+                    waitSemaphores[0] = waitSemaphore;
+                    submitCmds[0] = cmd;
+                    signalSemaphores[0] = signalSemaphore;
+
+                    queue.Submit(
+                        waitSemaphores,
+                        waitStages,
+                        submitCmds,
+                        signalSemaphores,
+                        frameSync.CurrentFence
+                    );
+                }
             }
 
             // 12. Present rendered image to desktop window surface

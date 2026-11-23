@@ -204,11 +204,13 @@ public sealed class UploadManager : IDisposable
         );
 
         // Transition image TransferDstOptimal -> finalLayout
+        // On transfer queue families, fragment/compute shader stages are invalid.
+        // Use TransferBit or BottomOfPipeBit for valid transfer family synchronization.
         texture.TransitionLayout(
             cmd,
             finalLayout,
             VkPipelineStageFlags.TransferBit,
-            VkPipelineStageFlags.FragmentShaderBit | VkPipelineStageFlags.ComputeShaderBit
+            VkPipelineStageFlags.TransferBit
         );
 
         cmd.End();

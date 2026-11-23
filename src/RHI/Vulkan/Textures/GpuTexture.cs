@@ -131,28 +131,44 @@ public sealed class GpuTexture : IDisposable
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(allocator);
 
-        var imageCreateInfo = new VkImageCreateInfo
-        {
-            ImageType = VkImageType._2D,
-            Format = format,
-            Extent = new VkExtent3D(width, height, 1),
-            MipLevels = Math.Max(1, mipLevels),
-            ArrayLayers = 1,
-            Samples = VkSampleCountFlags._1Bit,
-            Tiling = VkImageTiling.Optimal,
-            Usage = usage,
-            SharingMode = VkSharingMode.Exclusive,
-            InitialLayout = VkImageLayout.Undefined,
-        };
+        int graphicsFamily = context.QueueFamilies.GraphicsFamily ?? 0;
+        int? transferFamily = context.QueueFamilies.TransferFamily;
+        bool hasDedicatedTransfer = transferFamily.HasValue && transferFamily.Value != graphicsFamily;
 
-        allocator.CreateImage(
-            imageCreateInfo,
-            VmaMemoryUsage.GpuOnly,
-            VmaAllocationCreateFlags.None,
-            out var image,
-            out var allocation,
-            out _
-        );
+        int[] queueFamilyIndices = hasDedicatedTransfer
+            ? [graphicsFamily, transferFamily!.Value]
+            : [graphicsFamily];
+
+        VkImage image;
+        VmaAllocation allocation;
+
+        fixed (int* pQueueFamilies = queueFamilyIndices)
+        {
+            var imageCreateInfo = new VkImageCreateInfo
+            {
+                ImageType = VkImageType._2D,
+                Format = format,
+                Extent = new VkExtent3D(width, height, 1),
+                MipLevels = Math.Max(1, mipLevels),
+                ArrayLayers = 1,
+                Samples = VkSampleCountFlags._1Bit,
+                Tiling = VkImageTiling.Optimal,
+                Usage = usage,
+                SharingMode = hasDedicatedTransfer ? VkSharingMode.Concurrent : VkSharingMode.Exclusive,
+                QueueFamilyIndexCount = hasDedicatedTransfer ? 2 : 0,
+                QueueFamilyIndices = hasDedicatedTransfer ? pQueueFamilies : null,
+                InitialLayout = VkImageLayout.Undefined,
+            };
+
+            allocator.CreateImage(
+                imageCreateInfo,
+                VmaMemoryUsage.GpuOnly,
+                VmaAllocationCreateFlags.None,
+                out image,
+                out allocation,
+                out _
+            );
+        }
 
         var viewCreateInfo = new VkImageViewCreateInfo
         {
@@ -279,17 +295,19 @@ public sealed class GpuTexture : IDisposable
         CommandBuffer cmd,
         VkImageLayout newLayout,
         VkPipelineStageFlags srcStage = VkPipelineStageFlags.AllCommandsBit,
-        VkPipelineStageFlags dstStage = VkPipelineStageFlags.AllCommandsBit)
+        VkPipelineStageFlags dstStage = VkPipelineStageFlags.AllCommandsBit,
+        int srcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+        int dstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED)
     {
-        if (CurrentLayout == newLayout)
+        if (CurrentLayout == newLayout && srcQueueFamilyIndex == dstQueueFamilyIndex)
             return;
 
         var barrier = new VkImageMemoryBarrier
         {
             OldLayout = CurrentLayout,
             NewLayout = newLayout,
-            SrcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-            DstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+            SrcQueueFamilyIndex = srcQueueFamilyIndex,
+            DstQueueFamilyIndex = dstQueueFamilyIndex,
             Image = _image,
             SubresourceRange = new VkImageSubresourceRange
             {
