@@ -160,7 +160,7 @@ public static class MeshCooker
             };
 
             int targetIndexCount = Math.Max(12, (int)(indexCount * reductionFactor));
-            var lodIndices = new int[targetIndexCount];
+            var lodIndices = new int[indexCount];
             float resultError = 0;
 
             fixed (int* pDest = lodIndices)
@@ -180,7 +180,7 @@ public static class MeshCooker
                     &resultError
                 );
 
-                if (simplifiedCount > 0 && simplifiedCount <= targetIndexCount)
+                if (simplifiedCount > 0 && simplifiedCount <= indexCount)
                 {
                     var trimmed = new int[simplifiedCount];
                     Array.Copy(lodIndices, trimmed, simplifiedCount);

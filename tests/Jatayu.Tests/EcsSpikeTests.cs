@@ -6,6 +6,7 @@
 using System.Diagnostics;
 using Arch.Core;
 using Arch.Core.Extensions;
+using ArchWorld = Arch.Core.World;
 using Jatayu.Core.Profiling;
 using Xunit;
 using Xunit.Abstractions;
@@ -44,7 +45,7 @@ public class EcsSpikeTests
     public void Arch_100kEntities_ZeroAllocationsAndSubMillisecondQuery()
     {
         // 1. Setup World & 100,000 entities
-        var world = World.Create();
+        var world = ArchWorld.Create();
         for (int i = 0; i < 100_000; i++)
         {
             world.Create(new ArchPosition { X = i, Y = 0, Z = 0 }, new ArchVelocity { Vx = 1, Vy = 2, Vz = 3 });
@@ -77,7 +78,7 @@ public class EcsSpikeTests
 
         _output.WriteLine($"[Arch] 100k Entities: {msPerFrame:F3} ms/frame, Allocation: {frameAlloc} bytes/frame");
 
-        World.Destroy(world);
+        ArchWorld.Destroy(world);
 
         Assert.Equal(0, frameAlloc);
         Assert.True(msPerFrame < 1.0, $"Arch query took {msPerFrame:F2} ms, expected < 1.0 ms");

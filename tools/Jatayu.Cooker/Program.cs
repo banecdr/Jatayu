@@ -178,6 +178,7 @@ public static class Program
                 ".jmesh" => AssetType.Mesh,
                 ".jtex" => AssetType.Texture,
                 ".jmat" => AssetType.Material,
+                ".jcell" => AssetType.WorldCell,
                 _ => AssetType.Unknown,
             };
 

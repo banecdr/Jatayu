@@ -237,9 +237,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | :--- | :---: | :--- |
 | `src/Jatayu.AssetFormats/AssetGuid.cs` | **DONE** | 64-bit fast hash/GUID identifying assets uniquely across packages and runtime scenes. (Sprint 4). |
 | `src/Jatayu.AssetFormats/CookedFormats.cs` | **DONE** | Shared binary structs: CookedMeshHeader, CookedTextureHeader, CookedMaterialRecord. (Sprint 4). |
-| `src/Jatayu.AssetFormats/World/CellCoord.cs` | **PLANNED** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
-| `src/Jatayu.AssetFormats/World/CellFormat.cs` | **PLANNED** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
-| `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **PLANNED** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
+| `src/Jatayu.AssetFormats/World/CellCoord.cs` | **DONE** | Integer coordinate pair `(int X, int Z)` with fast hash, distance metrics, neighbor iterators, and GUID generation. (Sprint 6a). |
+| `src/Jatayu.AssetFormats/World/CellFormat.cs` | **DONE** | Canonical binary structure specification for packed cell records inside `.jpak`. (Sprint 6a). |
+| `src/Jatayu.AssetFormats/World/WorldConstants.cs`| **DONE** | Shared constants (CellSize: 128m, TileSize: 256m, MaxDrawDistance: 8000m) and GUID derivation from coordinates. (Sprint 6a). |
 | `src/Jatayu.AssetFormats/Loaders/TextureLoader.cs` | **DONE** | Image loader using `BRUTAL.Stb` and `BRUTAL.Ktx` for cooker tools and dev hot-reloading. (Sprint 3a). |
 | `src/Jatayu.AssetFormats/Loaders/ModelLoader.cs` | **DONE** | glTF 2.0 importer using `BRUTAL.Gltf` parsing meshes, hierarchies, and materials for cooking. (Sprint 4). |
 | `src/Assets/PackReader.cs` | **DONE** | High-speed memory-mapped reader for `.jpak` binary asset packages with table-of-contents seek. (Sprint 4). |
@@ -256,25 +256,25 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `tools/Jatayu.Cooker/TextureCooker.cs` | **DONE** | Compresses textures to BC7/BC5/BC4 with full mipmaps; splits resident mip tail ($\le 64\times 64$) from streamable mips. (Sprint 4). |
 | `tools/Jatayu.Cooker/MaterialCooker.cs` | **DONE** | Packages PBR material parameters and texture GUIDs into binary descriptor blobs. (Sprint 4). |
 | `tools/Jatayu.Cooker/PackWriter.cs` | **DONE** | Packs cooked binary assets and cells into contiguous, memory-mapped `.jpak` archives with TOC headers. (Sprint 4). |
-| `tools/Jatayu.Cooker/CellCooker.cs` | **PLANNED** | Bakes world cells into binary chunk records inside `.jpak`: static instance arrays, physics colliders, audio points. (Sprint 6a). |
+| `tools/Jatayu.Cooker/CellCooker.cs` | **DONE** | Bakes world cells into binary chunk records inside `.jpak`: static instance arrays, physics colliders, audio points. (Sprint 6a). |
 | `tools/Jatayu.Cooker/HeightfieldCooker.cs` | **PLANNED** | Processes 16-bit heightmaps into tiled terrain meshes, clipmap pyramids, and Jolt heightfield colliders. (Sprint 6b). |
 | `tools/Jatayu.Cooker/HlodCooker.cs` | **PLANNED** | Generates merged proxy meshes for clusters of world cells for Ring B mid-range rendering. (Sprint 6b). |
 | `tools/Jatayu.Cooker/ImpostorCooker.cs` | **PLANNED** | Generates 8-angle billboard impostor texture atlases for far-distance vegetation and props. (Sprint 6b). |
 | `tools/Jatayu.Cooker/FoliageCooker.cs` | **PLANNED** | Evaluates procedural density splat maps to generate per-cell foliage instance buffers. (Sprint 7b). |
 | `tools/Jatayu.Cooker/NavMeshCooker.cs` | **PLANNED** | Bakes per-cell Recast navigation mesh tiles from static geometry colliders. (Sprint 10). |
 | `tools/Jatayu.Cooker/ShaderCooker.cs` | **PLANNED** | Precompiles all runtime GLSL shaders into SPIR-V bytecode blobs and initializes pipeline cache files. (Sprint 10). |
-| `tools/Jatayu.WorldGen/Program.cs` | **PLANNED** | Procedural world generator: bakes Reference Scene terrain heightmaps, scatter tables, foliage maps, and procedural placeholder glTF models (rocks, buildings, trees, grass cards) into assets/generated/. (Sprint 6a). |
+| `tools/Jatayu.WorldGen/Program.cs` | **DONE** | Procedural world generator: bakes Reference Scene terrain heightmaps, scatter tables, foliage maps, and procedural placeholder glTF models (rocks, buildings, trees, grass cards) into assets/generated/. (Sprint 6a). |
 
 ### 2.7 World Grid & Region Streaming (`src/World/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/World/WorldConfig.cs` | **PLANNED** | World configuration (CellSize: 128m, LoadRadius: 600m, UnloadRadius: 750m, MaxDrawDistance: 8000m, LeadSeconds: 6s, 900m prefetch cap). (Sprint 6a). |
-| `src/World/WorldCell.cs` | **PLANNED** | Cell state machine (`Unloaded` → `LoadingIO` → `LoadingDecode` → `ReadyToFinalize` → `Active` → `Unloading`). Owns static instance data. (Sprint 6a). |
-| `src/World/WorldGrid.cs` | **PLANNED** | Sparse 2D hash grid storing active and dormant cells. Fast spatial lookup by `WorldPosition`. (Sprint 6a). |
-| `src/World/StreamingManager.cs` | **PLANNED** | Central streaming controller: evaluates player position/velocity, prioritizes loading queue, enforces time budget and VRAM limits. (Sprint 6a). |
-| `src/World/CellLoader.cs` | **PLANNED** | Job system worker reading cooked cell records from `.jpak`, parsing instances, and preparing GPU upload payloads. (Sprint 6a). |
+| `src/World/WorldConfig.cs` | **DONE** | World configuration (CellSize: 128m, LoadRadius: 600m, UnloadRadius: 750m, MaxDrawDistance: 8000m, LeadSeconds: 6s, 900m prefetch cap). (Sprint 6a). |
+| `src/World/WorldCell.cs` | **DONE** | Cell state machine (`Unloaded` → `LoadingIO` → `LoadingDecode` → `ReadyToFinalize` → `Active` → `Unloading`). Owns static instance data. (Sprint 6a). |
+| `src/World/WorldGrid.cs` | **DONE** | Sparse 2D hash grid storing active and dormant cells. Fast spatial lookup by `WorldPosition`. (Sprint 6a). |
+| `src/World/StreamingManager.cs` | **DONE** | Central streaming controller: evaluates player position/velocity, prioritizes loading queue, enforces time budget and VRAM limits. (Sprint 6a). |
+| `src/World/CellLoader.cs` | **DONE** | Job system worker reading cooked cell records from `.jpak`, parsing instances, and preparing GPU upload payloads. (Sprint 6a). |
 | `src/World/Hlod.cs` | **PLANNED** | Hierarchical LOD manager: swaps distant cell clusters with simplified proxy meshes and impostors. (Sprint 6b). |
-| `src/World/StreamingDebugOverlay.cs` | **PLANNED** | Visual debug grid displaying cell states (Green=Active, Yellow=Loading, Red=Unloading), memory, and queue depths. (Sprint 6a). |
+| `src/World/StreamingDebugOverlay.cs` | **DONE** | Visual debug grid displaying cell states (Green=Active, Yellow=Loading, Red=Unloading), memory, and queue depths. (Sprint 6a). |
 
 #### Distance Rings Configuration Table (`WorldConfig`)
 | Ring | Distance Range | Content & Subsystems Active | Foliage / Impostors | Physics Colliders | Hysteresis Unload Band |
@@ -475,8 +475,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 105
-- **Current Completion:** **48.8% (Sprint 5b Complete, Sprint 6a Ready)**
+- **Total Completed Files:** 116
+- **Current Completion:** **54.0% (Sprint 6a Complete, Sprint 6b Ready)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -484,9 +484,9 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Multithreading & Jobs** | 5 / 5 | **COMPLETE (JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher)** |
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
 | **Modern Vulkan 1.3 RHI** | 22 / 23 | **BindlessTable, Async Uploads, Timeline, DeletionQueue Added** |
-| **Shared Formats & Runtime Assets** | 7 / 12 | **AssetGuid, CookedFormats, ModelLoader, PackReader, AssetManager Complete** |
-| **Cooker & World Generator** | 5 / 13 | **Program, MeshCooker, TextureCooker, MaterialCooker, PackWriter Complete** |
-| **World Grid & Streaming** | 0 / 7 | Planned (Sprint 6a) |
+| **Shared Formats & Runtime Assets** | 10 / 12 | **COMPLETE (CellCoord, CellFormat, WorldConstants Added)** |
+| **Cooker & World Generator** | 7 / 13 | **CellCooker, WorldGen Program Added** |
+| **World Grid & Streaming** | 6 / 7 | **COMPLETE (WorldConfig, WorldCell, WorldGrid, StreamingManager, CellLoader, StreamingDebugOverlay)** |
 | **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
 | **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
 | **GPU-Driven Rendering** | 2 / 6 | **GeometryPool, DynamicInstanceRing Complete** (Sprint 5b, 7a) |
@@ -711,9 +711,9 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 6a: World Grid and Streaming [NEXT]                                       │
+│ SPRINT 6a: World Grid and Streaming [DONE]                                       │
 │  - WorldConfig (D18 rings, D19 lead time, D23 900m cap), WorldCell, WorldGrid    │
-│  - StreamingManager, CellLoader, CellCooker, StreamingDebugOverlay (adds map)   │
+│  - StreamingManager, CellLoader, CellCooker, StreamingDebugOverlay (radar map)   │
 │  - CellCoord, CellFormat, WorldConstants from Jatayu.AssetFormats                │
 │  - tools/Jatayu.WorldGen/ procedural generator with placeholder meshes           │
 │  - Temporary non-GPU instanced draw path for cell instances (replaced in 7a)     │
@@ -722,7 +722,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 6b: Terrain, HLOD and Texture Streaming                                   │
+│ SPRINT 6b: Terrain, HLOD and Texture Streaming [NEXT]                            │
 │  - TerrainTile (256m), TerrainClipmap (unified D22), TerrainMaterial splat       │
 │  - TerrainHeightPyramid (far-field clipmap), HeightfieldCooker (D15 rules)       │
 │  - Hlod, HlodCooker, ImpostorCooker                                              │
@@ -850,3 +850,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-48** | Roadmap | Fixed cosmetic typos in Sprint 3a box (closed parenthesis, added ShaderLoader) and Sprint 5b box (MaterialTable). |
 | **CL-49** | Verification | Populated Section 4.1 with compact table of installed Ahwoo.BRUTAL.* packages read from Jatayu.csproj. |
 | **CL-50** | Sprint 3b | Completed Sprint 3b: Implemented UploadManager, StagingRing, TimelineSemaphore, DeferredDeletionQueue, VramBudget, Reverse-Z depth conversion, NativeArena, NativePool, Profiler, AllocationTracker, GpuTimer, DebugNames, ImGuiVulkanBackend (dynamic rendering), DebugOverlay HUD, shaders, wired into Program.cs with 22/22 unit tests passing and hardware verification passing. |
+| **CL-51** | Sprint 6a | Completed Sprint 6a: Implemented CellCoord (fast packing, FNV-1a GUIDs, distance metrics, neighbor iterator), CellFormat (binary structs for CookedCellHeader, instances, colliders, audio), WorldConstants, WorldConfig (rings, velocity lead, 900m prefetch cap), WorldCell lifecycle state machine, WorldGrid 2D sparse spatial hash grid, CellLoader memory-mapped decoder, CellCooker binary payload baker, tools/Jatayu.WorldGen/ procedural generator (.glb models & cell scatter into .jpak), StreamingManager (directional queue prioritization along velocity, 150m hysteresis, 1ms budget finalization), StreamingDebugOverlay 2D radar visualizer, and ForwardRenderer3D cell instance integration. 98/98 unit tests passing and hardware verification passing. |

@@ -31,6 +31,9 @@ using Jatayu.RHI.Vulkan.Memory;
 using Jatayu.RHI.Vulkan.Pipelines;
 using Jatayu.Scene;
 using Jatayu.Scene.Components;
+using Jatayu.AssetFormats;
+using Jatayu.AssetFormats.World;
+using Jatayu.World;
 
 namespace Jatayu.Renderer;
 
@@ -479,7 +482,9 @@ public sealed class ForwardRenderer3D : IDisposable
         DebugRenderer? debugRenderer,
         RgTextureHandle colorTarget,
         RgTextureHandle depthTarget,
-        OriginShift? originShift = null)
+        OriginShift? originShift = null,
+        WorldGrid? worldGrid = null,
+        Func<AssetGuid, Mesh.Mesh?>? meshResolver = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(scene);
@@ -574,6 +579,60 @@ public sealed class ForwardRenderer3D : IDisposable
             ShadowCasters = _shadowCasters,
         };
         scene.World.InlineQuery<CullJob, Transform, MeshRenderer>(in CullQuery, ref cullJob);
+
+        // Query WorldGrid for static instances owned by active streaming cells (temporary draw path for Sprint 6a)
+        if (worldGrid != null && meshResolver != null)
+        {
+            var cameraWorldPos = new WorldPosition(camX, camY, camZ);
+            var activeCells = worldGrid.ActiveCells;
+            for (int c = 0; c < activeCells.Count; c++)
+            {
+                var cell = activeCells[c];
+                cell.GetCameraRelativeBounds(cameraWorldPos, out var cellRelCenter, out var cellRadius);
+                if (!_frustum.IsSphereVisible(cellRelCenter, cellRadius))
+                    continue;
+
+                var instances = cell.StaticInstances;
+                for (int i = 0; i < instances.Length; i++)
+                {
+                    ref readonly var inst = ref instances[i];
+                    double objWorldX = cell.Origin.X + inst.PosX;
+                    double objWorldY = cell.Origin.Y + inst.PosY;
+                    double objWorldZ = cell.Origin.Z + inst.PosZ;
+
+                    Vector3 relPos = new(
+                        (float)(objWorldX - camX),
+                        (float)(objWorldY - camY),
+                        (float)(objWorldZ - camZ)
+                    );
+
+                    float maxScale = MathF.Max(inst.ScaleX, MathF.Max(inst.ScaleY, inst.ScaleZ));
+                    float radius = inst.BoundingRadius * maxScale;
+
+                    if (_frustum.IsSphereVisible(relPos, radius))
+                    {
+                        var mesh = meshResolver(inst.MeshGuid);
+                        if (mesh != null)
+                        {
+                            var rot = new Quaternion(inst.RotX, inst.RotY, inst.RotZ, inst.RotW);
+                            var scale = new Vector3(inst.ScaleX, inst.ScaleY, inst.ScaleZ);
+                            Matrix4x4 cameraRelativeModel =
+                                Matrix4x4.CreateScale(scale) *
+                                Matrix4x4.CreateFromQuaternion(rot) *
+                                Matrix4x4.CreateTranslation(relPos);
+
+                            var item = new RenderItem(mesh, cameraRelativeModel, inst.MaterialId);
+                            _visibleItems.Add(item);
+
+                            if ((inst.Flags & StaticInstanceFlags.CastShadow) != 0)
+                            {
+                                _shadowCasters.Add(item);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // 4. Import Shadow Map depth target into RenderGraph
         var shadowDepthHandle = graph.ImportTexture(

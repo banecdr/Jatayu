@@ -78,6 +78,9 @@ using Jatayu.RHI.Vulkan.Textures;
 using Jatayu.RHI.Vulkan.Upload;
 using Jatayu.Scene;
 using Jatayu.Scene.Components;
+using Jatayu.AssetFormats.World;
+using Jatayu.Assets;
+using Jatayu.World;
 
 namespace Jatayu;
 
@@ -456,6 +459,17 @@ public static class Program
         using var gpuTimer = new GpuTimer(context, maxQueriesPerFrame: 64, framesInFlight: frameSync.MaxFramesInFlight);
         using var imguiBackend = new ImGuiVulkanBackend(context, allocator, uploadManager, window, swapchain.ColorFormat);
         var debugOverlay = new DebugOverlay();
+        var streamingOverlay = new StreamingDebugOverlay();
+
+        string worldPakPath = Path.Combine(AppContext.BaseDirectory, "assets/generated/world.jpak");
+        if (!File.Exists(worldPakPath) && File.Exists("assets/generated/world.jpak"))
+            worldPakPath = "assets/generated/world.jpak";
+
+        PackReader? worldPack = File.Exists(worldPakPath) ? new PackReader(worldPakPath) : null;
+        var worldConfig = new WorldConfig();
+        var worldGrid = new WorldGrid(worldConfig);
+        using var streamingManager = new StreamingManager(worldGrid, worldConfig, worldPack, vramBudget: vramBudget);
+        Vector3 prevCamPos = camera.Position;
 
         using var renderGraph = new RenderGraph();
 
@@ -536,6 +550,11 @@ public static class Program
                 {
                     debugOverlay.IsVisible = !debugOverlay.IsVisible;
                     Console.WriteLine($"[Diagnostics] Debug Overlay HUD: {(debugOverlay.IsVisible ? "VISIBLE" : "HIDDEN")}");
+                }
+                else if (key == GlfwKey.F2)
+                {
+                    streamingOverlay.IsVisible = !streamingOverlay.IsVisible;
+                    Console.WriteLine($"[Diagnostics] World Streaming Radar: {(streamingOverlay.IsVisible ? "VISIBLE" : "HIDDEN")}");
                 }
                 else if (key == GlfwKey.B)
                 {
@@ -737,6 +756,11 @@ public static class Program
             var camWorldPos = new WorldPosition(camera.Position.X, camera.Position.Y, camera.Position.Z);
             originShift.CheckAndShift(camWorldPos, out _);
 
+            // 5b. Open-World Region Streaming (Sprint 6a)
+            Vector3 camVelocity = (camera.Position - prevCamPos) / Math.Max(0.0001f, (float)dt);
+            prevCamPos = camera.Position;
+            streamingManager.Update(dt, in camWorldPos, in camVelocity);
+
             // 6. Immediate-Mode 3D Debug Wireframes
             if (debugWireframeEnabled)
             {
@@ -762,27 +786,35 @@ public static class Program
             }
 
             // 7. Prepare ImGui HUD frame
-            if (debugOverlay.IsVisible)
+            if (debugOverlay.IsVisible || streamingOverlay.IsVisible)
             {
                 using (Profiler.Scope("ImGuiNewFrame"))
                 {
                     imguiBackend.NewFrame();
-                    debugOverlay.Draw(
-                        time,
-                        camera,
-                        window.VSync,
-                        vramBudget,
-                        Profiler.LatestSnapshot,
-                        gpuTimer.LatestSnapshot,
-                        originShift: originShift,
-                        lightEnv: lightEnv,
-                        visibleEntities: forwardRenderer.VisibleItemCount,
-                        totalEntities: 10,
-                        shadowCasters: forwardRenderer.ShadowCasterCount,
-                        atLargeWorld: atLargeWorldCluster,
-                        debugWireframe: debugWireframeEnabled,
-                        sunOrbiting: sunOrbitEnabled
-                    );
+                    if (debugOverlay.IsVisible)
+                    {
+                        debugOverlay.Draw(
+                            time,
+                            camera,
+                            window.VSync,
+                            vramBudget,
+                            Profiler.LatestSnapshot,
+                            gpuTimer.LatestSnapshot,
+                            originShift: originShift,
+                            lightEnv: lightEnv,
+                            visibleEntities: forwardRenderer.VisibleItemCount,
+                            totalEntities: 10,
+                            shadowCasters: forwardRenderer.ShadowCasterCount,
+                            atLargeWorld: atLargeWorldCluster,
+                            debugWireframe: debugWireframeEnabled,
+                            sunOrbiting: sunOrbitEnabled
+                        );
+                    }
+
+                    if (streamingOverlay.IsVisible)
+                    {
+                        streamingOverlay.Draw(streamingManager, in camWorldPos, in camVelocity);
+                    }
                 }
             }
 
@@ -868,12 +900,14 @@ public static class Program
                     debugRenderer,
                     swapchainTarget,
                     depthTarget,
-                    originShift
+                    originShift,
+                    worldGrid,
+                    _ => cubeMesh
                 );
                 currentSwapchainTarget = swapchainTarget;
 
                 // ImGui Diagnostics HUD Pass
-                if (debugOverlay.IsVisible)
+                if (debugOverlay.IsVisible || streamingOverlay.IsVisible)
                 {
                     renderGraph.AddPass("ImGuiPass", imguiPassSetup, imguiPassExecute);
                 }
@@ -976,6 +1010,7 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         Console.WriteLine("[Shutdown] Waiting for GPU idle...");
         device.WaitIdle();
+        worldPack?.Dispose();
 
         Console.WriteLine("[Shutdown] All 3D resources released cleanly. Goodbye!");
     }

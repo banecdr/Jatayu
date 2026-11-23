@@ -1,6 +1,6 @@
-﻿# Jatayu
+# Jatayu
 
-<img width="1284" height="754" alt="image" src="https://github.com/user-attachments/assets/0b5000e7-ac41-4a5b-8045-fd506f5a4384" />
+<img width="1284" height="754" alt="image" src="https://github.com/user-attachments/assets/0c7866d3-f8d1-4642-adc9-24608a2340d4" />
 
 
 
