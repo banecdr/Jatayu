@@ -11,11 +11,13 @@ This document establishes the binding rendering, mathematical, coordinate, and d
   - **+X**: Right (East)
   - **+Y**: Up (Elevation)
   - **+Z**: Towards Viewer / Backwards (or South). Looking down **-Z** in camera space.
-- **Large World Positions**:
+- **Large World Positions & Origin Shifts**:
   - Absolute world coordinates use 64-bit double precision (`WorldPosition` with `double X, Y, Z`).
   - Rendering is **camera-relative**: the CPU subtracts the camera's double-precision position from entity world coordinates and casts the delta to single-precision `float` (`Vector3`) before uploading to GPU instance/constant buffers.
   - Shaders never receive or compute in absolute world coordinates.
-  - Origin shifts occur in snaps of 256 meters (matching the terrain tile grid).
+  - Origin shifts occur in deterministic snaps of 256 meters (matching the terrain tile grid) when the camera travels beyond 2,000 meters from the simulation origin.
+  - **Static Instance Transform Invariance (World Streaming)**: Static mesh instances in streaming cells store transforms cell-locally (`float3` position relative to that cell's double-precision origin). When an origin shift triggers, only the per-cell origin vectors are updated on the CPU; static instance transform buffers in VRAM remain invariant and are **never re-uploaded** on an origin shift.
+  - **Physics Simulation (Jolt Single Precision)**: Verified in D9 probe that `BRUTAL.Jolt` is built in Single Precision (`float3`). The 2,000 m origin snapping threshold strictly bounds all active rigid body coordinates to within $[-2000\text{ m}, +2000\text{ m}]$, avoiding catastrophic IEEE 754 precision loss without requiring double-precision physics builds.
 
 ---
 

@@ -67,6 +67,8 @@ public sealed class UploadManager : IDisposable
 
     private int _currentSlotIndex;
     private ulong _currentTimelineValue;
+    private ulong _pendingBatchTimelineValue;
+    private bool _hasOpenBatch;
     private bool _disposed;
 
     /// <summary>
@@ -112,6 +114,8 @@ public sealed class UploadManager : IDisposable
 
         _currentSlotIndex = 0;
         _currentTimelineValue = 0;
+        _pendingBatchTimelineValue = 0;
+        _hasOpenBatch = false;
     }
 
     /// <summary>
@@ -127,7 +131,7 @@ public sealed class UploadManager : IDisposable
         ArgumentNullException.ThrowIfNull(target);
 
         if (data.IsEmpty)
-            return _currentTimelineValue;
+            return _hasOpenBatch ? _pendingBatchTimelineValue : _currentTimelineValue;
 
         var size = (ulong)data.Length;
 
@@ -142,6 +146,12 @@ public sealed class UploadManager : IDisposable
 
         lock (_lock)
         {
+            if (!_hasOpenBatch)
+            {
+                _pendingBatchTimelineValue = _currentTimelineValue + 1;
+                _hasOpenBatch = true;
+            }
+
             var cmd = GetOrCreateActiveCommandBuffer();
 
             var copyRegion = new VkBufferCopy
@@ -159,9 +169,8 @@ public sealed class UploadManager : IDisposable
                 &copyRegion
             );
 
-            _currentTimelineValue++;
-            SubmitBatch_Locked(cmd, _currentTimelineValue, stagingOffset, size);
-            return _currentTimelineValue;
+            _stagingRing.SubmitSlice(stagingOffset, size, _pendingBatchTimelineValue);
+            return _pendingBatchTimelineValue;
         }
     }
 
@@ -193,6 +202,12 @@ public sealed class UploadManager : IDisposable
 
         lock (_lock)
         {
+            if (!_hasOpenBatch)
+            {
+                _pendingBatchTimelineValue = _currentTimelineValue + 1;
+                _hasOpenBatch = true;
+            }
+
             var cmd = GetOrCreateActiveCommandBuffer();
 
             // Transition image Undefined -> TransferDstOptimal
@@ -204,48 +219,15 @@ public sealed class UploadManager : IDisposable
             );
 
             // Generate copy regions for each mip level
-            int mipCount = Math.Max(1, texture.MipLevels);
-            var regions = new VkBufferImageCopy[mipCount];
-            ulong currentBufferOffset = stagingOffset;
-
-            int mipW = texture.Width;
-            int mipH = texture.Height;
-
-            // Determine format byte-size per pixel / block
-            int bytesPerPixel = GetBytesPerPixel(texture.Format);
-
-            for (int mip = 0; mip < mipCount; mip++)
-            {
-                regions[mip] = new VkBufferImageCopy
-                {
-                    BufferOffset = new ByteSize64(currentBufferOffset),
-                    BufferRowLength = 0,
-                    BufferImageHeight = 0,
-                    ImageSubresource = new VkImageSubresourceLayers
-                    {
-                        AspectMask = VkImageAspectFlags.ColorBit,
-                        MipLevel = mip,
-                        BaseArrayLayer = 0,
-                        LayerCount = 1,
-                    },
-                    ImageOffset = new VkOffset3D(0, 0, 0),
-                    ImageExtent = new VkExtent3D(mipW, mipH, 1),
-                };
-
-                ulong mipBytes = (ulong)(mipW * mipH * bytesPerPixel);
-                currentBufferOffset += mipBytes;
-
-                // Stop if provided pixelData ends before higher mips (e.g. only base mip was packed)
-                if (currentBufferOffset - stagingOffset > size)
-                {
-                    // Fallback: only copy up to mips that fit in pixelData
-                    mipCount = mip + 1;
-                    break;
-                }
-
-                mipW = Math.Max(1, mipW / 2);
-                mipH = Math.Max(1, mipH / 2);
-            }
+            var regions = GenerateMipCopyRegions(
+                texture.Format,
+                texture.Width,
+                texture.Height,
+                texture.MipLevels,
+                stagingOffset,
+                size,
+                out int validMipCount
+            );
 
             fixed (VkBufferImageCopy* pRegions = regions)
             {
@@ -254,7 +236,7 @@ public sealed class UploadManager : IDisposable
                     _stagingRing.BufferHandle,
                     texture.Image,
                     VkImageLayout.TransferDstOptimal,
-                    mipCount,
+                    validMipCount,
                     pRegions
                 );
             }
@@ -269,9 +251,8 @@ public sealed class UploadManager : IDisposable
                 VkPipelineStageFlags.TransferBit
             );
 
-            _currentTimelineValue++;
-            SubmitBatch_Locked(cmd, _currentTimelineValue, stagingOffset, size);
-            return _currentTimelineValue;
+            _stagingRing.SubmitSlice(stagingOffset, size, _pendingBatchTimelineValue);
+            return _pendingBatchTimelineValue;
         }
     }
 
@@ -301,20 +282,76 @@ public sealed class UploadManager : IDisposable
     }
 
     /// <summary>
+    /// Flushes and submits all batched upload commands recorded during this frame/tick to the GPU transfer queue.
+    /// Returns the timeline semaphore value that will be signaled when the batch completes.
+    /// </summary>
+    public unsafe ulong FlushBatch()
+    {
+        lock (_lock)
+        {
+            if (!_hasOpenBatch)
+                return _currentTimelineValue;
+
+            var slot = _poolSlots[_currentSlotIndex];
+            if (slot.ActiveCommandBuffer.HasValue)
+            {
+                var cmd = slot.ActiveCommandBuffer.Value;
+                cmd.End();
+
+                slot.ActiveCommandBuffer = null;
+                slot.RetiredTimelineValue = _pendingBatchTimelineValue;
+
+                var cmdHandle = cmd.Handle;
+                var sem = _timelineSemaphore.Handle;
+                var sigVal = (nint)_pendingBatchTimelineValue;
+
+                var timelineInfo = new VkTimelineSemaphoreSubmitInfo
+                {
+                    SignalSemaphoreValueCount = 1,
+                    SignalSemaphoreValues = &sigVal
+                };
+
+                var submitInfo = new VkSubmitInfo
+                {
+                    Next = &timelineInfo,
+                    CommandBufferCount = 1,
+                    CommandBuffers = &cmdHandle,
+                    SignalSemaphoreCount = 1,
+                    SignalSemaphores = &sem
+                };
+
+                var res = _context.Device.PInvoke.vkQueueSubmit.Invoke(_transferQueue.Handle, 1, &submitInfo, default);
+                if (res != VkResult.Success)
+                    throw new InvalidOperationException($"vkQueueSubmit failed on transfer queue: {res}");
+
+                _currentTimelineValue = _pendingBatchTimelineValue;
+                _currentSlotIndex = (_currentSlotIndex + 1) % _poolSlots.Length;
+            }
+
+            _hasOpenBatch = false;
+            return _currentTimelineValue;
+        }
+    }
+
+    /// <summary>
     /// Blocks until the transfer queue reaches or exceeds the specified timeline value.
+    /// Automatically flushes any pending open batch before waiting.
     /// </summary>
     public bool WaitForUpload(ulong timelineValue, nint timeoutNanoseconds = -1)
     {
         ThrowIfDisposed();
+        FlushBatch();
         return _timelineSemaphore.Wait(timelineValue, timeoutNanoseconds);
     }
 
     /// <summary>
     /// Checks if a given upload operation has completed on the GPU timeline.
+    /// Automatically flushes any pending open batch before querying.
     /// </summary>
     public bool IsUploadComplete(ulong timelineValue)
     {
         ThrowIfDisposed();
+        FlushBatch();
         return _timelineSemaphore.GetCurrentValue() >= timelineValue;
     }
 
@@ -342,44 +379,6 @@ public sealed class UploadManager : IDisposable
         return cmd;
     }
 
-    private unsafe void SubmitBatch_Locked(CommandBuffer cmd, ulong signalValue, ulong stagingOffset, ulong size)
-    {
-        cmd.End();
-
-        var slot = _poolSlots[_currentSlotIndex];
-        slot.ActiveCommandBuffer = null;
-        slot.RetiredTimelineValue = signalValue;
-
-        var cmdHandle = cmd.Handle;
-        var sem = _timelineSemaphore.Handle;
-        var sigVal = (nint)signalValue;
-
-        var timelineInfo = new VkTimelineSemaphoreSubmitInfo
-        {
-            SignalSemaphoreValueCount = 1,
-            SignalSemaphoreValues = &sigVal
-        };
-
-        var submitInfo = new VkSubmitInfo
-        {
-            Next = &timelineInfo,
-            CommandBufferCount = 1,
-            CommandBuffers = &cmdHandle,
-            SignalSemaphoreCount = 1,
-            SignalSemaphores = &sem
-        };
-
-        var res = _context.Device.PInvoke.vkQueueSubmit.Invoke(_transferQueue.Handle, 1, &submitInfo, default);
-        if (res != VkResult.Success)
-            throw new InvalidOperationException($"vkQueueSubmit failed on transfer queue: {res}");
-
-        // Track in-flight slice in StagingRing
-        _stagingRing.SubmitSlice(stagingOffset, size, signalValue);
-
-        // Advance to next command pool slot in the ring
-        _currentSlotIndex = (_currentSlotIndex + 1) % _poolSlots.Length;
-    }
-
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -404,16 +403,90 @@ public sealed class UploadManager : IDisposable
         }
     }
 
-    private static int GetBytesPerPixel(VkFormat format)
+    internal static VkBufferImageCopy[] GenerateMipCopyRegions(
+        VkFormat format,
+        int width,
+        int height,
+        int mipLevels,
+        ulong stagingOffset,
+        ulong totalDataSize,
+        out int validMipCount)
+    {
+        int maxMips = Math.Max(1, mipLevels);
+        var regions = new VkBufferImageCopy[maxMips];
+        ulong currentBufferOffset = stagingOffset;
+
+        int mipW = width;
+        int mipH = height;
+        validMipCount = 0;
+
+        for (int mip = 0; mip < maxMips; mip++)
+        {
+            ulong mipBytes = CalculateMipByteSize(format, mipW, mipH);
+            if (currentBufferOffset + mipBytes - stagingOffset > totalDataSize)
+            {
+                break;
+            }
+
+            regions[mip] = new VkBufferImageCopy
+            {
+                BufferOffset = new ByteSize64(currentBufferOffset),
+                BufferRowLength = 0,
+                BufferImageHeight = 0,
+                ImageSubresource = new VkImageSubresourceLayers
+                {
+                    AspectMask = VkImageAspectFlags.ColorBit,
+                    MipLevel = mip,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1,
+                },
+                ImageOffset = new VkOffset3D(0, 0, 0),
+                ImageExtent = new VkExtent3D(mipW, mipH, 1),
+            };
+
+            currentBufferOffset += mipBytes;
+            validMipCount++;
+
+            mipW = Math.Max(1, mipW / 2);
+            mipH = Math.Max(1, mipH / 2);
+        }
+
+        if (validMipCount == 0 && maxMips > 0)
+        {
+            regions[0] = new VkBufferImageCopy
+            {
+                BufferOffset = new ByteSize64(stagingOffset),
+                BufferRowLength = 0,
+                BufferImageHeight = 0,
+                ImageSubresource = new VkImageSubresourceLayers
+                {
+                    AspectMask = VkImageAspectFlags.ColorBit,
+                    MipLevel = 0,
+                    BaseArrayLayer = 0,
+                    LayerCount = 1,
+                },
+                ImageOffset = new VkOffset3D(0, 0, 0),
+                ImageExtent = new VkExtent3D(width, height, 1),
+            };
+            validMipCount = 1;
+        }
+
+        return regions;
+    }
+
+    internal static ulong CalculateMipByteSize(VkFormat format, int width, int height)
     {
         return format switch
         {
-            VkFormat.R8UNorm => 1,
-            VkFormat.R8G8B8A8UNorm or VkFormat.R8G8B8A8SRGB => 4,
-            VkFormat.R16UNorm => 2,
-            VkFormat.R32SFloat => 4,
-            VkFormat.Bc7UNormBlock or VkFormat.Bc7SRGBBlock or VkFormat.Bc5UNormBlock or VkFormat.Bc4UNormBlock => 1,
-            _ => 4,
+            VkFormat.Bc7UNormBlock or VkFormat.Bc7SRGBBlock or VkFormat.Bc5UNormBlock =>
+                (ulong)(((width + 3) / 4) * ((height + 3) / 4) * 16),
+            VkFormat.Bc4UNormBlock =>
+                (ulong)(((width + 3) / 4) * ((height + 3) / 4) * 8),
+            VkFormat.R8UNorm => (ulong)(width * height * 1),
+            VkFormat.R16UNorm => (ulong)(width * height * 2),
+            VkFormat.R32SFloat => (ulong)(width * height * 4),
+            VkFormat.R8G8B8A8UNorm or VkFormat.R8G8B8A8SRGB => (ulong)(width * height * 4),
+            _ => (ulong)(width * height * 4)
         };
     }
 }

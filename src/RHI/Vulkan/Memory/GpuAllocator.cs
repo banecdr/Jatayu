@@ -1,4 +1,4 @@
-﻿/* =================================================================================================
+/* =================================================================================================
  * FILE: GpuAllocator.cs
  * LOCATION: src/RHI/Vulkan/Memory/GpuAllocator.cs
  * 
@@ -168,7 +168,7 @@ public sealed class GpuAllocator : IDisposable
     /// <param name="buffer">Outputs the created Vulkan buffer handle.</param>
     /// <param name="allocation">Outputs the VMA allocation handle used to track and free memory.</param>
     /// <param name="allocationInfo">Outputs details about the allocation, including mapped pointers and offset.</param>
-    public void CreateBuffer(
+    public unsafe void CreateBuffer(
         ulong size,
         VkBufferUsageFlags usage,
         VmaMemoryUsage memoryUsage,
@@ -177,26 +177,39 @@ public sealed class GpuAllocator : IDisposable
         out VmaAllocation allocation,
         out VmaAllocationInfo allocationInfo)
     {
-        var bufferCreateInfo = new VkBufferCreateInfo
-        {
-            Size = new ByteSize64(size),
-            Usage = usage,
-            SharingMode = VkSharingMode.Exclusive,
-        };
+        int graphicsFamily = Context.QueueFamilies.GraphicsFamily ?? 0;
+        int? transferFamily = Context.QueueFamilies.TransferFamily;
+        bool hasDedicatedTransfer = transferFamily.HasValue && transferFamily.Value != graphicsFamily;
 
-        var allocationCreateInfo = new VmaAllocationCreateInfo
-        {
-            Usage = memoryUsage,
-            Flags = flags,
-        };
+        int[] queueFamilyIndices = hasDedicatedTransfer
+            ? [graphicsFamily, transferFamily!.Value]
+            : [graphicsFamily];
 
-        Handle.CreateBuffer(
-            bufferCreateInfo,
-            allocationCreateInfo,
-            out buffer,
-            out allocation,
-            out allocationInfo
-        );
+        fixed (int* pQueueFamilies = queueFamilyIndices)
+        {
+            var bufferCreateInfo = new VkBufferCreateInfo
+            {
+                Size = new ByteSize64(size),
+                Usage = usage,
+                SharingMode = hasDedicatedTransfer ? VkSharingMode.Concurrent : VkSharingMode.Exclusive,
+                QueueFamilyIndexCount = hasDedicatedTransfer ? 2 : 0,
+                QueueFamilyIndices = hasDedicatedTransfer ? pQueueFamilies : null,
+            };
+
+            var allocationCreateInfo = new VmaAllocationCreateInfo
+            {
+                Usage = memoryUsage,
+                Flags = flags,
+            };
+
+            Handle.CreateBuffer(
+                bufferCreateInfo,
+                allocationCreateInfo,
+                out buffer,
+                out allocation,
+                out allocationInfo
+            );
+        }
     }
 
     /// <summary>

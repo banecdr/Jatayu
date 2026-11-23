@@ -114,9 +114,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 1. **Trigger Window:** Executes at a **frame boundary**, strictly after the physics step and before any queries, raycasts, or rendering commands for the next frame are recorded.
 2. **Offset Snapping:** The shift offset is computed in double precision and snapped to a multiple of **256 m** (the terrain tile dimension covering $2\times 2$ cells), ensuring terrain tile data and cell-local coordinates remain invariant.
 3. **Subsystem Batch Updates:**
-   - Jolt physics: Active, sleeping, kinematic, character bodies, and Ring A static cell collider bodies are translated by the negative offset using batched updates (consistent with D16). If the physics origin-shift spike exceeds 3.0 ms during Sprint 8 testing, fallback to rebuilding Ring A static colliders from cell cooked data in the new origin; raycast caches are updated.
-   - Spatial audio: AudioListener position and all active AudioSource emitter coordinates are translated.
-   - ECS & Scene: Root entity transforms and active Camera `WorldPosition` are updated.
+   - **Static Instance Survival (World Streaming):** Static instances store transforms local to their streaming cell (`float3` position relative to cell origin). Each loaded cell maintains a single double-precision world origin (`WorldPosition`). When an origin shift occurs, only the per-cell origin offsets are translated; individual static instance transform buffers in VRAM remain completely untouched, avoiding re-uploading millions of instance matrices on every 256 m snap.
+   - **Jolt physics:** Active, sleeping, kinematic, character bodies, and Ring A static cell collider bodies are translated by the negative offset using batched updates (consistent with D16). Because `Ahwoo.BRUTAL.Jolt` is built in Single Precision (verified in D9 probe), simulation coordinates stay bounded within $[-2000\text{ m}, +2000\text{ m}]$, eliminating single-precision floating point degradation. If the physics origin-shift spike exceeds 3.0 ms during Sprint 8 testing, fallback to rebuilding Ring A static colliders from cell cooked data in the new origin; raycast caches are updated.
+   - **Spatial audio:** AudioListener position and all active AudioSource emitter coordinates are translated.
+   - **ECS & Scene:** Root dynamic entity transforms and active Camera `WorldPosition` are updated.
 4. **Event Dispatch:** An `OriginShifted` event is broadcast through `EventBus` so any custom gameplay listeners can synchronize.
 5. **Verification Rule:** Physics stacks must remain at rest across shifts with zero velocity spikes or millimeter-level drift.
 
@@ -529,7 +530,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
   * *Status:* Pending: verify in Sprint 3a (MeshOptimizer function exports: cache, fetch, overdraw, simplify, remap).
 * **D9 (Physics Precision):**
   * *Specification:* `Ahwoo.BRUTAL.Jolt` (v2026.10.4) is referenced in `Jatayu.csproj`.
-  * *Status:* Pending: verify in Sprint 3a (Jolt single vs double precision).
+  * *Status:* Verified in Sprint 3a: `Ahwoo.BRUTAL.Jolt` is built in Single Precision (`float3`). Deterministic origin rebasing procedure (Section 1.3) remains mandatory for large-world coordinates.
 * **D10 (Final Hardware Floor):**
   * *Specification:* Vulkan 1.3 discrete GPU, at least 4 GB VRAM, with all of the following:
     - Core 1.3: `dynamicRendering`, `synchronization2`, `maintenance4`

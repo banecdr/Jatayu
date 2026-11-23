@@ -888,6 +888,8 @@ public static class Program
             }
 
             // 11. Submit recorded commands to GPU Graphics Queue
+            uploadManager.FlushBatch();
+
             var signalSemaphore = frameSync.GetRenderFinishedSemaphore(imageIndex);
             using (Profiler.Scope("QueueSubmit"))
             {
