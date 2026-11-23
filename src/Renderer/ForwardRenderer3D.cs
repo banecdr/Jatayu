@@ -442,7 +442,7 @@ public sealed class ForwardRenderer3D : IDisposable
                 .SetVertexInput(shadowVertexInput)
                 .SetDepthAttachmentFormat(DepthConvention.DepthFormat)
                 .SetDepthTest(depthTestEnable: true, depthWriteEnable: true, compareOp: DepthConvention.DepthCompareOp)
-                .SetRasterization(Presets.Rasterization.Fill.CullBack)
+                .SetRasterization(Presets.Rasterization.Fill.CullFront)
                 .SetPipelineLayout(_shadowPipelineLayout)
                 .Build(_context);
         }

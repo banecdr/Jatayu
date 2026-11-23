@@ -94,23 +94,38 @@ public sealed class FoliageSystem : IDisposable
             VmaMemoryUsage.CpuToGpu
         );
 
-        // 2. Generate procedural 5-vertex tapered grass blade mesh
+        // 2. Generate procedural 3-blade crossed star grass clump mesh (15 vertices, 9 triangles)
         // Positions (x, y, z), Normals (nx, ny, nz), UVs (u, v), Color/Flex (flex, 0, 0, 1)
         float[] bladeVertices =
         [
-            // Base left
-            -0.12f, 0.0f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   0.0f, 0.0f, 0.0f, 1.0f,
-            // Base right
-             0.12f, 0.0f, 0.0f,   0.0f, 0.0f, 1.0f,   1.0f, 0.0f,   0.0f, 0.0f, 0.0f, 1.0f,
-            // Mid left
-            -0.08f, 0.6f, 0.0f,   0.0f, 0.0f, 1.0f,   0.15f, 0.6f,  0.5f, 0.0f, 0.0f, 1.0f,
-            // Mid right
-             0.08f, 0.6f, 0.0f,   0.0f, 0.0f, 1.0f,   0.85f, 0.6f,  0.5f, 0.0f, 0.0f, 1.0f,
-            // Tip
-             0.00f, 1.2f, 0.0f,   0.0f, 0.0f, 1.0f,   0.5f, 1.0f,   1.0f, 0.0f, 0.0f, 1.0f,
+            // Blade 0: Angle 0 deg (along X, facing +Z)
+            -0.025f, 0.00f, 0.00000f,    0.0f, 0.0f, 1.0f,   0.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+             0.025f, 0.00f, 0.00000f,    0.0f, 0.0f, 1.0f,   1.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+            -0.016f, 0.18f, 0.00000f,    0.0f, 0.0f, 1.0f,   0.15f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+             0.016f, 0.18f, 0.00000f,    0.0f, 0.0f, 1.0f,   0.85f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+             0.000f, 0.35f, 0.00000f,    0.0f, 0.0f, 1.0f,   0.50f, 1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+
+            // Blade 1: Angle 60 deg
+            -0.0125f, 0.00f, -0.02165f,  -0.866f, 0.0f, 0.5f,   0.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+             0.0125f, 0.00f,  0.02165f,  -0.866f, 0.0f, 0.5f,   1.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+            -0.0080f, 0.18f, -0.01386f,  -0.866f, 0.0f, 0.5f,   0.15f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+             0.0080f, 0.18f,  0.01386f,  -0.866f, 0.0f, 0.5f,   0.85f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+             0.0000f, 0.35f,  0.00000f,  -0.866f, 0.0f, 0.5f,   0.50f, 1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+
+            // Blade 2: Angle 120 deg
+             0.0125f, 0.00f, -0.02165f,  -0.866f, 0.0f, -0.5f,  0.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+            -0.0125f, 0.00f,  0.02165f,  -0.866f, 0.0f, -0.5f,  1.00f, 0.0f,  0.0f, 0.0f, 0.0f, 1.0f,
+             0.0080f, 0.18f, -0.01386f,  -0.866f, 0.0f, -0.5f,  0.15f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+            -0.0080f, 0.18f,  0.01386f,  -0.866f, 0.0f, -0.5f,  0.85f, 0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+             0.0000f, 0.35f,  0.00000f,  -0.866f, 0.0f, -0.5f,  0.50f, 1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
         ];
 
-        ushort[] bladeIndices = [0, 1, 2,  2, 1, 3,  2, 3, 4];
+        ushort[] bladeIndices =
+        [
+            0, 1, 2,  2, 1, 3,  2, 3, 4,
+            5, 6, 7,  7, 6, 8,  7, 8, 9,
+            10, 11, 12,  12, 11, 13,  12, 13, 14
+        ];
         _indexCount = (uint)bladeIndices.Length;
 
         _vertexBuffer = allocator.CreateBuffer(

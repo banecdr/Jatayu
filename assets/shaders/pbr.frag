@@ -103,8 +103,9 @@ float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
     }
 
     // In Reverse-Z, closer to light is higher depth value (1.0 = near, 0.0 = far).
-    // Slope-scaled bias pushes the reference depth closer to the light, preventing self-shadow acne.
-    float dynamicBias = max(bias * (1.0 - NdotL), bias * 0.25);
+    // Slope-scaled tangent bias pushes the reference depth closer to the light, preventing grazing shadow acne.
+    float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
+    float dynamicBias = clamp(bias * (1.0 + tanTheta * 0.75), bias * 0.5, 0.006);
     float currentDepth = projCoords.z + dynamicBias;
 
     vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));

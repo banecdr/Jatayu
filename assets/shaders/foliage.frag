@@ -34,16 +34,20 @@ void main() {
     // Distance dissolve using Bayer matrix stipple dither
     ApplyLODDither(gl_FragCoord.xy, vFadeAlpha);
 
-    // Procedural grass blade / foliage color gradient
-    vec3 baseColor = mix(vec3(0.08, 0.28, 0.04), vec3(0.22, 0.52, 0.08), vTexCoord.y);
+    // Procedural grass blade color gradient (earthy root to vibrant sunlight tip)
+    vec3 baseColor = mix(vec3(0.06, 0.22, 0.04), vec3(0.24, 0.55, 0.10), vTexCoord.y);
 
-    // Two-sided lighting with subsurface transmission through thin leaves
+    // Two-sided lighting with subsurface transmission through thin grass blades
     vec3 N = normalize(vNormal);
     float NdotL = max(dot(N, LightDir), 0.0);
-    float backLighting = max(dot(-N, LightDir), 0.0) * 0.35; // Subsurface scattering approximation
+    float backLighting = max(dot(-N, LightDir), 0.0) * 0.45; // Subsurface translucency
     float directTerm = NdotL + backLighting;
 
-    vec3 ambient = AmbientSky * 0.4;
+    // Hemispherical ambient environment lighting (sky light from above, warm earth bounce from below)
+    vec3 skyLight = vec3(0.35, 0.50, 0.65);
+    vec3 groundBounce = vec3(0.18, 0.26, 0.12);
+    vec3 ambient = mix(groundBounce, skyLight, clamp(N.y * 0.5 + 0.5, 0.0, 1.0)) * 0.55;
+
     vec3 finalColor = baseColor * (SunColor * directTerm + ambient);
 
     outColor = vec4(finalColor, 1.0);

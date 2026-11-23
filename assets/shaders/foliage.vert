@@ -47,7 +47,7 @@ void main() {
     uint tintAndPhase = (inst.PackedData >> 16u) & 0xFFFFu;
 
     float rotY = (float(rotByte) / 255.0) * (2.0 * PI);
-    float scale = 0.5 + (float(scaleByte) / 255.0) * 1.5;
+    float scale = 0.6 + (float(scaleByte) / 255.0) * 0.8;
     float windPhase = (float(tintAndPhase & 0xFFu) / 255.0) * (2.0 * PI);
 
     // Rotate and scale local vertex
@@ -68,13 +68,13 @@ void main() {
     // Camera-relative world position
     vec3 worldPos = pc.CameraRelOrigin.xyz + inst.PositionOffset + rotatedPos;
 
-    // Procedural wind oscillation (affecting tips based on inColor.r flexibility)
+    // Procedural wind oscillation pinned to world coordinate space (not camera-relative)
     float flex = inColor.r;
     vec2 windDir = normalize(pc.WindParams.xy);
     float windSpeed = pc.WindParams.z;
     float windStrength = pc.WindParams.w;
 
-    float wave = sin(pc.Time * windSpeed + windPhase + worldPos.x * 0.15 + worldPos.z * 0.15);
+    float wave = sin(pc.Time * windSpeed + windPhase + inst.PositionOffset.x * 0.15 + inst.PositionOffset.z * 0.15);
     float wave2 = cos(pc.Time * (windSpeed * 1.6) + windPhase * 1.3);
     vec3 windOffset = vec3(windDir.x, 0.0, windDir.y) * ((wave * 0.7 + wave2 * 0.3) * windStrength * flex);
 

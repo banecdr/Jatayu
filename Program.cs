@@ -369,7 +369,7 @@ public static class Program
             AmbientSkyColor = new Vector3(0.2f, 0.35f, 0.6f),
             AmbientGroundColor = new Vector3(0.1f, 0.08f, 0.05f),
             AmbientIntensity = 0.40f,
-            ShadowBias = 0.001f
+            ShadowBias = 0.0015f
         };
 
         using var debugRenderer = new DebugRenderer(context, allocator);
@@ -513,12 +513,13 @@ public static class Program
         {
             float fx = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
             float fz = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
-            if (MathF.Abs(fx) < 1.4f && MathF.Abs(fz) < 1.4f) continue;
+            if (MathF.Abs(fx) < 4.5f && fz > -2.0f && fz < 6.0f) continue; // Keep central exhibition area clean
             float rot = (float)(foliageRng.NextDouble() * Math.PI * 2.0);
-            float scale = 0.8f + (float)foliageRng.NextDouble() * 0.6f;
+            float scale = 0.8f + (float)foliageRng.NextDouble() * 0.5f;
             byte tint = (byte)foliageRng.Next(150, 255);
             byte windPhase = (byte)foliageRng.Next(0, 256);
-            foliageList.Add(new FoliageInstanceData(new Vector3(fx, -1.0f, fz), rot, scale, tint, windPhase));
+            float fy = MathF.Max(terrainClipmap.SampleElevation(fx, fz), -1.0f);
+            foliageList.Add(new FoliageInstanceData(new Vector3(fx, fy, fz), rot, scale, tint, windPhase));
         }
         foliageSystem.SetInstances(CollectionsMarshal.AsSpan(foliageList));
 
@@ -771,7 +772,7 @@ public static class Program
             cameraRelView.M42 = 0;
             cameraRelView.M43 = 0;
             Matrix4x4 folVp = cameraRelView * camera.ProjectionMatrix;
-            foliageSystem.Render(ctx.CommandBuffer, folVp, Vector3.Zero, (float)time.TotalTime);
+            foliageSystem.Render(ctx.CommandBuffer, folVp, -camera.Position, (float)time.TotalTime);
         };
 
         Action<RenderPassBuilder> particlePassSetup = setup =>
