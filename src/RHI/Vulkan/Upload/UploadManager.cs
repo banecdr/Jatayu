@@ -203,30 +203,61 @@ public sealed class UploadManager : IDisposable
                 VkPipelineStageFlags.TransferBit
             );
 
-            var region = new VkBufferImageCopy
-            {
-                BufferOffset = new ByteSize64(stagingOffset),
-                BufferRowLength = 0,
-                BufferImageHeight = 0,
-                ImageSubresource = new VkImageSubresourceLayers
-                {
-                    AspectMask = VkImageAspectFlags.ColorBit,
-                    MipLevel = 0,
-                    BaseArrayLayer = 0,
-                    LayerCount = 1,
-                },
-                ImageOffset = new VkOffset3D(0, 0, 0),
-                ImageExtent = new VkExtent3D(texture.Width, texture.Height, 1),
-            };
+            // Generate copy regions for each mip level
+            int mipCount = Math.Max(1, texture.MipLevels);
+            var regions = new VkBufferImageCopy[mipCount];
+            ulong currentBufferOffset = stagingOffset;
 
-            _context.Device.PInvoke.vkCmdCopyBufferToImage.Invoke(
-                cmd.Handle,
-                _stagingRing.BufferHandle,
-                texture.Image,
-                VkImageLayout.TransferDstOptimal,
-                1,
-                &region
-            );
+            int mipW = texture.Width;
+            int mipH = texture.Height;
+
+            // Determine format byte-size per pixel / block
+            int bytesPerPixel = GetBytesPerPixel(texture.Format);
+
+            for (int mip = 0; mip < mipCount; mip++)
+            {
+                regions[mip] = new VkBufferImageCopy
+                {
+                    BufferOffset = new ByteSize64(currentBufferOffset),
+                    BufferRowLength = 0,
+                    BufferImageHeight = 0,
+                    ImageSubresource = new VkImageSubresourceLayers
+                    {
+                        AspectMask = VkImageAspectFlags.ColorBit,
+                        MipLevel = mip,
+                        BaseArrayLayer = 0,
+                        LayerCount = 1,
+                    },
+                    ImageOffset = new VkOffset3D(0, 0, 0),
+                    ImageExtent = new VkExtent3D(mipW, mipH, 1),
+                };
+
+                ulong mipBytes = (ulong)(mipW * mipH * bytesPerPixel);
+                currentBufferOffset += mipBytes;
+
+                // Stop if provided pixelData ends before higher mips (e.g. only base mip was packed)
+                if (currentBufferOffset - stagingOffset > size)
+                {
+                    // Fallback: only copy up to mips that fit in pixelData
+                    mipCount = mip + 1;
+                    break;
+                }
+
+                mipW = Math.Max(1, mipW / 2);
+                mipH = Math.Max(1, mipH / 2);
+            }
+
+            fixed (VkBufferImageCopy* pRegions = regions)
+            {
+                _context.Device.PInvoke.vkCmdCopyBufferToImage.Invoke(
+                    cmd.Handle,
+                    _stagingRing.BufferHandle,
+                    texture.Image,
+                    VkImageLayout.TransferDstOptimal,
+                    mipCount,
+                    pRegions
+                );
+            }
 
             // Transition image TransferDstOptimal -> finalLayout
             // On transfer queue families, fragment/compute shader stages are invalid.
@@ -371,5 +402,18 @@ public sealed class UploadManager : IDisposable
             _stagingRing.Dispose();
             _timelineSemaphore.Dispose();
         }
+    }
+
+    private static int GetBytesPerPixel(VkFormat format)
+    {
+        return format switch
+        {
+            VkFormat.R8UNorm => 1,
+            VkFormat.R8G8B8A8UNorm or VkFormat.R8G8B8A8SRGB => 4,
+            VkFormat.R16UNorm => 2,
+            VkFormat.R32SFloat => 4,
+            VkFormat.Bc7UNormBlock or VkFormat.Bc7SRGBBlock or VkFormat.Bc5UNormBlock or VkFormat.Bc4UNormBlock => 1,
+            _ => 4,
+        };
     }
 }
