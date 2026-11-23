@@ -293,7 +293,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.9 Render Graph & Frame Scheduling (`src/Renderer/Graph/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Renderer/Graph/RenderGraph.cs` | **DONE** | Frame render graph DAG. Passes declare read/write dependencies; compiles barriers, layout transitions, and aliases memory. (Sprint 4). |
+| `src/Renderer/Graph/RenderGraph.cs` | **DONE** | Frame render graph DAG. Passes declare read/write dependencies; compiles barriers and layout transitions via synchronization2. (Sprint 4; transient memory aliasing planned for Sprint 7a). |
 | `src/Renderer/Graph/RenderPass.cs` | **DONE** | Execution node in the render graph with setup and execute callbacks receiving command buffers. (Sprint 4). |
 | `src/Renderer/Graph/RenderGraphResource.cs` | **DONE** | Virtual handle for transient/imported textures and buffers tracked by the graph for synchronization. (Sprint 4). |
 | `src/Renderer/Graph/BarrierBuilder.cs` | **DONE** | Automatic `VkDependencyInfo` and `VkImageMemoryBarrier2` generator using Vulkan 1.3 `synchronization2`. (Sprint 4). |
@@ -420,7 +420,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.19 Automated Testing, Validation & CI Infrastructure
 | File Path | Status | Purpose & Role |
 | :--- | :---: | :--- |
-| `tests/Jatayu.Tests/Jatayu.Tests.csproj` | **DONE** | xUnit unit test suite covering math, origin shift, job system, staging ring, pack reader, and cell state machines without GPU requirements. (Sprint 3a). |
+| `tests/Jatayu.Tests/Jatayu.Tests.csproj` | **DONE** | xUnit unit test suite covering math, origin shift, job system, staging ring, deferred deletion queue, event bus, and asset loaders (cell state machine tests planned with src/World in Sprint 6a). (Sprint 3a/3b/hotfixes). |
 | `tests/Jatayu.RenderSmoke/Program.cs` | **DONE** | Automated Vulkan smoke test: runs D20 feature probe, runs full test suite on D10 hardware or reduced validation-only suite on software drivers. (Sprint 3a). |
 | `.github/workflows/ci.yml` | **DONE** | Continuous integration pipeline: build, test, and run validation smoke tests. (Sprint 3a). |
 | `Directory.Build.props` | **DONE** | Solution-wide compiler settings (`TreatWarningsAsErrors=true`, nullable enabled, analyzers). (Sprint 3a). |

@@ -40,6 +40,25 @@ public static class Program
             var instanceExtensions = new HashSet<string>();
             VulkanHelpers.AddPlatformRequiredExtensions(instanceExtensions);
 
+            var instanceLayers = new HashSet<string>();
+            const string validationLayer = "VK_LAYER_KHRONOS_validation";
+            int layerCount = Vulkan.EnumerateInstanceLayerProperties_Count();
+            if (layerCount > 0)
+            {
+                var availableLayers = stackalloc VkLayerProperties[layerCount];
+                Vulkan.EnumerateInstanceLayerProperties_Write(new Span<VkLayerProperties>(availableLayers, layerCount));
+                for (int i = 0; i < layerCount; i++)
+                {
+                    string layerName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)availableLayers[i].LayerName) ?? string.Empty;
+                    if (layerName == validationLayer)
+                    {
+                        instanceLayers.Add(validationLayer);
+                        Console.WriteLine($"[Vulkan] Enabled Validation Layer: {validationLayer}");
+                        break;
+                    }
+                }
+            }
+
             using var instance = Vulkan.CreateInstance(new Instance.CreateInfo
             {
                 AppInfo = new VkApplicationInfo
@@ -48,7 +67,7 @@ public static class Program
                 },
                 Flags = VulkanHelpers.GetPlatformRequiredInstanceCreateFlags(),
                 EnabledExtensions = instanceExtensions,
-                EnabledLayers = [],
+                EnabledLayers = instanceLayers,
             });
 
             Console.WriteLine("[Vulkan] Instance created successfully (Vulkan 1.3).");
