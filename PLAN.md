@@ -453,8 +453,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | `assets/shaders/ibl_irradiance.comp` | **PLANNED** | Compute shader generating diffuse irradiance cubemap from environment map. (Sprint 7b). |
 | `assets/shaders/ibl_prefilter.comp` | **PLANNED** | Compute shader generating specular prefiltered environment cubemap mips. (Sprint 7b). |
 | `assets/shaders/brdf_lut.comp` | **PLANNED** | Compute shader pre-integrating split-sum 2D BRDF LUT for PBR specular reflections. (Sprint 7b). |
-| `assets/shaders/terrain.vert` | **PLANNED** | Terrain clipmap vertex shader with continuous geomorphing and normal generation from heightmaps. (Sprint 6b). |
-| `assets/shaders/terrain.frag` | **PLANNED** | Multi-layer splat material shader with triplanar projection for cliff slopes. (Sprint 6b). |
+| `assets/shaders/terrain.vert` | **DONE** | Terrain clipmap vertex shader with continuous geomorphing and normal generation from heightmaps. (Sprint 6b). |
+| `assets/shaders/terrain.frag` | **DONE** | Multi-layer splat material shader with triplanar projection for cliff slopes. (Sprint 6b). |
 | `assets/shaders/foliage.vert` | **PLANNED** | GPU-instanced vegetation vertex shader with procedural wind vertex oscillation. (Sprint 7b). |
 | `assets/shaders/foliage.frag` | **PLANNED** | Foliage fragment shader with alpha-to-coverage and subsurface scattering approximation. (Sprint 7b). |
 | `assets/shaders/atmosphere.frag`| **PLANNED** | Analytical Rayleigh/Mie scattering atmosphere and sun disc shader. (Sprint 9). |
@@ -475,8 +475,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 116
-- **Current Completion:** **54.0% (Sprint 6a Complete, Sprint 6b Ready)**
+- **Total Completed Files:** 128
+- **Current Completion:** **59.5% (Sprint 6b Complete, Sprint 7 Active)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -484,10 +484,10 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Multithreading & Jobs** | 5 / 5 | **COMPLETE (JobSystem, Job, JobHandle, ParallelFor, MainThreadDispatcher)** |
 | **Diagnostics & Profiling** | 4 / 4 | **COMPLETE (Profiler, AllocTracker, GpuTimer, DebugNames)** |
 | **Modern Vulkan 1.3 RHI** | 22 / 23 | **BindlessTable, Async Uploads, Timeline, DeletionQueue Added** |
-| **Shared Formats & Runtime Assets** | 10 / 12 | **COMPLETE (CellCoord, CellFormat, WorldConstants Added)** |
-| **Cooker & World Generator** | 7 / 13 | **CellCooker, WorldGen Program Added** |
-| **World Grid & Streaming** | 6 / 7 | **COMPLETE (WorldConfig, WorldCell, WorldGrid, StreamingManager, CellLoader, StreamingDebugOverlay)** |
-| **Terrain System** | 0 / 4 | Planned (Sprint 6b) |
+| **Shared Formats & Runtime Assets** | 12 / 12 | **COMPLETE (TextureStreamer, MipResidency, Formats Added)** |
+| **Cooker & World Generator** | 10 / 13 | **HeightfieldCooker, HlodCooker, ImpostorCooker, CellCooker Added** |
+| **World Grid & Streaming** | 7 / 7 | **COMPLETE (WorldGrid, StreamingManager, CellLoader, HLOD, DebugOverlay)** |
+| **Terrain System** | 4 / 4 | **COMPLETE (TerrainTile, TerrainClipmap, TerrainMaterial, HeightPyramid)** |
 | **Render Graph** | 4 / 4 | **COMPLETE (RenderGraph, RenderPass, RenderGraphResource, BarrierBuilder)** |
 | **GPU-Driven Rendering** | 2 / 6 | **GeometryPool, DynamicInstanceRing Complete** (Sprint 5b, 7a) |
 | **3D Graphics, Lighting & Environment** | 15 / 28 | **ForwardRenderer3D, Skybox, DebugRenderer, ShadowMap, Material, LightEnv Complete** |
@@ -499,7 +499,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
 | **Testing, Validation & CI** | 5 / 5 | **COMPLETE** |
-| **Asset Shaders** | 14 / 39 | **pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.* Complete** |
+| **Asset Shaders** | 16 / 39 | **terrain.*, pbr.*, shadow.*, skybox.*, debug_line.*, cube.*, imgui.* Complete** |
 
 ---
 
@@ -722,7 +722,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 6b: Terrain, HLOD and Texture Streaming [DONE]                            │
+│ SPRINT 6b: Terrain, HLOD and Texture Streaming [COMPLETED]                      │
 │  - TerrainTile (256m), TerrainClipmap (unified D22), TerrainMaterial splat       │
 │  - TerrainHeightPyramid (far-field clipmap), HeightfieldCooker (D15 rules)       │
 │  - Hlod, HlodCooker, ImpostorCooker                                              │
@@ -732,7 +732,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 7a: GPU-Driven Rendering [NEXT]                                           │
+│ SPRINT 7a: GPU-Driven Rendering [ACTIVE / IN PROGRESS]                           │
 │  - InstanceBuffer, IndirectDrawBuffer (vkCmdDrawIndexedIndirectCount)           │
 │  - GpuCuller (5 views: main + 4 cascades, LOD selection D24), HiZBuilder         │
 │  - Velocity output in opaque pass with previous-frame transforms (D25)           │
@@ -852,3 +852,4 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-50** | Sprint 3b | Completed Sprint 3b: Implemented UploadManager, StagingRing, TimelineSemaphore, DeferredDeletionQueue, VramBudget, Reverse-Z depth conversion, NativeArena, NativePool, Profiler, AllocationTracker, GpuTimer, DebugNames, ImGuiVulkanBackend (dynamic rendering), DebugOverlay HUD, shaders, wired into Program.cs with 22/22 unit tests passing and hardware verification passing. |
 | **CL-51** | Sprint 6a | Completed Sprint 6a: Implemented CellCoord (fast packing, FNV-1a GUIDs, distance metrics, neighbor iterator), CellFormat (binary structs for CookedCellHeader, instances, colliders, audio), WorldConstants, WorldConfig (rings, velocity lead, 900m prefetch cap), WorldCell lifecycle state machine, WorldGrid 2D sparse spatial hash grid, CellLoader memory-mapped decoder, CellCooker binary payload baker, tools/Jatayu.WorldGen/ procedural generator (.glb models & cell scatter into .jpak), StreamingManager (directional queue prioritization along velocity, 150m hysteresis, 1ms budget finalization), StreamingDebugOverlay 2D radar visualizer, and ForwardRenderer3D cell instance integration. 98/98 unit tests passing and hardware verification passing. |
 | **CL-52** | Sprint 6b | Completed Sprint 6b: Implemented TerrainTile (256m tiles covering 2x2 cells, TileCoord = CellCoord / 2 per D15, bilinear height interpolation, origin shifting, .jtile binary codec), TerrainClipmap (concentric nested grid rings with continuous geomorphing, D22 unified renderer), TerrainMaterial (4-layer splat mapping, triplanar cliff blend parameters), TerrainHeightPyramid (Ring C far-field elevation mip pyramid), HeightfieldCooker (elevation bounds calculation, .jtile payload baking), HlodProxyCluster & HlodManager (Ring B 600m–2,000m proxy activation), HlodCooker (.jhlod binary cooker), ImpostorCooker (8-angle billboard atlas layout and view angle selection), TextureResidencyState & TextureStreamer (step-of-2 mip transitions per D21, permanent resident tail protection <= 64x64 per D5, atomic bindless swaps, VRAM pressure fallback), shaders (terrain.vert & terrain.frag), ForwardRenderer3D terrain pipeline and clipmap draw loop, and 15 new unit tests (113/113 passing) and RenderSmoke CHECK 7 verification passing. |
+| **CL-53** | Sprint 7 | Planned Sprint 7 (GPU-Driven Rendering & Scalable Lighting): Structured into Phase 7a (InstanceBuffer, IndirectDrawBuffer, HiZBuilder, GpuCuller 5-view culling, multidraw indirect conversion) and Phase 7b (CascadedShadowMap, ClusteredLightCulling, IblProbe, FoliageSystem, TransparentPass, ParticleSystem). Updated progress tracking dashboard to 128 / 215 completed files (59.5%). |
