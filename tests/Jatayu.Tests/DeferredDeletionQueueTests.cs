@@ -90,4 +90,28 @@ public class DeferredDeletionQueueTests
 
         Assert.Equal(1, executedCount);
     }
+
+    [Fact]
+    public void ConcurrentEnqueue_FromMultipleThreads_AllItemsRetainedAndFlushed()
+    {
+        using var queue = new DeferredDeletionQueue();
+        int totalThreads = 8;
+        int itemsPerThread = 500;
+        int executedCount = 0;
+
+        System.Threading.Tasks.Parallel.For(0, totalThreads, threadId =>
+        {
+            for (int i = 0; i < itemsPerThread; i++)
+            {
+                queue.Enqueue(() => System.Threading.Interlocked.Increment(ref executedCount), frameIndex: (ulong)(threadId + 1));
+            }
+        });
+
+        Assert.Equal(totalThreads * itemsPerThread, queue.PendingCount);
+
+        queue.FlushAll();
+
+        Assert.Equal(totalThreads * itemsPerThread, executedCount);
+        Assert.Equal(0, queue.PendingCount);
+    }
 }

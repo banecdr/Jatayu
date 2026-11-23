@@ -8,20 +8,24 @@
  *
  * HOW IT WORKS INTERNALLY:
  *   When a resource is retired (e.g. during texture streaming or dynamic geometry reallocation),
- *   it is enqueued with the current submission frame index. At the start of each frame, Flush()
- *   destroys any resources whose frame index is <= completedFrameIndex.
+ *   it is enqueued with the current submission frame index or GPU timeline value. At the start
+ *   of each frame, Flush() destroys any resources whose frame index is <= completedFrameIndex.
+ *   Thread-safe enqueue operations allow background asset streaming worker threads to safely
+ *   retire GPU objects.
  * ================================================================================================= */
 
 using System;
 using System.Collections.Generic;
 using Brutal.VulkanApi;
 using Brutal.VulkanApi.Vma;
+using Jatayu.Core.Logging;
 using Jatayu.RHI.Vulkan.Context;
 
 namespace Jatayu.RHI.Vulkan.Memory;
 
 /// <summary>
 /// Holds GPU resources for destruction until in-flight frames have finished on the GPU timeline.
+/// Thread-safe for multi-threaded enqueuing during background asset streaming.
 /// </summary>
 public sealed class DeferredDeletionQueue : IDisposable
 {
@@ -34,12 +38,22 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     private readonly VulkanContext? _context;
     private readonly Queue<DeletionItem> _queue = new(256);
+    private readonly object _lock = new();
     private bool _disposed;
 
     /// <summary>
     /// Gets the number of pending resource deletions currently queued.
     /// </summary>
-    public int PendingCount => _queue.Count;
+    public int PendingCount
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _queue.Count;
+            }
+        }
+    }
 
     public DeferredDeletionQueue(VulkanContext? context = null)
     {
@@ -48,36 +62,45 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     /// <summary>
     /// Enqueues an arbitrary disposal action to execute once the given frame finishes on the GPU.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(Action callback, ulong frameIndex)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(callback);
 
-        _queue.Enqueue(new DeletionItem
+        lock (_lock)
         {
-            FrameIndex = frameIndex,
-            Callback = callback
-        });
+            _queue.Enqueue(new DeletionItem
+            {
+                FrameIndex = frameIndex,
+                Callback = callback
+            });
+        }
     }
 
     /// <summary>
     /// Enqueues an IDisposable GPU resource (e.g. GpuBuffer, GpuTexture) to dispose after frame completion.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(IDisposable resource, ulong frameIndex)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(resource);
 
-        _queue.Enqueue(new DeletionItem
+        lock (_lock)
         {
-            FrameIndex = frameIndex,
-            Disposable = resource
-        });
+            _queue.Enqueue(new DeletionItem
+            {
+                FrameIndex = frameIndex,
+                Disposable = resource
+            });
+        }
     }
 
     /// <summary>
     /// Enqueues a raw Vulkan image view for destruction.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(VkImageView imageView, ulong frameIndex)
     {
@@ -96,6 +119,7 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     /// <summary>
     /// Enqueues a raw Vulkan sampler for destruction.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(VkSampler sampler, ulong frameIndex)
     {
@@ -114,6 +138,7 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     /// <summary>
     /// Enqueues a VMA-allocated buffer for destruction.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(GpuAllocator allocator, VkBuffer buffer, VmaAllocation allocation, ulong frameIndex)
     {
@@ -128,6 +153,7 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     /// <summary>
     /// Enqueues a VMA-allocated image for destruction.
+    /// Thread-safe.
     /// </summary>
     public void Enqueue(GpuAllocator allocator, VkImage image, VmaAllocation allocation, ulong frameIndex)
     {
@@ -141,15 +167,23 @@ public sealed class DeferredDeletionQueue : IDisposable
     }
 
     /// <summary>
-    /// Destroys all queued resources whose frame index is less than or equal to completedFrameIndex.
+    /// Destroys all queued resources whose frame index is less than or equal to completedFrameIndex in monotonic FIFO order.
     /// </summary>
     public void Flush(ulong completedFrameIndex)
     {
         ThrowIfDisposed();
 
-        while (_queue.Count > 0 && _queue.Peek().FrameIndex <= completedFrameIndex)
+        while (true)
         {
-            var item = _queue.Dequeue();
+            DeletionItem item;
+            lock (_lock)
+            {
+                if (_queue.Count == 0 || _queue.Peek().FrameIndex > completedFrameIndex)
+                    break;
+
+                item = _queue.Dequeue();
+            }
+
             try
             {
                 item.Callback?.Invoke();
@@ -157,7 +191,7 @@ public sealed class DeferredDeletionQueue : IDisposable
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[DeferredDeletionQueue] Exception during deferred resource disposal: {ex}");
+                Log.Error($"[DeferredDeletionQueue] Exception during deferred resource disposal: {ex}");
             }
         }
     }
@@ -167,9 +201,17 @@ public sealed class DeferredDeletionQueue : IDisposable
     /// </summary>
     public void FlushAll()
     {
-        while (_queue.Count > 0)
+        while (true)
         {
-            var item = _queue.Dequeue();
+            DeletionItem item;
+            lock (_lock)
+            {
+                if (_queue.Count == 0)
+                    break;
+
+                item = _queue.Dequeue();
+            }
+
             try
             {
                 item.Callback?.Invoke();
@@ -177,7 +219,7 @@ public sealed class DeferredDeletionQueue : IDisposable
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[DeferredDeletionQueue] Exception during shutdown flush: {ex}");
+                Log.Error($"[DeferredDeletionQueue] Exception during shutdown flush: {ex}");
             }
         }
     }
@@ -189,8 +231,11 @@ public sealed class DeferredDeletionQueue : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
 
         FlushAll();
     }
