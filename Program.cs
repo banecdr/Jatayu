@@ -151,7 +151,7 @@ public static class Program
     {
         int maxFrames = int.MaxValue;
         bool initialStress = false;
-        bool initialNoVsync = false;
+        bool vsyncEnabled = false; // Default V-Sync OFF for uncapped, low-latency framerate
         bool benchmarkMode = false;
         bool initialAutopilot = false;
 
@@ -168,9 +168,13 @@ public static class Program
                 {
                     initialStress = true;
                 }
+                else if (args[i] == "--vsync")
+                {
+                    vsyncEnabled = true;
+                }
                 else if (args[i] == "--no-vsync")
                 {
-                    initialNoVsync = true;
+                    vsyncEnabled = false;
                 }
                 else if (args[i] == "--benchmark")
                 {
@@ -194,7 +198,7 @@ public static class Program
             width: InitialWidth,
             height: InitialHeight,
             resizable: true,
-            vsync: !initialNoVsync
+            vsync: vsyncEnabled
         );
 
         using var context = new VulkanContext(window);
