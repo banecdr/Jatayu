@@ -752,7 +752,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 8: Physics, Character & Spatial Audio                                     │
+│ SPRINT 8: Physics, Character & Spatial Audio [NEXT]                               │
 │  - Jolt PhysicsEngine integration with streaming per-cell colliders              │
 │  - Terrain heightfield physics shapes generated per cell                         │
 │  - Kinematic CharacterController (walk, sprint, jump, stairs, slopes)            │

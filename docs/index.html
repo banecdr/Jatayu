@@ -193,9 +193,19 @@ function showErr(msg){
 async function fetchPlan(){
   $("#meta").textContent = "Fetching latest plan…";
   try{
-    const r = await fetch(URL_, {cache:"no-store"});
-    if (!r.ok) throw new Error("HTTP "+r.status);
-    load(await r.text(), "Live from GitHub");
+    const ts = Date.now();
+    let text = null, src = "Live from GitHub";
+    // Try relative path first (works when hosted locally via live-server/http.server or relative repo)
+    try {
+      const lr = await fetch(`../PLAN.md?_t=${ts}`, {cache:"no-store"});
+      if (lr.ok) { text = await lr.text(); src = "Live from local PLAN.md"; }
+    } catch {}
+    if (!text) {
+      const r = await fetch(`${URL_}?_t=${ts}`, {cache:"no-store"});
+      if (!r.ok) throw new Error("HTTP "+r.status);
+      text = await r.text();
+    }
+    load(text, src);
   }catch(e){ showErr(e.message || "Network error"); }
 }
 
