@@ -125,6 +125,10 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private static readonly Arch.Core.QueryDescription CullQuery = new Arch.Core.QueryDescription().WithAll<Transform, MeshRenderer>();
 
+    // Preallocated static strings for RenderGraph names (eliminates 480 B/frame string interpolation)
+    private static readonly string[] CascadeDepthNames = ["CascadeDepth_0", "CascadeDepth_1", "CascadeDepth_2", "CascadeDepth_3"];
+    private static readonly string[] ShadowCascadePassNames = ["ShadowCascadePass_0", "ShadowCascadePass_1", "ShadowCascadePass_2", "ShadowCascadePass_3"];
+
     // Preallocated Vulkan command recording arrays (0 allocations per frame)
     private readonly VkViewport[] _viewports = new VkViewport[1];
     private readonly VkRect2D[] _scissors = new VkRect2D[1];
@@ -1088,7 +1092,7 @@ public sealed class ForwardRenderer3D : IDisposable
             {
                 _currentCascadeVps[i] = cascades[i].ViewProjection;
                 _currentCascadeDepthHandles[i] = graph.ImportTexture(
-                    $"CascadeDepth_{i}",
+                    CascadeDepthNames[i],
                     cascadedShadowMap.Texture.Image,
                     cascadedShadowMap.GetLayerView(i),
                     DepthConvention.DepthFormat,
@@ -1142,7 +1146,7 @@ public sealed class ForwardRenderer3D : IDisposable
             {
                 for (int i = 0; i < CascadedShadowMap.CascadeCount; i++)
                 {
-                    graph.AddPass($"ShadowCascadePass_{i}", _cascadeShadowPassSetups[i], _cascadeShadowPassExecutes[i]);
+                    graph.AddPass(ShadowCascadePassNames[i], _cascadeShadowPassSetups[i], _cascadeShadowPassExecutes[i]);
                 }
             }
             else if (shadowMap != null)

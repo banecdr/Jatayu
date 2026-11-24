@@ -43,7 +43,15 @@ public struct ShadowCascade
         NearDistance = nearDist;
         SplitDistance = farDist;
 
-        if (!Matrix4x4.Invert(cameraView, out var invCamView))
+        // Zero out camera position translation so cascade sub-frustums and bounding spheres
+        // are strictly calculated in camera-relative coordinate space (0, 0, 0),
+        // matching the large-world camera-relative model and world positions in shaders.
+        Matrix4x4 camRelativeView = cameraView;
+        camRelativeView.M41 = 0.0f;
+        camRelativeView.M42 = 0.0f;
+        camRelativeView.M43 = 0.0f;
+
+        if (!Matrix4x4.Invert(camRelativeView, out var invCamView))
         {
             invCamView = Matrix4x4.Identity;
         }
@@ -90,15 +98,16 @@ public struct ShadowCascade
         BoundingRadius = radius;
         TexelSize = worldUnitsPerTexel;
 
-        // 4. Position virtual light camera pulled back to capture shadow casters behind camera
+        // 4. Position virtual light camera pulled back far enough to encompass all potential shadow casters
         Vector3 lightDir = Vector3.Normalize(lightDirection);
-        Vector3 lightPos = center - (lightDir * (radius * 2.0f));
+        float pullBack = MathF.Max(radius * 2.5f, 150.0f);
+        Vector3 lightPos = center - (lightDir * pullBack);
         LightPosition = lightPos;
 
         Vector3 up = MathF.Abs(Vector3.Dot(lightDir, Vector3.UnitY)) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
         Matrix4x4 lightView = Matrix4x4.CreateLookAt(lightPos, center, up);
 
-        // 5. Texel snapping in light view space
+        // 5. Texel snapping in light view space to eliminate edge shimmering during camera movement
         Vector3 centerLight = Vector3.Transform(center, lightView);
         float snappedX = MathF.Floor(centerLight.X / worldUnitsPerTexel) * worldUnitsPerTexel;
         float snappedY = MathF.Floor(centerLight.Y / worldUnitsPerTexel) * worldUnitsPerTexel;
@@ -111,7 +120,7 @@ public struct ShadowCascade
         // 6. Symmetrical Reverse-Z Orthographic projection with extended light depth range
         float orthoExtent = radius * 2.0f;
         float nearZ = 0.1f;
-        float farZ = radius * 4.0f;
+        float farZ = pullBack + radius + 150.0f;
         Matrix4x4 lightProj = DepthConvention.CreateReverseZOrthographic(orthoExtent, orthoExtent, nearZ, farZ);
 
         ViewProjection = lightView * lightProj;

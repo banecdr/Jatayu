@@ -160,7 +160,7 @@ float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
         return NdotL <= 0.0 ? 0.0 : 1.0;
     }
 
-    // Determine cascade index based on view space depth
+    // Determine initial cascade index based on view space depth
     int cascadeIndex = 0;
     if (viewDepth > uLight.CascadeSplits.x) cascadeIndex = 1;
     if (viewDepth > uLight.CascadeSplits.y) cascadeIndex = 2;
@@ -171,36 +171,49 @@ float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
         return 1.0;
     }
 
-    mat4 cascadeVP;
-    if (cascadeIndex == 0) cascadeVP = uLight.CascadeViewProj0;
-    else if (cascadeIndex == 1) cascadeVP = uLight.CascadeViewProj1;
-    else if (cascadeIndex == 2) cascadeVP = uLight.CascadeViewProj2;
-    else cascadeVP = uLight.CascadeViewProj3;
+    // Try current cascade first; if the sample falls outside its bounds, fall back to outer cascades
+    vec3 projCoords = vec3(0.0);
+    int selectedCascade = -1;
 
-    vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
-    vec3 projCoords = shadowClip.xyz / shadowClip.w;
+    for (int c = cascadeIndex; c < 4; ++c) {
+        mat4 cascadeVP;
+        if (c == 0) cascadeVP = uLight.CascadeViewProj0;
+        else if (c == 1) cascadeVP = uLight.CascadeViewProj1;
+        else if (c == 2) cascadeVP = uLight.CascadeViewProj2;
+        else cascadeVP = uLight.CascadeViewProj3;
 
-    // Convert from Vulkan NDC [-1, 1] to texture UV [0, 1]
-    projCoords.x = projCoords.x * 0.5 + 0.5;
-    projCoords.y = projCoords.y * 0.5 + 0.5;
+        vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
+        vec3 p = shadowClip.xyz / shadowClip.w;
 
-    // Outside light frustum -> no shadow
-    if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
-        projCoords.y < 0.0 || projCoords.y > 1.0 ||
-        projCoords.z < 0.0 || projCoords.z > 1.0) {
+        // Convert from Vulkan NDC [-1, 1] to texture UV [0, 1]
+        p.x = p.x * 0.5 + 0.5;
+        p.y = p.y * 0.5 + 0.5;
+
+        // In Reverse-Z, valid depth is [0.0, 1.0]
+        if (p.x >= 0.001 && p.x <= 0.999 &&
+            p.y >= 0.001 && p.y <= 0.999 &&
+            p.z >= 0.0 && p.z <= 1.0) {
+            projCoords = p;
+            selectedCascade = c;
+            break;
+        }
+    }
+
+    // If completely outside all cascades -> no shadow
+    if (selectedCascade == -1) {
         return 1.0;
     }
 
     // In Reverse-Z, closer to light is higher depth value (1.0 = near, 0.0 = far).
     // Slope-scaled tangent bias pushes the reference depth closer to the light.
-    float cascadeScale = float(cascadeIndex + 1);
+    float cascadeScale = float(selectedCascade + 1);
     float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
     float dynamicBias = clamp(bias * cascadeScale * (1.0 + tanTheta * 1.5), bias * 0.5, 0.015);
     float currentDepth = projCoords.z + dynamicBias;
 
     vec2 texelSize = vec2(uLight.ShadowParams.y);
     float shadow = 0.0;
-    float layer = float(cascadeIndex);
+    float layer = float(selectedCascade);
 
     if (uLight.CastsShadows >= 2u) {
         // Ultra High-Quality Mode: 16-tap Poisson Disk filter (eliminates stair-stepping jaggedness)
