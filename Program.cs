@@ -2016,18 +2016,14 @@ public static class Program
                     VkAccessFlags2.None
                 );
 
-                // Update 4-Cascade CSM splits and light-space matrices with world-anchored texel snapping
+                // Update 4-Cascade CSM splits and light-space matrices with texel snapping
                 cascadedShadowMap.Update(
                     lightEnv.Sun.Direction,
                     camera.ViewMatrix,
                     camera.FovDegrees * (MathF.PI / 180.0f),
                     camera.AspectRatio,
                     camera.NearPlane,
-                    maxShadowDistance: 400.0f,
-                    lambda: 0.85f,
-                    camWorldX: camera.Position.X,
-                    camWorldY: camera.Position.Y,
-                    camWorldZ: camera.Position.Z
+                    maxShadowDistance: 500.0f
                 );
 
                 // ForwardRenderer3D schedules Shadows -> Skybox -> PBR Opaque (GPU-Driven Indirect or CPU Forward) -> Debug Wireframes passes

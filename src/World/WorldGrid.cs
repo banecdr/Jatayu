@@ -153,40 +153,28 @@ public sealed class WorldGrid
         float radiusMeters,
         List<CellCoord> destination)
     {
-        destination.Clear();
+        float cellSize = _config.CellSize;
+        int minCx = (int)Math.Floor((center.X - radiusMeters) / cellSize);
+        int maxCx = (int)Math.Floor((center.X + radiusMeters) / cellSize);
+        int minCz = (int)Math.Floor((center.Z - radiusMeters) / cellSize);
+        int maxCz = (int)Math.Floor((center.Z + radiusMeters) / cellSize);
 
-        double cellSize = _config.CellSize;
-        double r = radiusMeters;
-        double radiusSq = r * r;
-        double px = center.X;
-        double pz = center.Z;
-
-        // One-time growth to roughly the circle's cell count (pi*r^2 / cell^2 + rim).
-        int estimate = (int)(Math.PI * radiusSq / (cellSize * cellSize)) + 4 * (int)(r / cellSize) + 8;
-        if (destination.Capacity < estimate)
-            destination.Capacity = estimate;
-
-        // Only rows whose center line is within R of the player can contain cells:
-        //   |(cz + 0.5) * cellSize - pz| <= R
-        int minCz = (int)Math.Ceiling((pz - r) / cellSize - 0.5);
-        int maxCz = (int)Math.Floor((pz + r) / cellSize - 0.5);
+        double radiusSq = radiusMeters * radiusMeters;
 
         for (int cz = minCz; cz <= maxCz; cz++)
         {
-            double dz = (cz + 0.5) * cellSize - pz;
-            double rem = radiusSq - dz * dz;
-            if (rem < 0.0)
-                continue;
-
-            // Exact span of cell centers on this row inside the circle:
-            //   |(cx + 0.5) * cellSize - px| <= sqrt(R^2 - dz^2)
-            double halfSpan = Math.Sqrt(rem);
-            int minCx = (int)Math.Ceiling((px - halfSpan) / cellSize - 0.5);
-            int maxCx = (int)Math.Floor((px + halfSpan) / cellSize - 0.5);
-
-            // Tight emit loop: no distance test, no rejected candidates.
             for (int cx = minCx; cx <= maxCx; cx++)
-                destination.Add(new CellCoord(cx, cz));
+            {
+                var coord = new CellCoord(cx, cz);
+                coord.GetWorldCenter(cellSize, out double cellCenterX, out double cellCenterZ);
+
+                double dx = cellCenterX - center.X;
+                double dz = cellCenterZ - center.Z;
+                if ((dx * dx + dz * dz) <= radiusSq)
+                {
+                    destination.Add(coord);
+                }
+            }
         }
     }
 
