@@ -228,8 +228,8 @@ public sealed class Window : IDisposable
     /// <param name="width">Initial width in screen coordinates.</param>
     /// <param name="height">Initial height in screen coordinates.</param>
     /// <param name="resizable">Whether the user can resize the window with their mouse.</param>
-    /// <param name="vsync">Whether V-Sync is enabled by default (defaults to false).</param>
-    public Window(string title = "BRUTAL Engine", int width = 1280, int height = 720, bool resizable = true, bool vsync = false)
+    /// <param name="vsync">Whether V-Sync is enabled by default (defaults to true).</param>
+    public Window(string title = "BRUTAL Engine", int width = 1280, int height = 720, bool resizable = true, bool vsync = true)
     {
         _title = title;
         Width = width;
