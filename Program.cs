@@ -525,6 +525,7 @@ public static class Program
         };
 
         var dynInstances = new GpuInstanceData[10];
+        var streamingGpuInstances = new GpuInstanceData[4096];
         bool gpuDrivenEnabled = true;
         bool foliageEnabled = true;
         bool particlesEnabled = true;
@@ -724,6 +725,8 @@ public static class Program
 
         RgTextureHandle currentSwapchainTarget = default;
         RgTextureHandle currentDepthTarget = default;
+
+        Func<Jatayu.AssetFormats.AssetGuid, Mesh?> cubeMeshResolver = _ => cubeMesh;
 
         Action<RenderPassBuilder> foliagePassSetup = setup =>
         {
@@ -1093,12 +1096,53 @@ public static class Program
                     LodBias = 0f,
                 };
 
-                instanceBuffer.SetDynamicInstances(dynInstances);
-            }
+                // Populate active streaming cell static instances into the GPU InstanceBuffer
+                int staticInstIdx = 0;
+                var activeCells = worldGrid.ActiveCells;
+                for (int c = 0; c < activeCells.Count; c++)
+                {
+                    var cell = activeCells[c];
+                    var instances = cell.StaticInstances;
+                    for (int i = 0; i < instances.Length; i++)
+                    {
+                        if (staticInstIdx >= streamingGpuInstances.Length)
+                            break;
 
-            if (time.FrameCount % 15 == 0)
-            {
-                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [P] HQ Shadows: {(lightEnv.HighQualityShadows ? "ON (16-tap Poisson)" : "OFF (9-tap)")} | [G] Indirect: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Grass: {(foliageEnabled ? "ON" : "OFF")}";
+                        ref readonly var inst = ref instances[i];
+                        double objWorldX = cell.Origin.X + inst.PosX;
+                        double objWorldY = cell.Origin.Y + inst.PosY;
+                        double objWorldZ = cell.Origin.Z + inst.PosZ;
+
+                        Vector3 relPos = new(
+                            (float)(objWorldX - camX),
+                            (float)(objWorldY - camY),
+                            (float)(objWorldZ - camZ)
+                        );
+
+                        var rot = new Quaternion(inst.RotX, inst.RotY, inst.RotZ, inst.RotW);
+                        var scale = new Vector3(inst.ScaleX, inst.ScaleY, inst.ScaleZ);
+                        Matrix4x4 model = Matrix4x4.CreateScale(scale) *
+                                          Matrix4x4.CreateFromQuaternion(rot) *
+                                          Matrix4x4.CreateTranslation(relPos);
+
+                        float maxScale = MathF.Max(inst.ScaleX, MathF.Max(inst.ScaleY, inst.ScaleZ));
+
+                        streamingGpuInstances[staticInstIdx++] = new GpuInstanceData
+                        {
+                            CurrentTransform = model,
+                            PreviousTransform = model,
+                            BoundingCenter = relPos,
+                            BoundingRadius = inst.BoundingRadius * maxScale,
+                            MeshId = cubeSlice.MeshId,
+                            MaterialId = inst.MaterialId,
+                            Flags = (uint)inst.Flags,
+                            LodBias = 0f,
+                        };
+                    }
+                }
+
+                instanceBuffer.SetStaticInstances(streamingGpuInstances.AsSpan(0, staticInstIdx));
+                instanceBuffer.SetDynamicInstances(dynInstances);
             }
 
             // 6. Immediate-Mode 3D Debug Wireframes
@@ -1254,7 +1298,7 @@ public static class Program
                     depthTarget,
                     originShift,
                     worldGrid,
-                    _ => cubeMesh,
+                    cubeMeshResolver,
                     terrainClipmap: terrainClipmap,
                     instanceBuffer: gpuDrivenEnabled ? instanceBuffer : null,
                     indirectDrawBuffer: gpuDrivenEnabled ? indirectDrawBuffer : null,
@@ -1374,6 +1418,11 @@ public static class Program
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
             AllocationTracker.AssertZeroAllocations();
+
+            if (time.FrameCount % 30 == 0)
+            {
+                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [P] HQ Shadows: {(lightEnv.HighQualityShadows ? "ON (16-tap Poisson)" : "OFF (9-tap)")} | [G] Indirect: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Grass: {(foliageEnabled ? "ON" : "OFF")}";
+            }
         }
 
         // ---------------------------------------------------------------------------------------------

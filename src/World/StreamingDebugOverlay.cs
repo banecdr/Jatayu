@@ -147,6 +147,7 @@ public sealed class StreamingDebugOverlay
                 float mapHeight = (viewRadius * 2 + 1) * (cellSizePx + cellSpacingPx);
 
                 var cursor = ImGui.GetCursorScreenPos();
+                var drawList = ImGui.GetWindowDrawList();
 
                 for (int rz = -viewRadius; rz <= viewRadius; rz++)
                 {
@@ -176,7 +177,7 @@ public sealed class StreamingDebugOverlay
                             color = _colPlayer;
                         }
 
-                        ImGui.GetWindowDrawList().AddRectFilled(
+                        drawList.AddRectFilled(
                             new float2(px, py),
                             new float2(px + cellSizePx, py + cellSizePx),
                             ImGui.ColorConvertFloat4ToU32(color)

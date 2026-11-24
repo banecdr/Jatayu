@@ -298,16 +298,19 @@ public sealed class DebugOverlay
             // -------------------------------------------------------------------------------------
             if (ImGui.CollapsingHeader("Interactive Controls Cheatsheet"u8))
             {
+                ImGui.Text("  [G]           : Toggle GPU-Driven Indirect Multi-Draw (Hi-Z Occlusion)"u8);
+                ImGui.Text("  [K]           : Toggle Procedural Wind Grass Field"u8);
+                ImGui.Text("  [J]           : Toggle GPU Particle Fountain"u8);
+                ImGui.Text("  [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson vs 9-tap)"u8);
                 ImGui.Text("  [T]           : Teleport between 0m Origin and 50,000m Cluster"u8);
+                ImGui.Text("  [C]           : Toggle 6-DOF Flycam vs Orbit camera"u8);
+                ImGui.Text("  [F3]          : Toggle 100 m/s Supersonic Drone Tour"u8);
+                ImGui.Text("  [F4]          : Toggle Terrain Clipmap LOD Ring Colors"u8);
                 ImGui.Text("  [L]           : Toggle Sun Light Orbit animation"u8);
                 ImGui.Text("  [B]           : Toggle 3D Wireframe Debug bounds & axes"u8);
-                ImGui.Text("  [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson vs 9-tap)"u8);
                 ImGui.Text("  [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)"u8);
-                ImGui.Text("  [Left/Right]  : Manual horizontal orbit (Yaw)"u8);
-                ImGui.Text("  [Up/Down]     : Manual vertical orbit (Pitch)"u8);
-                ImGui.Text("  [W / S]       : Zoom camera in / out"u8);
                 ImGui.Text("  [V]           : Toggle V-Sync live"u8);
-                ImGui.Text("  [F1]          : Toggle this Telemetry HUD"u8);
+                ImGui.Text("  [F1] / [F2]   : Toggle Telemetry HUD / Streaming Radar"u8);
                 ImGui.Text("  [ESC]         : Graceful shutdown"u8);
             }
         }

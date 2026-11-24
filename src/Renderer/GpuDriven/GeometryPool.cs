@@ -106,6 +106,11 @@ public sealed class GeometryPool : IDisposable
     public GpuBuffer IndexBuffer => _indexBuffer;
 
     /// <summary>
+    /// Gets the index format of the shared index buffer (16-bit ushort).
+    /// </summary>
+    public VkIndexType IndexType => VkIndexType.UInt16;
+
+    /// <summary>
     /// Gets the GPU storage buffer holding the MeshLodRecord table for compute culling.
     /// </summary>
     public GpuBuffer MeshLodBuffer => _meshLodBuffer;

@@ -997,7 +997,7 @@ public sealed class ForwardRenderer3D : IDisposable
             _vertexBufferArray[0] = _currentGeometryPool.VertexBuffer.Handle;
             _vertexOffsetArray[0] = new ByteSize64(0);
             cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-            cmd.BindIndexBuffer(_currentGeometryPool.IndexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt32);
+            cmd.BindIndexBuffer(_currentGeometryPool.IndexBuffer.Handle, new ByteSize64(0), _currentGeometryPool.IndexType);
 
             ByteSize64 drawOffset = _currentIndirectDrawBuffer.GetCommandOffset(0);
             ByteSize64 countOffset = _currentIndirectDrawBuffer.GetCountOffset(0);
