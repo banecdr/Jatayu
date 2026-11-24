@@ -198,7 +198,10 @@ public sealed class CascadedShadowMap : IDisposable
         float aspect,
         float nearPlane,
         float maxShadowDistance = 500.0f,
-        float lambda = 0.75f)
+        float lambda = 0.75f,
+        double camWorldX = 0.0,
+        double camWorldY = 0.0,
+        double camWorldZ = 0.0)
     {
         _cascadeSplits = CalculateSplitDistances(nearPlane, maxShadowDistance, lambda);
         Span<float> splitDistances = stackalloc float[CascadeCount + 1];
@@ -217,7 +220,10 @@ public sealed class CascadedShadowMap : IDisposable
                 aspect,
                 splitDistances[i],
                 splitDistances[i + 1],
-                _resolution
+                _resolution,
+                camWorldX,
+                camWorldY,
+                camWorldZ
             );
         }
     }

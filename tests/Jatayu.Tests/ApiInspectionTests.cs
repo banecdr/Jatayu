@@ -15,6 +15,13 @@ public class ApiInspectionTests
     }
 
     [Fact]
+    public void InspectBoxShapeSettings()
+    {
+        _output.WriteLine("=== Jolt System Information ===");
+        _output.WriteLine($"TempAllocator: {typeof(Brutal.JoltApi.TempAllocatorImplWithMallocFallback).Name}");
+    }
+
+    [Fact]
     public void InspectStbAndKtxTypes()
     {
         _output.WriteLine("=== StbImage8 Properties and Fields ===");
@@ -81,16 +88,6 @@ public class ApiInspectionTests
             _output.WriteLine($"  {f.FieldType.Name} {f.Name}");
         foreach (var p in typeof(Brutal.VulkanApi.VkImageMemoryBarrier2).GetProperties())
             _output.WriteLine($"  prop: {p.PropertyType.Name} {p.Name}");
-    }
-
-    [Fact]
-    public void InspectDescriptorIndexingTypes()
-    {
-        _output.WriteLine("=== VkDescriptorBindingFlags Enum Values ===");
-        foreach (var val in Enum.GetNames<Brutal.VulkanApi.VkDescriptorBindingFlags>())
-        {
-            _output.WriteLine($"  {val}");
-        }
     }
 }
 

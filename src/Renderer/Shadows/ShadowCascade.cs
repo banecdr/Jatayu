@@ -37,7 +37,10 @@ public struct ShadowCascade
         float aspect,
         float nearDist,
         float farDist,
-        int resolution)
+        int resolution,
+        double camWorldX = 0.0,
+        double camWorldY = 0.0,
+        double camWorldZ = 0.0)
     {
         if (resolution <= 0)
         {
@@ -48,78 +51,73 @@ public struct ShadowCascade
         NearDistance = nearDist;
         SplitDistance = farDist;
 
-        // Zero out camera position translation so cascade sub-frustums and bounding spheres
-        // are strictly calculated in camera-relative coordinate space (0, 0, 0),
-        // matching the large-world camera-relative model and world positions in shaders.
-        Matrix4x4 camRelativeView = cameraView;
-        camRelativeView.M41 = 0.0f;
-        camRelativeView.M42 = 0.0f;
-        camRelativeView.M43 = 0.0f;
-
-        if (!Matrix4x4.Invert(camRelativeView, out var invCamView))
-        {
-            invCamView = Matrix4x4.Identity;
-        }
-
-        // 1. Calculate the 8 sub-frustum corners in camera-relative space
+        // 1. Analytical bounding sphere of the frustum slice [near, far] centered at slice midpoint.
+        //    k2 = squared distance of a plane's corner from the axis, per unit of depth.
         float tanHalfFov = MathF.Tan(fovRadians * 0.5f);
-        float nearY = tanHalfFov * nearDist;
-        float nearX = nearY * aspect;
-        float farY = tanHalfFov * farDist;
-        float farX = farY * aspect;
+        float k2 = tanHalfFov * tanHalfFov * (1.0f + aspect * aspect);
 
-        Span<Vector3> viewCorners = stackalloc Vector3[8]
-        {
-            new(-nearX,  nearY, -nearDist),
-            new( nearX,  nearY, -nearDist),
-            new( nearX, -nearY, -nearDist),
-            new(-nearX, -nearY, -nearDist),
-            new(-farX,   farY,  -farDist),
-            new( farX,   farY,  -farDist),
-            new( farX,  -farY,  -farDist),
-            new(-farX,  -farY,  -farDist),
-        };
+        float centerDist = 0.5f * (farDist + nearDist);
+        float dz = 0.5f * (farDist - nearDist);
+        float radius = MathF.Sqrt(dz * dz + farDist * farDist * k2);
 
-        Vector3 center = Vector3.Zero;
-        Span<Vector3> worldCorners = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-        {
-            worldCorners[i] = Vector3.Transform(viewCorners[i], invCamView);
-            center += worldCorners[i];
-        }
-        center /= 8.0f;
+        // Camera forward in camera-relative world space. For a rotation-only view
+        // matrix (row-vector convention), view-space -Z maps to -(M13, M23, M33).
+        Vector3 camForward = new Vector3(-cameraView.M13, -cameraView.M23, -cameraView.M33);
+        Vector3 center = camForward * centerDist;
 
-        // 2. Compute bounding sphere radius
-        float radius = 0.0f;
-        for (int i = 0; i < 8; i++)
-        {
-            float dist = Vector3.Distance(worldCorners[i], center);
-            if (dist > radius) radius = dist;
-        }
-
-        // 3. Round radius to texel increment
+        // 2. Texel size from the (rotation-invariant) radius.
         float worldUnitsPerTexel = (radius * 2.0f) / resolution;
-        radius = MathF.Ceiling(radius / worldUnitsPerTexel) * worldUnitsPerTexel;
         BoundingRadius = radius;
         TexelSize = worldUnitsPerTexel;
 
-        // 4. Position virtual light camera pulled back far enough to encompass all potential shadow casters
+        // 3. Light basis (identical to what CreateLookAt would produce).
         Vector3 lightDir = Vector3.Normalize(lightDirection);
+        Vector3 up = MathF.Abs(lightDir.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
+        Vector3 zAxis = -lightDir;
+        Vector3 xAxis = Vector3.Normalize(Vector3.Cross(up, zAxis));
+        Vector3 yAxis = Vector3.Cross(zAxis, xAxis);
+
         float pullBack = MathF.Max(radius * 2.5f, 150.0f);
-        Vector3 lightPos = center - (lightDir * pullBack);
-        LightPosition = lightPos;
 
-        Vector3 up = MathF.Abs(Vector3.Dot(lightDir, Vector3.UnitY)) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
-        Matrix4x4 lightView = Matrix4x4.CreateLookAt(lightPos, center, up);
+        // 4. Snap the window center to the shadow-map texel grid in light space.
+        //    The grid must be anchored in WORLD space, but `center` is camera-relative,
+        //    so offset by the camera's world position projected onto the light axes.
+        double t = worldUnitsPerTexel;
+        float centerLx = Vector3.Dot(center, xAxis);
+        float centerLy = Vector3.Dot(center, yAxis);
+        float centerLz = Vector3.Dot(center, zAxis);
 
-        // 5. Snap the fitted frustum center, not the light-space origin, to a shadow texel.
-        Vector3 centerLight = Vector3.Transform(center, lightView);
-        float snappedX = MathF.Round(centerLight.X / worldUnitsPerTexel) * worldUnitsPerTexel;
-        float snappedY = MathF.Round(centerLight.Y / worldUnitsPerTexel) * worldUnitsPerTexel;
-        lightView.M41 += snappedX - centerLight.X;
-        lightView.M42 += snappedY - centerLight.Y;
+        bool worldAnchored = camWorldX != 0.0 || camWorldY != 0.0 || camWorldZ != 0.0;
+        double snappedX;
+        double snappedY;
 
-        // 6. Symmetrical Reverse-Z Orthographic projection with extended light depth range
+        if (worldAnchored)
+        {
+            double originX = camWorldX * xAxis.X + camWorldY * xAxis.Y + camWorldZ * xAxis.Z;
+            double originY = camWorldX * yAxis.X + camWorldY * yAxis.Y + camWorldZ * yAxis.Z;
+            snappedX = Math.Round((centerLx + originX) / t) * t - originX;
+            snappedY = Math.Round((centerLy + originY) / t) * t - originY;
+        }
+        else
+        {
+            snappedX = centerLx;
+            snappedY = centerLy;
+        }
+
+        // Window center after snapping, and the light camera position.
+        Vector3 snappedCenter = center
+            + xAxis * (float)(snappedX - centerLx)
+            + yAxis * (float)(snappedY - centerLy);
+        LightPosition = snappedCenter - (lightDir * pullBack);
+
+        // 5. Light view matrix built directly from the basis (row-vector convention).
+        Matrix4x4 lightView = new Matrix4x4(
+            xAxis.X, yAxis.X, zAxis.X, 0.0f,
+            xAxis.Y, yAxis.Y, zAxis.Y, 0.0f,
+            xAxis.Z, yAxis.Z, zAxis.Z, 0.0f,
+            -(float)snappedX, -(float)snappedY, -(centerLz + pullBack), 1.0f);
+
+        // 6. Symmetrical Reverse-Z orthographic projection
         float orthoExtent = radius * 2.0f;
         float nearZ = 0.1f;
         float farZ = pullBack + radius + 150.0f;

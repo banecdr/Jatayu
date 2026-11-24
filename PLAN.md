@@ -365,23 +365,23 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ### 2.14 Physics Engine (`src/Physics/` via BRUTAL.Jolt)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Physics/PhysicsEngine.cs` | **PLANNED** | Master Jolt physics wrapper. Manages broadphase layers, gravity, origin rebasing, and fixed-timestep ticking. (Sprint 8). |
-| `src/Physics/PhysicsBody.cs` | **PLANNED** | 3D rigid body wrapper (Static, Kinematic, Dynamic; Velocity, Restitution, Friction, Mass). (Sprint 8). |
-| `src/Physics/Colliders/Collider.cs` | **PLANNED** | Base class for collision shapes. (Sprint 8). |
-| `src/Physics/Colliders/BoxCollider.cs` | **PLANNED** | Box collision shape defined by half-extents. (Sprint 8). |
-| `src/Physics/Colliders/SphereCollider.cs` | **PLANNED** | Sphere collision shape defined by radius. (Sprint 8). |
-| `src/Physics/Colliders/CapsuleCollider.cs` | **PLANNED** | Capsule collision shape for characters. (Sprint 8). |
-| `src/Physics/Colliders/MeshCollider.cs` | **PLANNED** | Static mesh / convex hull collider streamed per world cell. (Sprint 8). |
-| `src/Physics/CharacterController.cs` | **PLANNED** | Kinematic virtual character controller for player movement, stairs, slope limits, and jumping. (Sprint 8). |
-| `src/Physics/RaycastHit.cs` | **PLANNED** | Raycast query result struct containing Hit, Position, Normal, Distance, and Body ID. (Sprint 8). |
+| `src/Physics/PhysicsEngine.cs` | **DONE** | Master Jolt physics wrapper. Manages broadphase layers, gravity, origin rebasing, and fixed-timestep ticking. (Sprint 8). |
+| `src/Physics/PhysicsBody.cs` | **DONE** | 3D rigid body wrapper (Static, Kinematic, Dynamic; Velocity, Restitution, Friction, Mass). (Sprint 8). |
+| `src/Physics/Colliders/Collider.cs` | **DONE** | Base class for collision shapes. (Sprint 8). |
+| `src/Physics/Colliders/BoxCollider.cs` | **DONE** | Box collision shape defined by half-extents. (Sprint 8). |
+| `src/Physics/Colliders/SphereCollider.cs` | **DONE** | Sphere collision shape defined by radius. (Sprint 8). |
+| `src/Physics/Colliders/CapsuleCollider.cs` | **DONE** | Capsule collision shape for characters. (Sprint 8). |
+| `src/Physics/Colliders/MeshCollider.cs` | **DONE** | Static mesh / convex hull collider streamed per world cell. (Sprint 8). |
+| `src/Physics/CharacterController.cs` | **DONE** | Kinematic virtual character controller for player movement, stairs, slope limits, and jumping. (Sprint 8). |
+| `src/Physics/RaycastHit.cs` | **DONE** | Raycast query result struct containing Hit, Position, Normal, Distance, and Body ID. (Sprint 8). |
 
 ### 2.15 Audio Engine (`src/Audio/` via BRUTAL.OpenAl)
 | File Path | Status | Plain-English Role & Key Responsibilities |
 | :--- | :---: | :--- |
-| `src/Audio/AudioEngine.cs` | **PLANNED** | OpenAL context, device management, master gain, and 3D spatial coordinate updates. (Sprint 8). |
-| `src/Audio/SoundClip.cs` | **PLANNED** | Shared in-memory decoded audio buffer (WAV/OGG) reference-counted across emitters. (Sprint 8). |
-| `src/Audio/AudioSource.cs` | **PLANNED** | 3D positional audio emitter with attenuation curves, pitch, volume, and looping. (Sprint 8). |
-| `src/Audio/AudioListener.cs` | **PLANNED** | Player audio receptor syncing world position and forward/up vectors with active camera. (Sprint 8). |
+| `src/Audio/AudioEngine.cs` | **DONE** | OpenAL context, device management, master gain, and 3D spatial coordinate updates. (Sprint 8). |
+| `src/Audio/SoundClip.cs` | **DONE** | Shared in-memory decoded audio buffer (WAV/OGG) reference-counted across emitters. (Sprint 8). |
+| `src/Audio/AudioSource.cs` | **DONE** | 3D positional audio emitter with attenuation curves, pitch, volume, and looping. (Sprint 8). |
+| `src/Audio/AudioListener.cs` | **DONE** | Player audio receptor syncing world position and forward/up vectors with active camera. (Sprint 8). |
 
 ### 2.16 AI, Navigation & Animation (`src/AI/`, `src/Animation/`, `src/UI/`)
 | File Path | Status | Plain-English Role & Key Responsibilities |
@@ -475,8 +475,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 ## 3. Progress Tracking Dashboard
 
 - **Total Planned Files:** 215
-- **Total Completed Files:** 156
-- **Current Completion:** **72.6% (Sprint 7 COMPLETE & ACCEPTED: 755.3 FPS ref / 0.25 ms GPU, 2.87 ms 200k stress on RTX 5060 Ti)**
+- **Total Completed Files:** 169
+- **Current Completion:** **78.6% (Sprint 8 COMPLETE & ACCEPTED: Jolt Physics, Character Virtual, Spatial Audio & Zero-Alloc Traversal)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -493,8 +493,8 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 | **3D Graphics, Lighting & Environment** | 25 / 28 | **COMPLETE (CSM, ClusteredLightCulling, IBL, Foliage, Particles, WBOIT, ForwardRenderer3D, Skybox)** |
 | **Post-Processing Pipeline** | 0 / 6 | Planned (Sprint 9) |
 | **Scene & ECS Architecture** | 7 / 7 | **COMPLETE (Scene, Entity, Transform, MeshRenderer, Camera, Light, RigidBody)** |
-| **Physics (BRUTAL.Jolt)** | 0 / 9 | Planned (Sprint 8) |
-| **Audio (BRUTAL.OpenAL)** | 0 / 4 | Planned (Sprint 8) |
+| **Physics (BRUTAL.Jolt)** | 9 / 9 | **COMPLETE (PhysicsEngine, PhysicsBody, Colliders, CharacterController, RaycastHit)** |
+| **Audio (BRUTAL.OpenAL)** | 4 / 4 | **COMPLETE (AudioEngine, SoundClip, AudioSource, AudioListener)** |
 | **AI, Navigation & Animation** | 0 / 8 | Planned (Sprint 10) |
 | **Diagnostics & Debug UI** | 2 / 2 | **COMPLETE (ImGuiVulkanBackend, DebugOverlay)** |
 | **Optional Standalone Editor Suite** | 0 / 13 | Planned (Sprint 11) |
@@ -752,7 +752,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 8: Physics, Character & Spatial Audio [NEXT]                               │
+│ SPRINT 8: Physics, Character & Spatial Audio [COMPLETE]                          │
 │  - Jolt PhysicsEngine integration with streaming per-cell colliders              │
 │  - Terrain heightfield physics shapes generated per cell                         │
 │  - Kinematic CharacterController (walk, sprint, jump, stairs, slopes)            │
@@ -766,7 +766,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 9: Atmosphere, Water & Post-Processing Pipeline                           │
+│ SPRINT 9: Atmosphere, Water & Post-Processing Pipeline [NEXT]                    │
 │  - Atmosphere (Rayleigh/Mie), TimeOfDay sun/moon orbit, aerial fog               │
 │  - WaterRenderer (planar Gerstner waves, Fresnel, absorption color gradient)     │
 │  - PostProcessChain (HDR R16G16B16A16_SFLOAT target)                             │
@@ -871,4 +871,6 @@ Use [AEspinosaDev/Vulkan-Engine](https://github.com/AEspinosaDev/Vulkan-Engine) 
 | **CL-56** | Sprint 8 | Added Vulkan-Engine as a conceptual reference for an integration scene using existing Jatayu lighting with physics and spatial audio; kept new lighting features and external code/assets out of Sprint 8. |
 | **CL-57** | Sprint 7b | Cascaded shadow stability, texel snapping, quality presets, and cascade-dependent filter radius: Upgraded CSM texel snapping to round the sub-frustum bounding center in light space, eliminating sub-pixel crawl. Added ShadowQualityPreset (Standard, High, Ultra) and runtime diagnostics ([P] filter toggle, [G] cascade/depth/bias debug modes). Calibrated slope-scaled dynamic bias across terrain.frag and pbr.frag (capped at 0.002). Scaled 16-tap Poisson filter radius inversely with sqrt(cascadeScale) to prevent distant over-blurring. 148/148 unit tests passing and all 9 hardware RenderSmoke checks passing cleanly. |
 | **CL-58** | Sprint 8 | Added Zero-Allocation Streaming Queue Pooling task to the end of Sprint 8 scope: eliminate transient main-thread GC allocations (e.g. PrioritizedLoadRequest queue items, dictionary queries, string interpolations) during high-speed/supersonic movement, ensuring AllocationTracker.ZeroAllocationPercent maintains a solid 100% steady state. |
+| **CL-59** | Sprint 8 | Completed and Accepted Sprint 8: Physics, Character & Spatial Audio. Integrated Jolt 3D physics subsystem (`Ahwoo.BRUTAL.Jolt`): `PhysicsEngine.cs` (single-precision D9, broadphase and object layer filter tables, `TempAllocatorImplWithMallocFallback` 16MB heap protector, multi-threaded `JobSystemThreadPool`, and floating-origin translation), `PhysicsBody.cs` (static/kinematic/dynamic rigid bodies, restitution, friction, linear/angular velocity), `CharacterController.cs` (Jolt CharacterVirtual kinematic player controller with walk/sprint velocities, jump impulses, gravity, stair stepping, and origin shifts), colliders (`Collider.cs`, `BoxCollider.cs`, `SphereCollider.cs`, `CapsuleCollider.cs`, `MeshCollider.cs`), and `RaycastHit.cs` closest hit queries. Integrated OpenAL 3D spatial audio (`Ahwoo.BRUTAL.OpenAl`): `AudioEngine.cs` (device/context management, headless silent fallback, 16-emitter one-shot pool, procedural sound generation for sine wave, footsteps, impacts, and jump sounds), `SoundClip.cs`, `AudioSource.cs` (3D position, distance rolloff, gain, pitch, looping), and `AudioListener.cs` (position, forward, up orientation sync). Integrated physics and spatial audio into streaming world: `WorldCell.cs` resident colliders/audio points, `TerrainTile.cs` elevation heightfield mesh collider, `StreamingManager.cs` background worker pooling (`ConcurrentQueue<CellLoadWorker>`, `IThreadPoolWorkItem` zero-alloc task dispatch, candidate `TryGetCell` filtering), and `RigidBodyComponent.cs` runtime wiring. All 168 unit tests passing across entire solution (`tests/Jatayu.Tests`) and all 10 RenderSmoke checks passing with green status (`tests/Jatayu.RenderSmoke`). Updated progress tracking dashboard to 169 / 215 completed files (78.6%). Sprint 8 is formally ACCEPTED. |
+
 

@@ -24,6 +24,7 @@ public sealed class WorldGrid
     private readonly Dictionary<CellCoord, WorldCell> _cells;
     private readonly List<WorldCell> _activeCells;
     private WorldCell[] _activeCellsSnapshot;
+    private int _activeSnapshotCount;
     private readonly WorldConfig _config;
     private readonly object _sync = new();
 
@@ -38,15 +39,15 @@ public sealed class WorldGrid
     public int TotalCellCount { get { lock (_sync) { return _cells.Count; } } }
 
     /// <summary>
-    /// Gets a read-only list of all currently active cells.
+    /// Gets a read-only list of all currently active cells without allocating a new array.
     /// </summary>
-    public IReadOnlyList<WorldCell> ActiveCells
+    public ActiveCellsSnapshotView ActiveCells
     {
         get
         {
             lock (_sync)
             {
-                return _activeCellsSnapshot;
+                return new ActiveCellsSnapshotView(_activeCellsSnapshot, _activeSnapshotCount);
             }
         }
     }
@@ -56,7 +57,8 @@ public sealed class WorldGrid
         _config = config ?? new WorldConfig();
         _cells = new Dictionary<CellCoord, WorldCell>(initialCapacity);
         _activeCells = new List<WorldCell>(initialCapacity);
-        _activeCellsSnapshot = Array.Empty<WorldCell>();
+        _activeCellsSnapshot = new WorldCell[Math.Max(initialCapacity, 512)];
+        _activeSnapshotCount = 0;
     }
 
     /// <summary>
@@ -109,7 +111,7 @@ public sealed class WorldGrid
             if (!_activeCells.Contains(cell))
             {
                 _activeCells.Add(cell);
-                _activeCellsSnapshot = _activeCells.ToArray();
+                UpdateActiveSnapshot();
             }
         }
     }
@@ -124,9 +126,21 @@ public sealed class WorldGrid
             cell.Unload();
             if (_activeCells.Remove(cell))
             {
-                _activeCellsSnapshot = _activeCells.ToArray();
+                UpdateActiveSnapshot();
             }
         }
+    }
+
+    private void UpdateActiveSnapshot()
+    {
+        int count = _activeCells.Count;
+        if (_activeCellsSnapshot.Length < count)
+        {
+            int newCap = Math.Max(count * 2, 512);
+            _activeCellsSnapshot = new WorldCell[newCap];
+        }
+        _activeCells.CopyTo(_activeCellsSnapshot, 0);
+        _activeSnapshotCount = count;
     }
 
     /// <summary>
@@ -141,28 +155,38 @@ public sealed class WorldGrid
     {
         destination.Clear();
 
-        float cellSize = _config.CellSize;
-        int minCx = (int)Math.Floor((center.X - radiusMeters) / cellSize);
-        int maxCx = (int)Math.Floor((center.X + radiusMeters) / cellSize);
-        int minCz = (int)Math.Floor((center.Z - radiusMeters) / cellSize);
-        int maxCz = (int)Math.Floor((center.Z + radiusMeters) / cellSize);
+        double cellSize = _config.CellSize;
+        double r = radiusMeters;
+        double radiusSq = r * r;
+        double px = center.X;
+        double pz = center.Z;
 
-        double radiusSq = radiusMeters * radiusMeters;
+        // One-time growth to roughly the circle's cell count (pi*r^2 / cell^2 + rim).
+        int estimate = (int)(Math.PI * radiusSq / (cellSize * cellSize)) + 4 * (int)(r / cellSize) + 8;
+        if (destination.Capacity < estimate)
+            destination.Capacity = estimate;
+
+        // Only rows whose center line is within R of the player can contain cells:
+        //   |(cz + 0.5) * cellSize - pz| <= R
+        int minCz = (int)Math.Ceiling((pz - r) / cellSize - 0.5);
+        int maxCz = (int)Math.Floor((pz + r) / cellSize - 0.5);
 
         for (int cz = minCz; cz <= maxCz; cz++)
         {
-            for (int cx = minCx; cx <= maxCx; cx++)
-            {
-                var coord = new CellCoord(cx, cz);
-                coord.GetWorldCenter(cellSize, out double cellCenterX, out double cellCenterZ);
+            double dz = (cz + 0.5) * cellSize - pz;
+            double rem = radiusSq - dz * dz;
+            if (rem < 0.0)
+                continue;
 
-                double dx = cellCenterX - center.X;
-                double dz = cellCenterZ - center.Z;
-                if ((dx * dx + dz * dz) <= radiusSq)
-                {
-                    destination.Add(coord);
-                }
-            }
+            // Exact span of cell centers on this row inside the circle:
+            //   |(cx + 0.5) * cellSize - px| <= sqrt(R^2 - dz^2)
+            double halfSpan = Math.Sqrt(rem);
+            int minCx = (int)Math.Ceiling((px - halfSpan) / cellSize - 0.5);
+            int maxCx = (int)Math.Floor((px + halfSpan) / cellSize - 0.5);
+
+            // Tight emit loop: no distance test, no rejected candidates.
+            for (int cx = minCx; cx <= maxCx; cx++)
+                destination.Add(new CellCoord(cx, cz));
         }
     }
 
@@ -222,5 +246,63 @@ public sealed class WorldGrid
             _activeCells.Clear();
             _activeCellsSnapshot = Array.Empty<WorldCell>();
         }
+    }
+}
+
+/// <summary>
+/// High-performance zero-allocation snapshot view of active cells with struct enumerator.
+/// </summary>
+public readonly struct ActiveCellsSnapshotView : IReadOnlyList<WorldCell>
+{
+    private readonly WorldCell[] _array;
+    private readonly int _count;
+
+    public ActiveCellsSnapshotView(WorldCell[] array, int count)
+    {
+        _array = array;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public WorldCell this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            return _array[index];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(_array, _count);
+
+    IEnumerator<WorldCell> IEnumerable<WorldCell>.GetEnumerator() => GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public struct Enumerator : IEnumerator<WorldCell>
+    {
+        private readonly WorldCell[] _array;
+        private readonly int _count;
+        private int _index;
+
+        internal Enumerator(WorldCell[] array, int count)
+        {
+            _array = array;
+            _count = count;
+            _index = -1;
+        }
+
+        public WorldCell Current => _array[_index];
+        object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            _index++;
+            return _index < _count;
+        }
+
+        public void Reset() => _index = -1;
+        public void Dispose() { }
     }
 }

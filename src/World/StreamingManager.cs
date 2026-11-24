@@ -17,6 +17,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
+
 using Jatayu.AssetFormats;
 using Jatayu.AssetFormats.World;
 using Jatayu.Assets;
@@ -58,7 +59,7 @@ public sealed class StreamingManager : IDisposable
     // Concurrency and state tracking
     private readonly HashSet<CellCoord> _inFlightLoads = new();
     private readonly ConcurrentQueue<DecodedCellPayload> _readyToFinalize = new();
-    private readonly List<PrioritizedLoadRequest> _pendingRequests = new(256);
+    private readonly PrioritizedLoadRequest[] _topK;
 
     // Reusable query buffers (zero heap allocation in update loop)
     private readonly List<CellCoord> _candidateCoords = new(256);
@@ -67,6 +68,14 @@ public sealed class StreamingManager : IDisposable
     private readonly object _stateLock = new();
     private readonly Core.Events.EventHandler<OriginShiftedEvent> _originShiftHandler;
     private bool _disposed;
+
+    // Subsystems
+    public Physics.PhysicsEngine? Physics { get; set; }
+    public Audio.AudioEngine? Audio { get; set; }
+    private WorldPosition _lastPlayerPos;
+
+    // Worker pool for zero GC allocation background jobs
+    private readonly ConcurrentQueue<CellLoadWorker> _workerPool = new();
 
     // Telemetry & Diagnostics
     public int InFlightCount => _inFlightLoads.Count;
@@ -91,8 +100,15 @@ public sealed class StreamingManager : IDisposable
         _packReader = packReader;
         _jobSystem = jobSystem;
         _vramBudget = vramBudget;
+        _topK = new PrioritizedLoadRequest[Math.Max(1, _config.MaxConcurrentLoadingJobs)];
 
         EffectiveLoadRadius = _config.LoadRadiusRingA;
+
+        // Pre-allocate worker pool (64 reusable workers with cached delegates)
+        for (int i = 0; i < 64; i++)
+        {
+            _workerPool.Enqueue(new CellLoadWorker(this));
+        }
 
         // Subscribe to floating-origin rebase events
         _originShiftHandler = OnOriginShifted;
@@ -102,6 +118,7 @@ public sealed class StreamingManager : IDisposable
     private void OnOriginShifted(in OriginShiftedEvent e)
     {
         _grid.ShiftOrigin(e.DeltaX, e.DeltaY, e.DeltaZ);
+        _lastPlayerPos = new WorldPosition(_lastPlayerPos.X + e.DeltaX, _lastPlayerPos.Y + e.DeltaY, _lastPlayerPos.Z + e.DeltaZ);
     }
 
     /// <summary>
@@ -111,6 +128,7 @@ public sealed class StreamingManager : IDisposable
     public void Update(double deltaTime, in WorldPosition playerPos, in Vector3 playerVelocity)
     {
         long startTicks = Stopwatch.GetTimestamp();
+        _lastPlayerPos = playerPos;
 
         // 1. Compute velocity and effective prefetch radius (D19, D23)
         float speed = MathF.Sqrt((playerVelocity.X * playerVelocity.X) + (playerVelocity.Z * playerVelocity.Z));
@@ -142,41 +160,71 @@ public sealed class StreamingManager : IDisposable
         // 3. Populate and prioritize load requests
         lock (_stateLock)
         {
-            _pendingRequests.Clear();
+            int availableSlots = Math.Min(
+                _config.MaxConcurrentLoadingJobs - _inFlightLoads.Count,
+                _topK.Length);
 
-            for (int i = 0; i < _candidateCoords.Count; i++)
+            // Early-out: if every loading slot is busy, nothing can be dispatched this
+            // frame, so skip the candidate scan entirely.
+            if (availableSlots > 0)
             {
-                var coord = _candidateCoords[i];
-                var cell = _grid.GetOrCreateCell(coord);
+                var top = _topK;              // sorted ascending by Priority (best first)
+                int count = 0;
 
-                if (cell.State == CellState.Unloaded && !_inFlightLoads.Contains(coord))
+                // Hoist loop invariants
+                float cellSize = _config.CellSize;
+                double px = playerPos.X;
+                double pz = playerPos.Z;
+                float vx = velDir.X;
+                float vz = velDir.Y;
+
+                for (int i = 0; i < _candidateCoords.Count; i++)
                 {
-                    coord.GetWorldCenter(_config.CellSize, out double cx, out double cz);
-                    float dx = (float)(cx - playerPos.X);
-                    float dz = (float)(cz - playerPos.Z);
-                    float dist = MathF.Sqrt(dx * dx + dz * dz);
+                    var coord = _candidateCoords[i];
 
-                    // Directional dot product: cells along travel direction get a substantial priority discount
-                    float forwardProjection = (velDir.X * dx) + (velDir.Y * dz);
-                    float priority = dist - (forwardProjection * 1.5f);
+                    // Priority is pure math, so compute it before any hash lookups.
+                    // Subtract in double first, then narrow, to keep precision far
+                    // from the world origin (same as the original).
+                    coord.GetWorldCenter(cellSize, out double cx, out double cz);
+                    float dx = (float)(cx - px);
+                    float dz = (float)(cz - pz);
 
-                    _pendingRequests.Add(new PrioritizedLoadRequest(coord, priority));
+                    // Directional bias: cells along the travel direction get a discount.
+                    float priority = MathF.Sqrt(dx * dx + dz * dz)
+                                   - 1.5f * (vx * dx + vz * dz);
+
+                    // Cheap reject: can't beat the worst of the K we already hold.
+                    if (count == availableSlots && priority >= top[count - 1].Priority)
+                        continue;
+
+                    // Only candidates that would make the cut pay for the lookups.
+                    if (_inFlightLoads.Contains(coord))
+                        continue;
+
+                    if (_grid.TryGetCell(coord, out var existing) && existing.State != CellState.Unloaded)
+                        continue;
+
+                    // Insert into the small sorted array. When full, the slot at
+                    // count-1 (the current worst) is overwritten/dropped.
+                    int pos = count < availableSlots ? count++ : count - 1;
+                    while (pos > 0 && top[pos - 1].Priority > priority)
+                    {
+                        top[pos] = top[pos - 1];
+                        pos--;
+                    }
+                    top[pos] = new PrioritizedLoadRequest(coord, priority);
                 }
-            }
 
-            _pendingRequests.Sort();
+                // 4. Dispatch background loading jobs (best priority first).
+                for (int i = 0; i < count; i++)
+                {
+                    var next = top[i];
+                    var cell = _grid.GetOrCreateCell(next.Coord);
+                    cell.State = CellState.LoadingIO;
+                    _inFlightLoads.Add(next.Coord);
 
-            // 4. Dispatch background loading jobs
-            while (_pendingRequests.Count > 0 && _inFlightLoads.Count < _config.MaxConcurrentLoadingJobs)
-            {
-                var next = _pendingRequests[0];
-                _pendingRequests.RemoveAt(0);
-
-                var cell = _grid.GetOrCreateCell(next.Coord);
-                cell.State = CellState.LoadingIO;
-                _inFlightLoads.Add(next.Coord);
-
-                DispatchLoadJob(cell);
+                    DispatchLoadJob(cell);
+                }
             }
         }
 
@@ -192,45 +240,28 @@ public sealed class StreamingManager : IDisposable
 
     private void DispatchLoadJob(WorldCell cell)
     {
-        var coord = cell.Coord;
-        var reader = _packReader;
-
-        void JobAction()
+        if (!_workerPool.TryDequeue(out var worker))
         {
-            if (Volatile.Read(ref _disposed))
-                return;
-
-            DecodedCellPayload? payload = null;
-
-            if (reader != null)
-            {
-                CellLoader.TryLoadCellFromPack(reader, coord, out payload);
-            }
-
-            if (payload == null)
-            {
-                // Fallback: empty cell header
-                var header = CookedCellHeader.Create(
-                    coord,
-                    coord.ToAssetGuid(),
-                    0, 0, 0,
-                    CellFlags.None,
-                    0, 0, 0,
-                    WorldConstants.CellSize, 10, WorldConstants.CellSize
-                );
-                payload = new DecodedCellPayload(coord, in header, Array.Empty<CookedStaticInstance>(), Array.Empty<CookedColliderRecord>(), Array.Empty<CookedAudioPointRecord>());
-            }
-
-            _readyToFinalize.Enqueue(payload);
+            worker = new CellLoadWorker(this);
         }
+
+        worker.TargetCell = cell;
 
         if (_jobSystem != null)
         {
-            _jobSystem.Schedule(JobAction, JobPriority.Normal);
+            _jobSystem.Schedule(worker.ExecuteAction, JobPriority.Normal);
         }
         else
         {
-            System.Threading.ThreadPool.QueueUserWorkItem(_ => JobAction());
+            System.Threading.ThreadPool.UnsafeQueueUserWorkItem(worker, preferLocal: false);
+        }
+    }
+
+    private void ReturnWorker(CellLoadWorker worker)
+    {
+        if (!Volatile.Read(ref _disposed))
+        {
+            _workerPool.Enqueue(worker);
         }
     }
 
@@ -250,6 +281,15 @@ public sealed class StreamingManager : IDisposable
             {
                 CellLoader.ApplyPayloadToCell(cell, payload);
                 _grid.MarkActive(cell);
+
+                if (Physics != null)
+                {
+                    cell.SpawnPhysicsBodies(Physics, _lastPlayerPos);
+                }
+                if (Audio != null)
+                {
+                    cell.SpawnAudioEmitters(Audio, _lastPlayerPos);
+                }
             }
 
             // Enforce time budgeting
@@ -279,6 +319,8 @@ public sealed class StreamingManager : IDisposable
         for (int i = 0; i < _cellsToUnload.Count; i++)
         {
             var cell = _cellsToUnload[i];
+            cell.DespawnPhysicsBodies(Physics);
+            cell.DespawnAudioEmitters(Audio);
             _grid.MarkUnloaded(cell);
         }
     }
@@ -300,6 +342,15 @@ public sealed class StreamingManager : IDisposable
         {
             CellLoader.ApplyPayloadToCell(cell, payload);
             _grid.MarkActive(cell);
+
+            if (Physics != null)
+            {
+                cell.SpawnPhysicsBodies(Physics, _lastPlayerPos);
+            }
+            if (Audio != null)
+            {
+                cell.SpawnAudioEmitters(Audio, _lastPlayerPos);
+            }
             return true;
         }
 
@@ -314,9 +365,69 @@ public sealed class StreamingManager : IDisposable
             _disposed = true;
 
             EventBus.Unsubscribe<OriginShiftedEvent>(_originShiftHandler);
-            _pendingRequests.Clear();
+            Array.Clear(_topK, 0, _topK.Length);
             _inFlightLoads.Clear();
             while (_readyToFinalize.TryDequeue(out _)) { }
+            while (_workerPool.TryDequeue(out _)) { }
+
+            var active = _grid.ActiveCells;
+            for (int i = 0; i < active.Count; i++)
+            {
+                active[i].DespawnPhysicsBodies(Physics);
+                active[i].DespawnAudioEmitters(Audio);
+            }
+        }
+    }
+
+    private sealed class CellLoadWorker : System.Threading.IThreadPoolWorkItem
+    {
+        private readonly StreamingManager _manager;
+        public WorldCell? TargetCell;
+        public readonly Action ExecuteAction;
+
+        public CellLoadWorker(StreamingManager manager)
+        {
+            _manager = manager;
+            ExecuteAction = Execute;
+        }
+
+        void System.Threading.IThreadPoolWorkItem.Execute() => Execute();
+
+        public void Execute()
+        {
+            var cell = TargetCell;
+            TargetCell = null;
+            if (cell == null || Volatile.Read(ref _manager._disposed))
+            {
+                _manager.ReturnWorker(this);
+                return;
+            }
+
+            var coord = cell.Coord;
+            var reader = _manager._packReader;
+            DecodedCellPayload? payload = null;
+
+            if (reader != null)
+            {
+                CellLoader.TryLoadCellFromPack(reader, coord, out payload);
+            }
+
+            if (payload == null)
+            {
+                var header = CookedCellHeader.Create(
+                    coord,
+                    coord.ToAssetGuid(),
+                    0, 0, 0,
+                    CellFlags.None,
+                    0, 0, 0,
+                    WorldConstants.CellSize, 10, WorldConstants.CellSize
+                );
+                payload = new DecodedCellPayload(coord, in header, Array.Empty<CookedStaticInstance>(), Array.Empty<CookedColliderRecord>(), Array.Empty<CookedAudioPointRecord>());
+            }
+
+            _manager._readyToFinalize.Enqueue(payload);
+            _manager.ReturnWorker(this);
         }
     }
 }
+

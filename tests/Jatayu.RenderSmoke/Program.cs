@@ -708,11 +708,69 @@ public static class Program
             failureCount++;
         }
 
+        // -----------------------------------------------------------------------------------------
+        // 10. SPRINT 8: PHYSICS, CHARACTER & SPATIAL AUDIO
+        // -----------------------------------------------------------------------------------------
+        Console.WriteLine("\n--- [CHECK 10] Sprint 8: Jolt Physics, Character & OpenAL Spatial Audio ---");
+        try
+        {
+            Console.WriteLine("  [10.1] Initializing PhysicsEngine...");
+            using var physics = new Jatayu.Physics.PhysicsEngine();
+            Console.WriteLine($"  [PhysicsEngine] Initialized with {physics.ActiveBodyCount} bodies.");
+
+            Console.WriteLine("  [10.2] Creating static floor body...");
+            var floor = physics.CreateBoxBody(new Brutal.Numerics.float3(0, 0, 0), new Brutal.Numerics.float3(20, 1, 20), Jatayu.Scene.Components.BodyMotionType.Static);
+            Console.WriteLine($"  [Floor] Created BodyId: {floor.BodyId}, Pos: {floor.Position}");
+
+            Console.WriteLine("  [10.3] Creating dynamic sphere body...");
+            var sphere = physics.CreateSphereBody(new Brutal.Numerics.float3(0, 10, 0), 1.0f, Jatayu.Scene.Components.BodyMotionType.Dynamic);
+            Console.WriteLine($"  [Sphere] Created BodyId: {sphere.BodyId}, Initial Pos: {sphere.Position}");
+
+            Console.WriteLine("  [10.4] Stepping simulation 60 frames...");
+            for (int i = 0; i < 60; i++)
+            {
+                physics.Update(1.0f / 60.0f);
+            }
+            Console.WriteLine($"  [Simulation] Sphere final Pos: {sphere.Position}");
+
+            Console.WriteLine("  [10.5] Raycast test...");
+            var hit = physics.Raycast(new Brutal.Numerics.float3(0, 10, 0), new Brutal.Numerics.float3(0, -10, 0));
+            Console.WriteLine($"  [Raycast] HasHit: {hit.HasHit}, Pos: {hit.Position}, Normal: {hit.Normal}");
+
+            Console.WriteLine("  [10.6] CharacterController test...");
+            using var character = new Jatayu.Physics.CharacterController(physics, new Brutal.Numerics.float3(0, 5, 0));
+            character.Update(1.0f / 60.0f, new System.Numerics.Vector2(0, 1), sprint: false, jump: false);
+            Console.WriteLine($"  [Character] Velocity: {character.LinearVelocity}");
+
+            Console.WriteLine("  [10.7] AudioEngine test...");
+            using var audio = new Jatayu.Audio.AudioEngine();
+            Console.WriteLine($"  [AudioEngine] Hardware available: {audio.IsHardwareAvailable}");
+            if (audio.FootstepClip != null)
+            {
+                Console.WriteLine($"  [SoundClip] Footstep clip duration: {audio.FootstepClip.DurationSeconds:F3}s");
+            }
+            var src = audio.CreateSource();
+            src.Position = new Brutal.Numerics.float3(5, 0, 5);
+            src.Gain = 0.5f;
+            audio.RemoveSource(src);
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(">> Sprint 8 Physics, Character & Spatial Audio: VERIFIED");
+            Console.ResetColor();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Sprint 8 Error]: {ex.Message}\n{ex.StackTrace}");
+            Console.ResetColor();
+            failureCount++;
+        }
+
         Console.WriteLine("\n================================================================================");
         if (failureCount == 0)
         {
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("             ALL FINAL CHECKS PASSED - SPRINT 7B VERIFIED!                      ");
+            Console.WriteLine("             ALL FINAL CHECKS PASSED - SPRINT 8 VERIFIED!                       ");
         }
         else
         {

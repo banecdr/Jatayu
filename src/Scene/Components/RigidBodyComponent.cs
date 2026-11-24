@@ -52,6 +52,11 @@ public struct RigidBodyComponent
     public bool IsSensor;
 
     /// <summary>
+    /// Managed runtime wrapper for Jolt physics body.
+    /// </summary>
+    public Physics.PhysicsBody? RuntimeBody;
+
+    /// <summary>
     /// Constructs a rigid body component.
     /// </summary>
     public RigidBodyComponent(BodyMotionType motionType = BodyMotionType.Dynamic, float mass = 1.0f)
@@ -62,5 +67,6 @@ public struct RigidBodyComponent
         Friction = 0.5f;
         Restitution = 0.0f;
         IsSensor = false;
+        RuntimeBody = null;
     }
 }

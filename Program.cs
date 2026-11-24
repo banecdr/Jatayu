@@ -24,17 +24,20 @@
  *    10. Zero Steady-State Allocations: Verified 0 bytes GC heap allocation per frame via AllocationTracker.
  *
  * INTERACTIVE CONTROLS:
+ *   [J]          : Launch High-Velocity Dynamic Cannonball into the Physics Pyramid at Origin
+ *   [K]          : Rebuild / Reset Physics Pyramid & Bouncing Spheres at Origin
+ *   [X]          : Toggle Character Controller Walk Mode (WASD move, Shift sprint, Space jump)
  *   [T]          : Teleport between World Origin (0m) and 50,000m Monolith Cluster
  *   [L]          : Toggle Sun Light Orbit animation (animates soft PCF directional shadows)
- *   [B]          : Toggle 3D Wireframe Debug bounds & coordinate axes (DebugRenderer)
- *   [Space]      : Toggle Auto-Orbit camera rotation On / Off
+ *   [B]          : Toggle 3D Wireframe Debug bounds, physics colliders & coordinate axes
+ *   [Space]      : Jump (in Character Mode) / Toggle Auto-Orbit camera (in Orbit Mode)
  *   [P]          : Toggle shadow PCF quality (3x3 vs 16-tap Poisson)
  *   [G]          : Cycle shadow debug view (cascades, depth, bias, off)
  *   [F]          : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)
  *   [-] / [=]    : Fine-tune Panini distance 'd' (-0.1 / +0.1)
  *   [Left/Right] : Orbit camera horizontally (Yaw)
  *   [Up/Down]    : Orbit camera vertically (Pitch)
- *   [W / S]      : Zoom camera in / out (Distance)
+ *   [W / S]      : Move character (in Character Mode) / Zoom camera in / out (Distance)
  *   [V]          : Toggle V-Sync Live (Observe FPS change in Title Bar / HUD)
  *   [F1]         : Toggle Diagnostics HUD overlay (Telemetry, Allocations, Pass Timers, VRAM)
  *   [ESC]        : Clean shutdown
@@ -88,6 +91,10 @@ using Jatayu.Assets;
 using Jatayu.Assets.Textures;
 using Jatayu.Terrain;
 using Jatayu.World;
+using Jatayu.Physics;
+using Jatayu.Physics.Colliders;
+using Jatayu.Audio;
+using EngineInput = Jatayu.Core.Input.Input;
 
 namespace Jatayu;
 
@@ -96,6 +103,44 @@ namespace Jatayu;
 /// </summary>
 public static class Program
 {
+    private struct PhysicsDemoEntity
+    {
+        public PhysicsBody Body;
+        public Jatayu.Scene.Entity SceneEntity;
+        public uint MeshId;
+        public uint MaterialId;
+        public Vector3 Scale;
+        public float BoundingRadius;
+        public Matrix4x4 PrevTransform;
+    }
+
+    private const int SyntheticCols = 512;
+    private const double GoldenAngle = 2.399963229728653;
+    private static readonly float[] s_colSin = InitializeColSin();
+    private static readonly float[] s_colCos = InitializeColCos();
+    private static readonly float[] s_colDepth = InitializeColDepth();
+
+    private static float[] InitializeColSin()
+    {
+        var arr = new float[SyntheticCols];
+        for (int i = 0; i < SyntheticCols; i++) arr[i] = MathF.Sin((float)(i * GoldenAngle));
+        return arr;
+    }
+
+    private static float[] InitializeColCos()
+    {
+        var arr = new float[SyntheticCols];
+        for (int i = 0; i < SyntheticCols; i++) arr[i] = MathF.Cos((float)(i * GoldenAngle));
+        return arr;
+    }
+
+    private static float[] InitializeColDepth()
+    {
+        var arr = new float[SyntheticCols];
+        for (int i = 0; i < SyntheticCols; i++) arr[i] = 12.0f + i * 5.5f;
+        return arr;
+    }
+
     public static unsafe void Main(string[] args)
     {
         _ = Vulkan.GetInstanceProcAddr;
@@ -288,15 +333,16 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         using var geometryPool = new GeometryPool(context, allocator);
 
-        // 1. Central Exhibition Pavilion Plinth (32m x 32m paved slate platform at Y = 0.01)
-        const float PlinthExtent = 16.0f;
-        const float PlinthY = 0.01f;
+        // 1. Central Exhibition Pavilion Plinth (160m x 160m paved slate platform at Y = 0.10, elevated 0.1m to eliminate Z-fighting)
+        const float PlinthExtent = 80.0f;
+        const float PlinthY = 0.10f;
+        const float PlinthUvScale = 40.0f;
         Vertex3D[] groundVertices =
         [
             new(new float3(-PlinthExtent, PlinthY,  PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
-            new(new float3( PlinthExtent, PlinthY,  PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(8f, 0f)),
-            new(new float3( PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(8f, 8f)),
-            new(new float3(-PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 8f)),
+            new(new float3( PlinthExtent, PlinthY,  PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(PlinthUvScale, 0f)),
+            new(new float3( PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(PlinthUvScale, PlinthUvScale)),
+            new(new float3(-PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, PlinthUvScale)),
         ];
         ushort[] groundIndices = [0, 1, 2, 2, 3, 0];
 
@@ -361,8 +407,8 @@ public static class Program
             groundSlice.VertexOffsetBytes,
             groundSlice.IndexOffsetBytes,
             VkIndexType.UInt16,
-            boundingMin: new Vector3(-PlinthExtent, -0.05f, -PlinthExtent),
-            boundingMax: new Vector3(PlinthExtent, 0.05f, PlinthExtent),
+            boundingMin: new Vector3(-PlinthExtent, PlinthY - 0.05f, -PlinthExtent),
+            boundingMax: new Vector3(PlinthExtent, PlinthY + 0.05f, PlinthExtent),
             boundingRadius: PlinthExtent * 1.4142f,
             ownsBuffers: false
         );
@@ -378,6 +424,59 @@ public static class Program
             boundingMin: new Vector3(-1f, -1f, -1f),
             boundingMax: new Vector3(1f, 1f, 1f),
             boundingRadius: 1.732f,
+            ownsBuffers: false
+        );
+
+        // 3. UV Sphere 3D geometry (for physics dynamic spheres, projectiles, and character)
+        const int SphereRings = 16;
+        const int SphereSectors = 16;
+        var sphereVertices = new List<Vertex3D>((SphereRings + 1) * (SphereSectors + 1));
+        var sphereIndices = new List<ushort>(SphereRings * SphereSectors * 6);
+        for (int r = 0; r <= SphereRings; r++)
+        {
+            float theta = r * MathF.PI / SphereRings;
+            float sinTheta = MathF.Sin(theta);
+            float cosTheta = MathF.Cos(theta);
+            for (int s = 0; s <= SphereSectors; s++)
+            {
+                float phi = s * 2f * MathF.PI / SphereSectors;
+                float sinPhi = MathF.Sin(phi);
+                float cosPhi = MathF.Cos(phi);
+                float x = cosPhi * sinTheta;
+                float y = cosTheta;
+                float z = sinPhi * sinTheta;
+                float u = (float)s / SphereSectors;
+                float v = (float)r / SphereRings;
+                sphereVertices.Add(new Vertex3D(new float3(x, y, z), new float3(1f, 1f, 1f), new float3(x, y, z), new float2(u, v)));
+            }
+        }
+        for (int r = 0; r < SphereRings; r++)
+        {
+            for (int s = 0; s < SphereSectors; s++)
+            {
+                int first = r * (SphereSectors + 1) + s;
+                int second = first + SphereSectors + 1;
+                sphereIndices.Add((ushort)first);
+                sphereIndices.Add((ushort)second);
+                sphereIndices.Add((ushort)(first + 1));
+                sphereIndices.Add((ushort)(first + 1));
+                sphereIndices.Add((ushort)second);
+                sphereIndices.Add((ushort)(second + 1));
+            }
+        }
+        var sphereSlice = geometryPool.AllocateMesh(uploadManager, CollectionsMarshal.AsSpan(sphereVertices), CollectionsMarshal.AsSpan(sphereIndices));
+
+        using var sphereMesh = new Mesh(
+            geometryPool.VertexBuffer,
+            geometryPool.IndexBuffer,
+            sphereSlice.VertexCount,
+            sphereSlice.IndexCount,
+            sphereSlice.VertexOffsetBytes,
+            sphereSlice.IndexOffsetBytes,
+            VkIndexType.UInt16,
+            boundingMin: new Vector3(-1f, -1f, -1f),
+            boundingMax: new Vector3(1f, 1f, 1f),
+            boundingRadius: 1.0f,
             ownsBuffers: false
         );
 
@@ -526,6 +625,26 @@ public static class Program
         using var streamingManager = new StreamingManager(worldGrid, worldConfig, worldPack, vramBudget: vramBudget);
         Vector3 prevCamPos = camera.Position;
 
+        // ---------------------------------------------------------------------------------------------
+        // SPRINT 8: JOLT 3D PHYSICS & OPENAL 3D SPATIAL AUDIO PLAYGROUND
+        // ---------------------------------------------------------------------------------------------
+        using var physicsEngine = new PhysicsEngine();
+        using var audioEngine = new AudioEngine();
+        streamingManager.Physics = physicsEngine;
+        streamingManager.Audio = audioEngine;
+
+        // Static floor collider for Central Exhibition Pavilion Plinth (160m x 160m, 1m thick box placed so top surface is at Y = PlinthY = 0.10f)
+        var plinthFloorBody = physicsEngine.CreateBoxBody(
+            new float3(0f, PlinthY - 0.5f, 0f),
+            new float3(PlinthExtent, 0.5f, PlinthExtent),
+            BodyMotionType.Static,
+            friction: 0.9f,
+            restitution: 0.15f
+        );
+
+        // Virtual Character Controller (capsule: 1.8m height, 0.3m radius)
+        using var characterController = new CharacterController(physicsEngine, new float3(0f, 1.5f, 5f));
+
         // Sprint 6b: Terrain Clipmap (D22) & Texture Mip Streamer (D5, D21)
         using var terrainClipmap = new TerrainClipmap(context, allocator);
         for (int tz = -2; tz <= 1; tz++)
@@ -563,23 +682,8 @@ public static class Program
         using var hizBuilder = new HiZBuilder(context, allocator, shaderCompiler, (uint)swapchain.Width, (uint)swapchain.Height);
         using var gpuCuller = new GpuCuller(context, allocator, shaderCompiler);
 
-        // Procedural wind foliage grass field (Sprint 7b - 50,000 blades surrounding the plinth)
+        // Procedural wind foliage grass field (backend preserved; grass removed from scene per request)
         using var foliageSystem = new FoliageSystem(context, allocator, shaderCompiler, swapchain.ColorFormat);
-        var foliageList = new List<FoliageInstanceData>(50000);
-        var foliageRng = new Random(1337);
-        for (int i = 0; i < 50000; i++)
-        {
-            float fx = (float)(foliageRng.NextDouble() * 160.0 - 80.0);
-            float fz = (float)(foliageRng.NextDouble() * 160.0 - 80.0);
-            if (MathF.Abs(fx) < PlinthExtent + 1.0f && MathF.Abs(fz) < PlinthExtent + 1.0f) continue; // Keep central exhibition plinth clean
-            float rot = (float)(foliageRng.NextDouble() * Math.PI * 2.0);
-            float scale = 0.8f + (float)foliageRng.NextDouble() * 0.5f;
-            byte tint = (byte)foliageRng.Next(150, 255);
-            byte windPhase = (byte)foliageRng.Next(0, 256);
-            float fy = MathF.Max(terrainClipmap.SampleElevation(fx, fz), 0.0f);
-            foliageList.Add(new FoliageInstanceData(new Vector3(fx, fy, fz), rot, scale, tint, windPhase));
-        }
-        foliageSystem.SetInstances(CollectionsMarshal.AsSpan(foliageList));
 
         // GPU compute particle emitter fountain (Sprint 7b - erupts above the emissive crystal)
         using var particleSystem = new ParticleSystem(context, allocator, shaderCompiler, swapchain.ColorFormat, maxParticles: 16384)
@@ -600,12 +704,180 @@ public static class Program
         var pointLights = new PointLight[224];
         var spotLights = new SpotLight[32];
 
-        var dynInstances = new GpuInstanceData[10];
+        var dynInstances = new GpuInstanceData[128];
         var streamingGpuInstances = new GpuInstanceData[ReferenceStaticInstanceCount];
         bool gpuDrivenEnabled = true;
-        bool foliageEnabled = true;
+        bool foliageEnabled = false;
         bool particlesEnabled = true;
         bool referenceScaleEnabled = initialStress;
+
+        var demoPhysicsEntities = new List<PhysicsDemoEntity>(64);
+        bool characterModeEnabled = false;
+        float footstepTimer = 0.0f;
+
+        Action resetPhysicsDemo = () =>
+        {
+            for (int i = 0; i < demoPhysicsEntities.Count; i++)
+            {
+                scene.DestroyEntity(demoPhysicsEntities[i].SceneEntity);
+                demoPhysicsEntities[i].Body.Dispose();
+            }
+            demoPhysicsEntities.Clear();
+
+            // Build a 6-box pyramid at (X = 6, Z = 6) on the plinth
+            float3 boxHalfExtents = new(0.5f, 0.5f, 0.5f);
+            Vector3 boxScale = new(0.5f, 0.5f, 0.5f);
+            float boxRadius = 0.5f * 1.732f;
+
+            (float3 pos, uint mat)[] boxDefs =
+            [
+                (new float3(5.0f, 0.65f, 6.0f), copperMatId),
+                (new float3(6.1f, 0.65f, 6.0f), terracottaMatId),
+                (new float3(7.2f, 0.65f, 6.0f), chromeMatId),
+                (new float3(5.55f, 1.70f, 6.0f), checkerMatId),
+                (new float3(6.65f, 1.70f, 6.0f), goldMatId),
+                (new float3(6.1f, 2.75f, 6.0f), emissiveMatId),
+            ];
+
+            for (int i = 0; i < boxDefs.Length; i++)
+            {
+                var bPos = boxDefs[i].pos;
+                var bMat = boxDefs[i].mat;
+                var body = physicsEngine.CreateBoxBody(bPos, boxHalfExtents, BodyMotionType.Dynamic, mass: 5.0f, friction: 0.6f, restitution: 0.1f);
+                var entity = scene.CreateEntity(
+                    new Transform(bPos.X, bPos.Y, bPos.Z, Quaternion.Identity, boxScale),
+                    new MeshRenderer(cubeMesh, materialId: bMat, castShadows: true)
+                );
+                entity.Add(new RigidBodyComponent
+                {
+                    BodyId = body.BodyId,
+                    MotionType = BodyMotionType.Dynamic,
+                    Mass = 5.0f,
+                    Friction = 0.6f,
+                    Restitution = 0.1f,
+                    RuntimeBody = body
+                });
+                demoPhysicsEntities.Add(new PhysicsDemoEntity
+                {
+                    Body = body,
+                    SceneEntity = entity,
+                    MeshId = cubeSlice.MeshId,
+                    MaterialId = bMat,
+                    Scale = boxScale,
+                    BoundingRadius = boxRadius,
+                    PrevTransform = Matrix4x4.CreateScale(boxScale) * Matrix4x4.CreateTranslation(bPos.X, bPos.Y, bPos.Z)
+                });
+            }
+
+            // Drop 1 dynamic bouncing sphere above pyramid
+            float sphereRadius = 0.4f;
+            var sPos = new float3(6.1f, 4.3f, 6.0f);
+            var sBody = physicsEngine.CreateSphereBody(
+                sPos,
+                sphereRadius,
+                BodyMotionType.Dynamic,
+                mass: 3.0f,
+                friction: 0.7f,
+                restitution: 0.45f,
+                linearDamping: 0.2f,
+                angularDamping: 0.6f
+            );
+            var sEntity = scene.CreateEntity(
+                new Transform(sPos.X, sPos.Y, sPos.Z, Quaternion.Identity, new Vector3(sphereRadius)),
+                new MeshRenderer(sphereMesh, materialId: goldMatId, castShadows: true)
+            );
+            sEntity.Add(new RigidBodyComponent
+            {
+                BodyId = sBody.BodyId,
+                MotionType = BodyMotionType.Dynamic,
+                Mass = 3.0f,
+                Friction = 0.7f,
+                Restitution = 0.45f,
+                RuntimeBody = sBody
+            });
+            demoPhysicsEntities.Add(new PhysicsDemoEntity
+            {
+                Body = sBody,
+                SceneEntity = sEntity,
+                MeshId = sphereSlice.MeshId,
+                MaterialId = goldMatId,
+                Scale = new Vector3(sphereRadius),
+                BoundingRadius = sphereRadius,
+                PrevTransform = Matrix4x4.CreateScale(sphereRadius) * Matrix4x4.CreateTranslation(sPos.X, sPos.Y, sPos.Z)
+            });
+
+            // Reset character controller to spawn
+            characterController.Position = new float3(0f, 1.5f, 5f);
+
+            if (audioEngine.IsHardwareAvailable && audioEngine.ImpactClip != null)
+            {
+                audioEngine.PlayOneShot(audioEngine.ImpactClip, new float3(6f, 1f, 6f), 0.8f);
+            }
+            Console.WriteLine("[PhysicsDemo] Physics pyramid & bouncing sphere stack reset at (X=6, Z=6)!");
+        };
+
+        Action shootCannonball = () =>
+        {
+            if (demoPhysicsEntities.Count >= 60)
+            {
+                if (demoPhysicsEntities.Count > 7)
+                {
+                    scene.DestroyEntity(demoPhysicsEntities[7].SceneEntity);
+                    demoPhysicsEntities[7].Body.Dispose();
+                    demoPhysicsEntities.RemoveAt(7);
+                }
+            }
+
+            Vector3 spawnPos = camera.Position + camera.Forward * 1.5f;
+            Vector3 impulseDir = camera.Forward;
+            float cannonRadius = 0.45f;
+
+            var ballBody = physicsEngine.CreateSphereBody(
+                new float3(spawnPos.X, spawnPos.Y, spawnPos.Z),
+                cannonRadius,
+                BodyMotionType.Dynamic,
+                mass: 25.0f,
+                friction: 0.85f,
+                restitution: 0.20f,
+                linearDamping: 0.25f,
+                angularDamping: 0.8f
+            );
+            ballBody.LinearVelocityVector3 = impulseDir * 35.0f;
+
+            var ballEntity = scene.CreateEntity(
+                new Transform(spawnPos.X, spawnPos.Y, spawnPos.Z, Quaternion.Identity, new Vector3(cannonRadius)),
+                new MeshRenderer(sphereMesh, materialId: chromeMatId, castShadows: true)
+            );
+            ballEntity.Add(new RigidBodyComponent
+            {
+                BodyId = ballBody.BodyId,
+                MotionType = BodyMotionType.Dynamic,
+                Mass = 25.0f,
+                Friction = 0.85f,
+                Restitution = 0.20f,
+                RuntimeBody = ballBody
+            });
+
+            demoPhysicsEntities.Add(new PhysicsDemoEntity
+            {
+                Body = ballBody,
+                SceneEntity = ballEntity,
+                MeshId = sphereSlice.MeshId,
+                MaterialId = chromeMatId,
+                Scale = new Vector3(cannonRadius),
+                BoundingRadius = cannonRadius,
+                PrevTransform = Matrix4x4.CreateScale(cannonRadius) * Matrix4x4.CreateTranslation(spawnPos)
+            });
+
+            if (audioEngine.IsHardwareAvailable && audioEngine.ImpactClip != null)
+            {
+                audioEngine.PlayOneShot(audioEngine.ImpactClip, new float3(spawnPos.X, spawnPos.Y, spawnPos.Z), 1.0f);
+            }
+            Console.WriteLine($"[PhysicsDemo] Fired cannonball from ({spawnPos.X:F1}, {spawnPos.Y:F1}, {spawnPos.Z:F1}) with velocity 35.0 m/s!");
+        };
+
+        // Initialize physics demo stack
+        resetPhysicsDemo();
 
         using var renderGraph = new RenderGraph();
 
@@ -623,6 +895,10 @@ public static class Program
         bool flyCamEnabled = false;
         bool autopilotTourEnabled = initialAutopilot;
         double tourTime = 0.0;
+        float flyCamBaseSpeed = 20.0f;
+        float flyCamYaw = 0.0f;
+        float flyCamPitch = 0.0f;
+        bool isRightMouseDown = false;
 
         window.KeyAction += (key, action) =>
         {
@@ -635,8 +911,23 @@ public static class Program
                 }
                 else if (key == GlfwKey.Space)
                 {
-                    cameraController.AutoOrbitEnabled = !cameraController.AutoOrbitEnabled;
-                    Console.WriteLine($"[Input] Auto-Orbit -> {(cameraController.AutoOrbitEnabled ? "ENABLED" : "PAUSED (Manual control active)")}");
+                    if (characterModeEnabled)
+                    {
+                        if (characterController.IsGrounded)
+                        {
+                            characterController.Jump();
+                            if (audioEngine.IsHardwareAvailable && audioEngine.JumpClip != null)
+                            {
+                                audioEngine.PlayOneShot(audioEngine.JumpClip, characterController.Position, 0.8f);
+                            }
+                            Console.WriteLine("[Character] Jump impulse triggered!");
+                        }
+                    }
+                    else
+                    {
+                        cameraController.AutoOrbitEnabled = !cameraController.AutoOrbitEnabled;
+                        Console.WriteLine($"[Input] Auto-Orbit -> {(cameraController.AutoOrbitEnabled ? "ENABLED" : "PAUSED (Manual control active)")}");
+                    }
                 }
                 else if (key == GlfwKey.P)
                 {
@@ -746,12 +1037,37 @@ public static class Program
                     gpuDrivenEnabled = !gpuDrivenEnabled;
                     Console.WriteLine($"[Renderer] GPU-Driven Indirect Multi-Draw -> {(gpuDrivenEnabled ? "ENABLED (vkCmdDrawIndexedIndirectCount + Hi-Z Culling)" : "DISABLED (CPU Forward Submission)")}");
                 }
+                else if (key == GlfwKey.J)
+                {
+                    shootCannonball();
+                }
                 else if (key == GlfwKey.K)
+                {
+                    resetPhysicsDemo();
+                }
+                else if (key == GlfwKey.X)
+                {
+                    characterModeEnabled = !characterModeEnabled;
+                    if (characterModeEnabled)
+                    {
+                        flyCamEnabled = false;
+                        autopilotTourEnabled = false;
+                        cameraController.AutoOrbitEnabled = false;
+                        cameraController.Distance = 5.0f;
+                        cameraController.Pitch = 0.35f;
+                        Console.WriteLine("[Character] Mode: VIRTUAL CHARACTER (WASD walk, Shift sprint, Space jump, Arrows orbit)");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[Character] Mode: ORBIT CAM (Target-centered)");
+                    }
+                }
+                else if (key == GlfwKey.F5)
                 {
                     foliageEnabled = !foliageEnabled;
                     Console.WriteLine($"[Foliage] Procedural Wind Grass -> {(foliageEnabled ? $"ENABLED ({foliageSystem.ActiveInstanceCount} grass blades)" : "DISABLED")}");
                 }
-                else if (key == GlfwKey.J)
+                else if (key == GlfwKey.F6)
                 {
                     particlesEnabled = !particlesEnabled;
                     Console.WriteLine($"[Particles] GPU Particle Fountain -> {(particlesEnabled ? $"ENABLED ({particleSystem.ActiveParticleCount} active, {particleSystem.MaxParticles} capacity)" : "DISABLED")}");
@@ -768,50 +1084,108 @@ public static class Program
             }
         };
 
+        window.MouseButtonAction += (button, action) =>
+        {
+            if (button == GlfwMouseButton.Right)
+            {
+                if (action == GlfwButtonAction.Press)
+                {
+                    isRightMouseDown = true;
+                    window.IsCursorCaptured = true;
+                    cameraController.AutoOrbitEnabled = false;
+
+                    Vector3 fwd = camera.Forward;
+                    flyCamPitch = MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
+                    flyCamYaw = MathF.Atan2(fwd.X, -fwd.Z);
+                    EngineInput.ResetMouseDelta();
+                }
+                else if (action == GlfwButtonAction.Release)
+                {
+                    isRightMouseDown = false;
+                    window.IsCursorCaptured = false;
+
+                    Vector3 fwd = camera.Forward;
+                    cameraController.AutoOrbitEnabled = false;
+                    cameraController.Pitch = -MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
+                    cameraController.Yaw = MathF.Atan2(-fwd.X, -fwd.Z);
+                    cameraController.Distance = 10.0f;
+                    camera.Target = camera.Position + fwd * 10.0f;
+                }
+            }
+        };
+
+        window.MouseScrolled += (xOffset, yOffset) =>
+        {
+            if (Math.Abs(yOffset) > 0.001)
+            {
+                flyCamBaseSpeed = Math.Clamp(flyCamBaseSpeed + (float)yOffset * 3.0f, 1.0f, 300.0f);
+                Console.WriteLine($"[Camera] Flight Speed -> {flyCamBaseSpeed:F1} m/s");
+            }
+        };
+
+        window.FocusChanged += focused =>
+        {
+            if (!focused && isRightMouseDown)
+            {
+                isRightMouseDown = false;
+                window.IsCursorCaptured = false;
+            }
+        };
+
         // ---------------------------------------------------------------------------------------------
         // PRINT DETAILED ENGINE STATUS
         // ---------------------------------------------------------------------------------------------
         Console.WriteLine("================================================================================");
-        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 7: GPU-DRIVEN & SCALABLE LIGHTING     ");
+        Console.WriteLine("     JATAYU VULKAN 1.3 3D ENGINE - SPRINT 8: JOLT PHYSICS & SPATIAL AUDIO       ");
         Console.WriteLine("================================================================================");
         Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
         Console.WriteLine($" [Renderer]      : ForwardRenderer3D (GPU-Driven Indirect + Shadows + Skybox + Terrain + Foliage + Particles)");
+        Console.WriteLine($" [Physics]       : Jolt 3D Simulation (Rigid Bodies + Virtual Character + Static Plinth Floor)");
+        Console.WriteLine($" [Audio]         : OpenAL 3D Spatial Audio (Hardware: {(audioEngine.IsHardwareAvailable ? "ACTIVE" : "HEADLESS")}) | Positional Footsteps/Impacts/Jumps");
         Console.WriteLine($" [GPU-Driven]    : Indirect Multi-Draw (Toggle [G]) | vkCmdDrawIndexedIndirectCount + Hi-Z Culling");
         Console.WriteLine($" [Reference]     : 200k GPU static instance stress (Toggle [H], requires [G])");
-        Console.WriteLine($" [Foliage]       : Procedural Wind Grass (Toggle [K]) | {foliageSystem.ActiveInstanceCount} instanced blades");
-        Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [J]) | {particleSystem.ActiveParticleCount} active / {particleSystem.MaxParticles} capacity, {ParticleSystem.DefaultEmissionRate:0} particles/s");
+        Console.WriteLine($" [Foliage]       : Disabled (Backend preserved; grass removed from scene)");
+        Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [F6]) | {particleSystem.ActiveParticleCount} active / {particleSystem.MaxParticles} capacity, {ParticleSystem.DefaultEmissionRate:0} particles/s");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
         Console.WriteLine($" [Shadow Map]    : 4-Cascade CSM ({cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}x4 D32_SFLOAT, Texel Snapping, Reverse-Z)");
         Console.WriteLine($" [Clipmap]       : 7 nested LOD rings (8.4 km span), 10 modular piece meshes, 144 instances, watertight geomorphing");
-        Console.WriteLine($" [Arena]         : 200m flat origin clearing for central pavilion plinth & rotating testing boxes");
+        Console.WriteLine($" [Arena]         : 200m flat clearing + 160m x 160m Pavilion Plinth (Elevated Y = 0.10m, Zero Z-Fighting)");
         Console.WriteLine($" [Bindless]      : BindlessTable active ({bindlessTable.MaxTextures} slots) | Checkerboard Slot: #{checkerSlot}");
         Console.WriteLine($" [MaterialTable] : {materialTable.Count} PBR materials registered in GPU Storage Buffer");
-        Console.WriteLine($" [GeometryPool]  : Monolithic shared pool active (Exhibition Pavilion Plinth + Unit Cube meshes)");
+        Console.WriteLine($" [GeometryPool]  : Monolithic shared pool active (Plinth + Unit Cube + UV Sphere meshes)");
         Console.WriteLine($" [Large World]   : 64-bit precision WorldPosition active (Monolith cluster at 50,000m)");
         Console.WriteLine($" [Origin Shift]  : Snapped to 256m terrain tile multiple (Threshold: {originShift.ThresholdDistance:F0}m)");
         Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle [F1]) | World Radar (Toggle [F2])");
         Console.WriteLine("--------------------------------------------------------------------------------");
-        Console.WriteLine(" INTERACTIVE HOTKEYS:");
-        Console.WriteLine("   [G]           : Toggle GPU-Driven Multi-Draw vs CPU Draw (Live rendering comparison!)");
-        Console.WriteLine("   [K]           : Toggle Procedural Foliage Grass Field (50,000 swaying wind blades)");
-        Console.WriteLine("   [J]           : Toggle GPU Particle Fountain (16K compute physics + WBOIT transparency)");
-        Console.WriteLine("   [C]           : Toggle 6-DOF Free-Flycam (WASD + Q/E to fly, Shift for 100 m/s boost, Arrows to aim)");
-        Console.WriteLine("   [F3]          : Toggle 100 m/s Supersonic Autopilot Drone Tour (360 km/h open-world stress sweep)");
-        Console.WriteLine("   [F4]          : Toggle Terrain Clipmap LOD Ring Colors (Green/Cyan/Yellow/Orange/Red/Purple)");
-        Console.WriteLine("   [F2]          : Toggle World Streaming Radar & Clipmap Telemetry HUD");
-        Console.WriteLine("   [F1]          : Toggle Diagnostics Telemetry HUD");
-        Console.WriteLine("   [T]           : Teleport between Origin (0m) and 50,000m Monolith Cluster");
-        Console.WriteLine("   [L]           : Toggle Sun Light Orbit animation (animates soft shadows)");
-        Console.WriteLine("   [B]           : Toggle 3D Wireframe Debug bounds and coordinate axes");
-        Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
-        Console.WriteLine("   [P]           : Toggle shadow filtering (3x3 PCF vs 16-tap Poisson)");
-        Console.WriteLine("   [G]           : Cycle shadow debug view (cascades, depth, bias, off)");
-        Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
-        Console.WriteLine("   [Left/Right]  : Manual horizontal orbit (Yaw)");
-        Console.WriteLine("   [Up/Down]     : Manual vertical orbit (Pitch)");
-        Console.WriteLine("   [W / S]       : Zoom camera in / out");
-        Console.WriteLine("   [V]           : Toggle V-Sync Live (Observe FPS change in Title Bar / HUD)");
-        Console.WriteLine("   [ESC]         : Graceful Shutdown");
+        Console.WriteLine(" INTERACTIVE HOTKEYS & NAVIGATION:");
+        Console.WriteLine("   [Hold Right Click] : Capture mouse -> Look with Mouse, Fly with WASD");
+        Console.WriteLine("   [Scroll Wheel]     : Adjust flight speed (1 - 300 m/s)");
+        Console.WriteLine("   [Hold Shift]       : Precision Slowdown (0.25x speed) while flying");
+        Console.WriteLine("   [Hold Ctrl]        : Traversal Speed Boost (4.0x speed) while flying");
+        Console.WriteLine("   [Space / E]        : Fly Upwards (while holding Right Click)");
+        Console.WriteLine("   [Q / C]            : Fly Downwards (while holding Right Click)");
+        Console.WriteLine("   [J]                : Launch High-Velocity Dynamic Cannonball into Physics Pyramid at Origin");
+        Console.WriteLine("   [K]                : Rebuild / Reset Physics Pyramid & Bouncing Spheres at Origin");
+        Console.WriteLine("   [X]                : Toggle Virtual Character Walk Mode (WASD move, Shift sprint, Space jump)");
+        Console.WriteLine("   [Space]            : Jump (in Character Mode) / Toggle Auto-Orbit camera (in Orbit Mode)");
+        Console.WriteLine("   [G]                : Toggle GPU-Driven Multi-Draw vs CPU Draw (Live rendering comparison!)");
+        Console.WriteLine("   [F5]               : Toggle Procedural Foliage Grass Field (Disabled)");
+        Console.WriteLine("   [F6]               : Toggle GPU Particle Fountain (16K compute physics + WBOIT transparency)");
+        Console.WriteLine("   [C]                : Toggle 6-DOF Free-Flycam (WASD + Q/E to fly, Shift for 100 m/s boost, Arrows to aim)");
+        Console.WriteLine("   [F3]               : Toggle 100 m/s Supersonic Autopilot Drone Tour (360 km/h open-world stress sweep)");
+        Console.WriteLine("   [F4]               : Toggle Terrain Clipmap LOD Ring Colors (Green/Cyan/Yellow/Orange/Red/Purple)");
+        Console.WriteLine("   [F2]               : Toggle World Streaming Radar & Clipmap Telemetry HUD");
+        Console.WriteLine("   [F1]               : Toggle Diagnostics Telemetry HUD");
+        Console.WriteLine("   [T]                : Teleport between Origin (0m) and 50,000m Monolith Cluster");
+        Console.WriteLine("   [L]                : Toggle Sun Light Orbit animation (animates soft shadows)");
+        Console.WriteLine("   [B]                : Toggle 3D Wireframe Debug bounds and colliders");
+        Console.WriteLine("   [P]                : Toggle shadow filtering (3x3 PCF vs 16-tap Poisson)");
+        Console.WriteLine("   [F]                : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
+        Console.WriteLine("   [Left/Right]       : Manual horizontal orbit (Yaw)");
+        Console.WriteLine("   [Up/Down]          : Manual vertical orbit (Pitch)");
+        Console.WriteLine("   [W / S]            : Zoom camera in / out (in Orbit Mode) / Walk (in Character Mode)");
+        Console.WriteLine("   [V]                : Toggle V-Sync Live (Observe FPS change in Title Bar / HUD)");
+        Console.WriteLine("   [ESC]              : Graceful Shutdown");
         Console.WriteLine("================================================================================");
 
         // ---------------------------------------------------------------------------------------------
@@ -873,6 +1247,7 @@ public static class Program
             // 1. Process OS window events
             using (Profiler.Scope("PollEvents"))
             {
+                EngineInput.BeginFrame();
                 window.PollEvents();
             }
 
@@ -910,11 +1285,62 @@ public static class Program
                 time.Update();
             }
             var dt = time.DeltaTime;
+            float physicsDt = Math.Clamp((float)dt, 0.001f, 0.033f);
 
-            // Interactive camera controls (Autopilot Drone Tour, 6-DOF Flycam, or Target-Centered Orbit)
+            // Step Jolt 3D physics simulation
+            using (Profiler.Scope("PhysicsStep"))
+            {
+                physicsEngine.Update(physicsDt);
+            }
+
+            // Interactive camera controls (Right-Click Flycam, Autopilot Drone Tour, 6-DOF Flycam, Character Mode, or Target-Centered Orbit)
             using (Profiler.Scope("CameraUpdate"))
             {
-                if (autopilotTourEnabled)
+                if (isRightMouseDown)
+                {
+                    // Relative mouse motion look (Yaw and Pitch)
+                    Vector2 mouseDelta = EngineInput.MouseDelta;
+                    const float mouseSensitivity = 0.0022f;
+                    flyCamYaw += mouseDelta.X * mouseSensitivity;
+                    flyCamPitch -= mouseDelta.Y * mouseSensitivity;
+                    flyCamPitch = Math.Clamp(flyCamPitch, -1.56f, 1.56f);
+
+                    Vector3 lookDir = Vector3.Normalize(new Vector3(
+                        MathF.Sin(flyCamYaw) * MathF.Cos(flyCamPitch),
+                        MathF.Sin(flyCamPitch),
+                        -MathF.Cos(flyCamYaw) * MathF.Cos(flyCamPitch)
+                    ));
+                    Vector3 rightDir = Vector3.Normalize(Vector3.Cross(lookDir, Vector3.UnitY));
+
+                    // Speed calculation: scroll wheel sets base speed; Shift = slowdown (0.25x), Ctrl = boost (4.0x)
+                    float currentSpeed = flyCamBaseSpeed;
+                    if (window.IsKeyDown(GlfwKey.LeftShift) || window.IsKeyDown(GlfwKey.RightShift))
+                    {
+                        currentSpeed *= 0.25f;
+                    }
+                    else if (window.IsKeyDown(GlfwKey.LeftControl) || window.IsKeyDown(GlfwKey.RightControl))
+                    {
+                        currentSpeed *= 4.0f;
+                    }
+
+                    Vector3 moveDir = Vector3.Zero;
+                    if (window.IsKeyDown(GlfwKey.W)) moveDir += lookDir;
+                    if (window.IsKeyDown(GlfwKey.S)) moveDir -= lookDir;
+                    if (window.IsKeyDown(GlfwKey.D)) moveDir += rightDir;
+                    if (window.IsKeyDown(GlfwKey.A)) moveDir -= rightDir;
+                    if (window.IsKeyDown(GlfwKey.Space) || window.IsKeyDown(GlfwKey.E)) moveDir += Vector3.UnitY;
+                    if (window.IsKeyDown(GlfwKey.Q) || window.IsKeyDown(GlfwKey.C)) moveDir -= Vector3.UnitY;
+
+                    if (moveDir.LengthSquared() > 0.0001f)
+                    {
+                        moveDir = Vector3.Normalize(moveDir);
+                        camera.Position += moveDir * currentSpeed * (float)dt;
+                    }
+
+                    camera.Target = camera.Position + lookDir * 10.0f;
+                    characterController.Update(physicsDt, Vector2.Zero, false, false);
+                }
+                else if (autopilotTourEnabled)
                 {
                     tourTime += dt;
                     // Drone travels along wide circuit across cell and tile boundaries
@@ -967,8 +1393,67 @@ public static class Program
                     }
                     camera.Target = camera.Position + Vector3.Normalize(fwd) * 10.0f;
                 }
+                else if (characterModeEnabled)
+                {
+                    if (window.IsKeyDown(GlfwKey.Left))
+                    {
+                        cameraController.Yaw -= 2.0f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Right))
+                    {
+                        cameraController.Yaw += 2.0f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Up))
+                    {
+                        cameraController.Pitch += 1.5f * dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Down))
+                    {
+                        cameraController.Pitch -= 1.5f * dt;
+                    }
+
+                    // WASD character movement relative to camera yaw
+                    Vector3 camFwd = camera.Forward;
+                    camFwd.Y = 0f;
+                    if (camFwd.LengthSquared() > 0.0001f) camFwd = Vector3.Normalize(camFwd);
+                    Vector3 camRight = camera.Right;
+                    camRight.Y = 0f;
+                    if (camRight.LengthSquared() > 0.0001f) camRight = Vector3.Normalize(camRight);
+
+                    Vector3 charMove = Vector3.Zero;
+                    if (window.IsKeyDown(GlfwKey.W)) charMove += camFwd;
+                    if (window.IsKeyDown(GlfwKey.S)) charMove -= camFwd;
+                    if (window.IsKeyDown(GlfwKey.D)) charMove += camRight;
+                    if (window.IsKeyDown(GlfwKey.A)) charMove -= camRight;
+
+                    bool isSprinting = window.IsKeyDown(GlfwKey.LeftShift) || window.IsKeyDown(GlfwKey.RightShift);
+                    if (charMove.LengthSquared() > 0.0001f)
+                    {
+                        charMove = Vector3.Normalize(charMove);
+                        footstepTimer += (float)dt * (isSprinting ? 2.8f : 1.8f);
+                        if (footstepTimer >= 1.0f && characterController.IsGrounded)
+                        {
+                            footstepTimer = 0.0f;
+                            if (audioEngine.IsHardwareAvailable && audioEngine.FootstepClip != null)
+                            {
+                                audioEngine.PlayOneShot(audioEngine.FootstepClip, characterController.Position, 0.5f);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        footstepTimer = 0.9f;
+                    }
+
+                    characterController.Update(physicsDt, new Vector2(charMove.X, charMove.Z), isSprinting, jump: false);
+
+                    camera.Target = characterController.PositionVector3 + new Vector3(0f, 0.9f, 0f);
+                    cameraController.Update(dt);
+                }
                 else
                 {
+                    characterController.Update(physicsDt, Vector2.Zero, false, false);
+
                     if (window.IsKeyDown(GlfwKey.Left))
                     {
                         cameraController.AutoOrbitEnabled = false;
@@ -998,6 +1483,12 @@ public static class Program
 
                     cameraController.Update(dt);
                 }
+            }
+
+            // Synchronize OpenAL 3D spatial audio listener with active camera
+            if (audioEngine.IsHardwareAvailable)
+            {
+                audioEngine.Listener.UpdateFromCamera(camera);
             }
 
             // 3. Animate Sun Light Direction
@@ -1107,8 +1598,8 @@ public static class Program
                 float camZ = camera.Position.Z;
 
                 // 0: Exhibition Pavilion Plinth
-                Vector3 groundRel = new Vector3(-camX, -camY, -camZ);
-                Matrix4x4 groundModel = Matrix4x4.CreateTranslation(groundRel);
+                Vector3 groundRel = new Vector3(-camX, PlinthY - camY, -camZ);
+                Matrix4x4 groundModel = Matrix4x4.CreateTranslation(-camX, -camY, -camZ);
                 dynInstances[0] = new GpuInstanceData
                 {
                     CurrentTransform = groundModel,
@@ -1117,7 +1608,7 @@ public static class Program
                     BoundingRadius = PlinthExtent * 1.4142f,
                     MeshId = groundSlice.MeshId,
                     MaterialId = groundMatId,
-                    Flags = 0,
+                    Flags = 4, // Bit 2 = NoOcclusionCull (ground plinth must never be culled by Hi-Z)
                     LodBias = 0f,
                 };
 
@@ -1256,6 +1747,39 @@ public static class Program
                     LodBias = 0f,
                 };
 
+                // 10..N: Dynamic Physics Entities at Origin
+                for (int i = 0; i < demoPhysicsEntities.Count; i++)
+                {
+                    var demoObj = demoPhysicsEntities[i];
+                    var pos = demoObj.Body.Position;
+                    var rot = demoObj.Body.Rotation;
+
+                    Vector3 worldPos = new(pos.X, pos.Y, pos.Z);
+                    Quaternion worldRot = new(rot.X, rot.Y, rot.Z, rot.W);
+
+                    ref var t = ref demoObj.SceneEntity.Get<Transform>();
+                    t.Position = worldPos;
+                    t.Rotation = worldRot;
+
+                    Vector3 relPos = worldPos - camera.Position;
+                    Matrix4x4 model = Matrix4x4.CreateScale(demoObj.Scale) *
+                                      Matrix4x4.CreateFromQuaternion(worldRot) *
+                                      Matrix4x4.CreateTranslation(relPos);
+
+                    dynInstances[10 + i] = new GpuInstanceData
+                    {
+                        CurrentTransform = model,
+                        PreviousTransform = demoObj.PrevTransform,
+                        BoundingCenter = relPos,
+                        BoundingRadius = demoObj.BoundingRadius,
+                        MeshId = demoObj.MeshId,
+                        MaterialId = demoObj.MaterialId,
+                        Flags = 1,
+                        LodBias = 0f,
+                    };
+                    demoPhysicsEntities[i] = demoObj with { PrevTransform = model };
+                }
+
                 // Populate active streaming cell static instances into the GPU InstanceBuffer
                 int staticInstIdx = 0;
                 var activeCells = worldGrid.ActiveCells;
@@ -1303,37 +1827,67 @@ public static class Program
 
                 if (referenceScaleEnabled && staticInstIdx < ReferenceStaticInstanceCount)
                 {
-                    Vector3 forward = camera.Forward;
-                    Vector3 right = camera.Right;
-                    Vector3 up = camera.UpVector;
-                    float tanHalfFov = MathF.Tan(camera.FovDegrees * (MathF.PI / 360.0f));
-                    float aspect = camera.AspectRatio;
-                    int syntheticCount = ReferenceStaticInstanceCount - staticInstIdx;
-                    for (int i = 0; staticInstIdx < ReferenceStaticInstanceCount; i++, staticInstIdx++)
+                    int count = ReferenceStaticInstanceCount - staticInstIdx;
+                    if (count > 0)
                     {
-                        float depth = 12.0f + (i % 512) * 5.5f;
-                        float radial = 0.72f * MathF.Sqrt((float)(i / 512 + 1) / ((syntheticCount + 511) / 512));
-                        float angle = i * 2.39996323f;
-                        float horizontal = MathF.Cos(angle) * radial * depth * tanHalfFov * aspect;
-                        float vertical = MathF.Sin(angle) * radial * depth * tanHalfFov;
-                        Vector3 relPos = forward * depth + right * horizontal + up * vertical;
-                        Matrix4x4 model = Matrix4x4.CreateScale(0.35f) * Matrix4x4.CreateTranslation(relPos);
-                        streamingGpuInstances[staticInstIdx] = new GpuInstanceData
+                        Vector3 forward = camera.Forward;
+                        Vector3 right = camera.Right;
+                        Vector3 up = camera.UpVector;
+                        float tanHalfFov = MathF.Tan(camera.FovDegrees * (MathF.PI / 360.0f));
+                        float aspect = camera.AspectRatio;
+
+                        int rows = (count + SyntheticCols - 1) / SyntheticCols;
+                        double rowAngleStep = SyntheticCols * GoldenAngle;
+
+                        Matrix4x4 model = Matrix4x4.CreateScale(0.35f);
+                        uint meshId = cubeSlice.MeshId;
+                        uint matId = copperMatId;
+
+                        Span<GpuInstanceData> dst = streamingGpuInstances.AsSpan(staticInstIdx, count);
+
+                        for (int row = 0, i = 0; i < count; row++)
                         {
-                            CurrentTransform = model,
-                            PreviousTransform = model,
-                            BoundingCenter = relPos,
-                            BoundingRadius = 0.6f,
-                            MeshId = cubeSlice.MeshId,
-                            MaterialId = copperMatId,
-                            Flags = 1u,
-                            LodBias = 0f,
-                        };
+                            float radial = 0.72f * MathF.Sqrt((float)(row + 1) / rows);
+                            var (sr, cr) = Math.SinCos(row * rowAngleStep);
+                            float sinR = (float)sr, cosR = (float)cr;
+
+                            float hFactor = tanHalfFov * aspect * radial;
+                            float vFactor = tanHalfFov * radial;
+
+                            int n = Math.Min(SyntheticCols, count - i);
+                            Span<GpuInstanceData> rowDst = dst.Slice(i, n);
+
+                            for (int c = 0; c < n; c++)
+                            {
+                                float sinC = s_colSin[c], cosC = s_colCos[c];
+                                float cosA = cosR * cosC - sinR * sinC;
+                                float sinA = sinR * cosC + cosR * sinC;
+
+                                float depth = s_colDepth[c];
+                                float h = cosA * depth * hFactor;
+                                float v = sinA * depth * vFactor;
+                                Vector3 relPos = forward * depth + right * h + up * v;
+
+                                model.Translation = relPos;
+
+                                ref GpuInstanceData inst = ref rowDst[c];
+                                inst.CurrentTransform = model;
+                                inst.PreviousTransform = model;
+                                inst.BoundingCenter = relPos;
+                                inst.BoundingRadius = 0.6f;
+                                inst.MeshId = meshId;
+                                inst.MaterialId = matId;
+                                inst.Flags = 1u;
+                                inst.LodBias = 0f;
+                            }
+                            i += n;
+                        }
+                        staticInstIdx += count;
                     }
                 }
 
                     instanceBuffer.SetStaticInstances(streamingGpuInstances.AsSpan(0, staticInstIdx));
-                    instanceBuffer.SetDynamicInstances(dynInstances);
+                    instanceBuffer.SetDynamicInstances(dynInstances.AsSpan(0, 10 + demoPhysicsEntities.Count));
                 }
             }
 
@@ -1348,13 +1902,25 @@ public static class Program
                 if (!atLargeWorldCluster)
                 {
                     // AABB wireframe bounding boxes for local objects
-                    debugRenderer.DrawBox(new Vector3(-PlinthExtent, 0f, -PlinthExtent), new Vector3(PlinthExtent, 0.02f, PlinthExtent), new Vector4(0.5f, 0.5f, 0.6f, 0.4f));
+                    debugRenderer.DrawBox(new Vector3(-PlinthExtent, PlinthY - 0.02f, -PlinthExtent), new Vector3(PlinthExtent, PlinthY + 0.02f, PlinthExtent), new Vector4(0.5f, 0.5f, 0.6f, 0.4f));
                     debugRenderer.DrawBox(new Vector3(-1f, 0.2f, -1f), new Vector3(1f, 2.2f, 1f), new Vector4(1f, 1f, 0f, 0.8f));
                     debugRenderer.DrawBox(new Vector3(-4.8f, 0.2f, -0.8f), new Vector3(-3.2f, 1.8f, 0.8f), new Vector4(0.9f, 0.6f, 0.4f, 0.8f));
                     debugRenderer.DrawBox(new Vector3(3.2f, 0.2f, -0.8f), new Vector3(4.8f, 1.8f, 0.8f), new Vector4(0.8f, 0.8f, 0.9f, 0.8f));
                     debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, -4.8f), new Vector3(0.8f, 1.8f, -3.2f), new Vector4(0.85f, 0.35f, 0.2f, 0.8f));
                     debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, 3.2f), new Vector3(0.8f, 1.8f, 4.8f), new Vector4(0.2f, 0.8f, 0.2f, 0.8f));
                     debugRenderer.DrawBox(new Vector3(-0.5f, 1.7f, -0.5f), new Vector3(0.5f, 4.7f, 0.5f), new Vector4(0.2f, 0.8f, 1.0f, 0.8f));
+
+                    // Physics demo dynamic bodies wireframe bounds
+                    for (int i = 0; i < demoPhysicsEntities.Count; i++)
+                    {
+                        var demoObj = demoPhysicsEntities[i];
+                        Vector3 dPos = demoObj.Body.PositionVector3;
+                        debugRenderer.DrawBox(dPos - demoObj.Scale, dPos + demoObj.Scale, new Vector4(0.2f, 1.0f, 0.4f, 0.8f));
+                    }
+
+                    // Character controller capsule wireframe bounds
+                    Vector3 charPos = characterController.PositionVector3;
+                    debugRenderer.DrawBox(charPos - new Vector3(0.3f, 0.9f, 0.3f), charPos + new Vector3(0.3f, 0.9f, 0.3f), new Vector4(1.0f, 0.4f, 0.9f, 0.9f));
                 }
                 else
                 {
@@ -1381,7 +1947,7 @@ public static class Program
                             originShift: originShift,
                             lightEnv: lightEnv,
                             visibleEntities: forwardRenderer.VisibleItemCount,
-                            totalEntities: 10,
+                            totalEntities: 10 + demoPhysicsEntities.Count,
                             shadowCasters: forwardRenderer.ShadowCasterCount,
                             terrainDrawCount: forwardRenderer.TerrainDrawCount,
                             terrainTriangleCount: forwardRenderer.TerrainTriangleCount,
@@ -1450,14 +2016,18 @@ public static class Program
                     VkAccessFlags2.None
                 );
 
-                // Update 4-Cascade CSM splits and light-space matrices with texel snapping
+                // Update 4-Cascade CSM splits and light-space matrices with world-anchored texel snapping
                 cascadedShadowMap.Update(
                     lightEnv.Sun.Direction,
                     camera.ViewMatrix,
                     camera.FovDegrees * (MathF.PI / 180.0f),
                     camera.AspectRatio,
                     camera.NearPlane,
-                    maxShadowDistance: 500.0f
+                    maxShadowDistance: 400.0f,
+                    lambda: 0.85f,
+                    camWorldX: camera.Position.X,
+                    camWorldY: camera.Position.Y,
+                    camWorldZ: camera.Position.Z
                 );
 
                 // ForwardRenderer3D schedules Shadows -> Skybox -> PBR Opaque (GPU-Driven Indirect or CPU Forward) -> Debug Wireframes passes

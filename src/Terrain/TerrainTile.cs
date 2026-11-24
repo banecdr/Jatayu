@@ -251,4 +251,78 @@ public sealed class TerrainTile
 
         return new TerrainTile(coord, samples, samples, heights, minH, maxH, tileSize: tileSize);
     }
+
+    /// <summary>
+    /// Jolt rigid body collider representing this tile's terrain surface in Ring A.
+    /// </summary>
+    public Physics.PhysicsBody? ColliderBody { get; internal set; }
+
+    /// <summary>
+    /// Spawns a static mesh collision shape in the physics engine for this tile.
+    /// </summary>
+    public void CreatePhysicsCollider(Physics.PhysicsEngine physicsEngine, in WorldPosition cameraPos, float tileSize = WorldConstants.TileSize)
+    {
+        if (physicsEngine == null) return;
+        DestroyPhysicsCollider(physicsEngine);
+
+        // Subsample elevation grid (17x17 grid = 16x16 quads = 16m resolution) for fast, robust collision
+        int gridX = 17;
+        int gridZ = 17;
+
+        int vertCount = gridX * gridZ;
+        var vertices = new Brutal.Numerics.float3[vertCount];
+
+        float relOriginX = (float)(Origin.X - cameraPos.X);
+        float relOriginZ = (float)(Origin.Z - cameraPos.Z);
+
+        float dx = tileSize / (gridX - 1);
+        float dz = tileSize / (gridZ - 1);
+
+        for (int gz = 0; gz < gridZ; gz++)
+        {
+            float localZ = gz * dz;
+            for (int gx = 0; gx < gridX; gx++)
+            {
+                float localX = gx * dx;
+                float height = SampleHeightLocal(localX, localZ, tileSize);
+                vertices[gz * gridX + gx] = new Brutal.Numerics.float3(relOriginX + localX, height, relOriginZ + localZ);
+            }
+        }
+
+        int quadCount = (gridX - 1) * (gridZ - 1);
+        var indices = new uint[quadCount * 6];
+        int idx = 0;
+        for (int gz = 0; gz < gridZ - 1; gz++)
+        {
+            for (int gx = 0; gx < gridX - 1; gx++)
+            {
+                uint i0 = (uint)(gz * gridX + gx);
+                uint i1 = (uint)(gz * gridX + gx + 1);
+                uint i2 = (uint)((gz + 1) * gridX + gx);
+                uint i3 = (uint)((gz + 1) * gridX + gx + 1);
+
+                indices[idx++] = i0;
+                indices[idx++] = i2;
+                indices[idx++] = i1;
+
+                indices[idx++] = i1;
+                indices[idx++] = i2;
+                indices[idx++] = i3;
+            }
+        }
+
+        ColliderBody = physicsEngine.CreateMeshBody(Brutal.Numerics.float3.Zero, vertices, indices);
+    }
+
+    /// <summary>
+    /// Destroys the physics collider when tile leaves Ring A or unloads.
+    /// </summary>
+    public void DestroyPhysicsCollider(Physics.PhysicsEngine? physicsEngine)
+    {
+        if (ColliderBody != null)
+        {
+            ColliderBody.Dispose();
+            ColliderBody = null;
+        }
+    }
 }

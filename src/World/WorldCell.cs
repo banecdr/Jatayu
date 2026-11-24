@@ -162,10 +162,131 @@ public sealed class WorldCell
     }
 
     /// <summary>
+    /// Active physics rigid bodies spawned for this cell while resident in Ring A.
+    /// </summary>
+    public List<Physics.PhysicsBody> ResidentBodies { get; } = new(16);
+
+    /// <summary>
+    /// Active 3D spatial audio emitters spawned for this cell while resident in Ring A.
+    /// </summary>
+    public List<Audio.AudioSource> ResidentAudioSources { get; } = new(8);
+
+    /// <summary>
+    /// Spawns static physics colliders in the physics engine for this cell in Ring A.
+    /// </summary>
+    public void SpawnPhysicsBodies(Physics.PhysicsEngine physicsEngine, in WorldPosition cameraPos)
+    {
+        if (physicsEngine == null || Colliders.Length == 0) return;
+        DespawnPhysicsBodies(physicsEngine);
+
+        for (int i = 0; i < Colliders.Length; i++)
+        {
+            ref readonly var col = ref Colliders[i];
+            double worldX = Origin.X + col.OffsetX;
+            double worldY = Origin.Y + col.OffsetY;
+            double worldZ = Origin.Z + col.OffsetZ;
+
+            float relX = (float)(worldX - cameraPos.X);
+            float relY = (float)(worldY - cameraPos.Y);
+            float relZ = (float)(worldZ - cameraPos.Z);
+            var pos = new Brutal.Numerics.float3(relX, relY, relZ);
+
+            Physics.PhysicsBody? body = null;
+            switch (col.ShapeType)
+            {
+                case ColliderShapeType.Box:
+                    body = physicsEngine.CreateBoxBody(pos, new Brutal.Numerics.float3(col.ExtentX, col.ExtentY, col.ExtentZ), Scene.Components.BodyMotionType.Static);
+                    break;
+                case ColliderShapeType.Sphere:
+                    body = physicsEngine.CreateSphereBody(pos, col.ExtentX, Scene.Components.BodyMotionType.Static);
+                    break;
+                case ColliderShapeType.Capsule:
+                    var capsule = new Physics.Colliders.CapsuleCollider(col.ExtentX, col.ExtentY);
+                    body = physicsEngine.CreateBody(capsule, pos, Brutal.Numerics.floatQuat.Identity, Scene.Components.BodyMotionType.Static);
+                    break;
+                case ColliderShapeType.Mesh:
+                    float ex = col.ExtentX > 0 ? col.ExtentX : 2.0f;
+                    float ey = col.ExtentY > 0 ? col.ExtentY : 2.0f;
+                    float ez = col.ExtentZ > 0 ? col.ExtentZ : 2.0f;
+                    body = physicsEngine.CreateBoxBody(pos, new Brutal.Numerics.float3(ex, ey, ez), Scene.Components.BodyMotionType.Static);
+                    break;
+            }
+
+            if (body != null)
+            {
+                ResidentBodies.Add(body);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes and disposes static physics colliders owned by this cell.
+    /// </summary>
+    public void DespawnPhysicsBodies(Physics.PhysicsEngine? physicsEngine)
+    {
+        for (int i = 0; i < ResidentBodies.Count; i++)
+        {
+            ResidentBodies[i].Dispose();
+        }
+        ResidentBodies.Clear();
+    }
+
+    /// <summary>
+    /// Spawns 3D spatial audio emitters for this cell in Ring A.
+    /// </summary>
+    public void SpawnAudioEmitters(Audio.AudioEngine audioEngine, in WorldPosition cameraPos)
+    {
+        if (audioEngine == null || !audioEngine.IsHardwareAvailable || AudioEmitters.Length == 0) return;
+        DespawnAudioEmitters(audioEngine);
+
+        for (int i = 0; i < AudioEmitters.Length; i++)
+        {
+            ref readonly var emitter = ref AudioEmitters[i];
+            double worldX = Origin.X + emitter.OffsetX;
+            double worldY = Origin.Y + emitter.OffsetY;
+            double worldZ = Origin.Z + emitter.OffsetZ;
+
+            float relX = (float)(worldX - cameraPos.X);
+            float relY = (float)(worldY - cameraPos.Y);
+            float relZ = (float)(worldZ - cameraPos.Z);
+
+            var source = audioEngine.CreateSource();
+            if (source != null)
+            {
+                source.Position = new Brutal.Numerics.float3(relX, relY, relZ);
+                source.Gain = emitter.Volume > 0 ? emitter.Volume : 0.5f;
+                source.MaxDistance = emitter.Radius > 0 ? emitter.Radius : 50.0f;
+                source.ReferenceDistance = 2.0f;
+                source.IsLooping = true;
+                if (audioEngine.FootstepClip != null)
+                {
+                    source.Clip = audioEngine.FootstepClip;
+                    source.Play();
+                }
+                ResidentAudioSources.Add(source);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes and disposes 3D audio emitters owned by this cell.
+    /// </summary>
+    public void DespawnAudioEmitters(Audio.AudioEngine? audioEngine)
+    {
+        for (int i = 0; i < ResidentAudioSources.Count; i++)
+        {
+            audioEngine?.RemoveSource(ResidentAudioSources[i]);
+        }
+        ResidentAudioSources.Clear();
+    }
+
+    /// <summary>
     /// Cleans up CPU instance arrays when cell is unloaded.
     /// </summary>
     public void Unload()
     {
+        DespawnPhysicsBodies(null);
+        DespawnAudioEmitters(null);
         State = CellState.Unloaded;
         Ring = StreamingRing.None;
         StaticInstances = Array.Empty<CookedStaticInstance>();

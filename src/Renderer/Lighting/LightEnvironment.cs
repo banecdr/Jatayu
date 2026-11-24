@@ -51,10 +51,10 @@ public sealed class LightEnvironment
     public Vector3 AmbientSkyColor { get; set; } = new(0.2f, 0.35f, 0.6f);
     public Vector3 AmbientGroundColor { get; set; } = new(0.1f, 0.08f, 0.05f);
     public float AmbientIntensity { get; set; } = 0.4f;
-    public float ShadowBias { get; set; } = 0.00015f;
+    public float ShadowBias { get; set; } = 0.00012f;
     public float ShadowOrthoExtents { get; set; } = 80.0f;
-    public bool HighQualityShadows { get; set; } = false;
-    public float ShadowFilterRadius { get; set; } = 1.6f;
+    public bool HighQualityShadows { get; set; } = true;
+    public float ShadowFilterRadius { get; set; } = 1.4f;
     public ShadowDebugMode ShadowDebugMode { get; set; }
 
     /// <summary>

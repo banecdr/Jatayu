@@ -115,35 +115,39 @@ void main() {
     }
 
     // 4. Hi-Z Occlusion Culling (Reverse-Z MIN reduction)
-    if (u_Uniforms.HiZScreenSize.x > 0.0) {
+    // Bit 2 of Flags (value 4) marks instances that must bypass Hi-Z occlusion (e.g. ground plinth)
+    if (u_Uniforms.HiZScreenSize.x > 0.0 && (inst.Flags & 4u) == 0u) {
         vec4 clipCenter = u_Uniforms.ViewProj * vec4(center, 1.0);
         if (clipCenter.w > 0.001) {
-            // Projected screen-space radius using projection scaling
-            float projRadius = (radius / clipCenter.w) * abs(u_Uniforms.ViewProj[1][1]);
-            vec2 screenUv = (clipCenter.xy / clipCenter.w) * 0.5 + 0.5;
+            float dNear = dist - radius;
+            if (dNear > 0.01) {
+                // Projected screen-space radius using projection scaling
+                float projRadius = (radius / clipCenter.w) * abs(u_Uniforms.ViewProj[1][1]);
+                vec2 screenUv = (clipCenter.xy / clipCenter.w) * 0.5 + 0.5;
 
-            vec2 minUv = clamp(screenUv - vec2(projRadius), 0.0, 1.0);
-            vec2 maxUv = clamp(screenUv + vec2(projRadius), 0.0, 1.0);
-            vec2 aabbPixels = (maxUv - minUv) * u_Uniforms.HiZScreenSize;
+                vec2 minUv = clamp(screenUv - vec2(projRadius), 0.0, 1.0);
+                vec2 maxUv = clamp(screenUv + vec2(projRadius), 0.0, 1.0);
+                vec2 aabbPixels = (maxUv - minUv) * u_Uniforms.HiZScreenSize;
 
-            float maxDim = max(aabbPixels.x, aabbPixels.y);
-            if (maxDim > 1.0) {
-                float mip = clamp(ceil(log2(maxDim)), 0.0, 12.0);
+                float maxDim = max(aabbPixels.x, aabbPixels.y);
+                if (maxDim > 1.0) {
+                    float mip = clamp(ceil(log2(maxDim)), 0.0, 12.0);
 
-                // Sample 4 taps covering the projected AABB
-                float s0 = textureLod(u_HiZPyramid, vec2(minUv.x, minUv.y), mip).r;
-                float s1 = textureLod(u_HiZPyramid, vec2(maxUv.x, minUv.y), mip).r;
-                float s2 = textureLod(u_HiZPyramid, vec2(minUv.x, maxUv.y), mip).r;
-                float s3 = textureLod(u_HiZPyramid, vec2(maxUv.x, maxUv.y), mip).r;
-                float hizDepth = min(min(s0, s1), min(s2, s3));
+                    // Sample 4 taps covering the projected AABB
+                    float s0 = textureLod(u_HiZPyramid, vec2(minUv.x, minUv.y), mip).r;
+                    float s1 = textureLod(u_HiZPyramid, vec2(maxUv.x, minUv.y), mip).r;
+                    float s2 = textureLod(u_HiZPyramid, vec2(minUv.x, maxUv.y), mip).r;
+                    float s3 = textureLod(u_HiZPyramid, vec2(maxUv.x, maxUv.y), mip).r;
+                    float hizDepth = min(min(s0, s1), min(s2, s3));
 
-                // Under Reverse-Z, smaller depth = farther away.
-                // Sphere closest point depth in NDC:
-                float sphereNearestZ = (clipCenter.z + radius) / clipCenter.w;
+                    // Under Reverse-Z infinite projection, nearest NDC depth on sphere is nearPlane / dNear:
+                    // ViewProj[3][2] contains nearPlane (from M43 in System.Numerics row-vector matrix)
+                    float sphereNearestZ = abs(u_Uniforms.ViewProj[3][2]) / dNear;
 
-                // If the closest point of our sphere is farther than the furthest occluder, it is fully occluded!
-                if (sphereNearestZ < hizDepth) {
-                    return; // Culled!
+                    // If the closest point of our sphere is farther than the furthest occluder, it is fully occluded!
+                    if (sphereNearestZ < hizDepth) {
+                        return; // Culled!
+                    }
                 }
             }
         }

@@ -127,6 +127,8 @@ public static class Input
         return s_gamepads[index];
     }
 
+    private static bool s_mouseInitialized;
+
     /// <summary>
     /// Prepares input state at the beginning of each frame.
     /// Copies current keys to previous keys and resets per-frame deltas.
@@ -136,8 +138,7 @@ public static class Input
         Array.Copy(s_currentKeys, s_previousKeys, MaxKeys);
         Array.Copy(s_currentMouse, s_previousMouse, MaxMouseButtons);
 
-        s_mouseDelta = s_mousePosition - s_previousMousePosition;
-        s_previousMousePosition = s_mousePosition;
+        s_mouseDelta = Vector2.Zero;
         s_scrollDelta = Vector2.Zero;
     }
 
@@ -168,7 +169,24 @@ public static class Input
     /// </summary>
     public static void RecordMouseMove(float x, float y)
     {
-        s_mousePosition = new Vector2(x, y);
+        var newPos = new Vector2(x, y);
+        if (s_mouseInitialized)
+        {
+            s_mouseDelta += newPos - s_mousePosition;
+        }
+        else
+        {
+            s_mouseInitialized = true;
+        }
+        s_mousePosition = newPos;
+    }
+
+    /// <summary>
+    /// Resets the accumulated mouse movement delta for the current frame.
+    /// </summary>
+    public static void ResetMouseDelta()
+    {
+        s_mouseDelta = Vector2.Zero;
     }
 
     /// <summary>
@@ -192,6 +210,7 @@ public static class Input
         s_previousMousePosition = Vector2.Zero;
         s_mouseDelta = Vector2.Zero;
         s_scrollDelta = Vector2.Zero;
+        s_mouseInitialized = false;
 
         for (int i = 0; i < MaxGamepads; i++)
         {

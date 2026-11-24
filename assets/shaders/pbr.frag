@@ -169,7 +169,7 @@ vec3 ShadowDebugColor(float value) {
     return vec3(value);
 }
 
-float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
+float EvaluateShadow(vec3 worldPos, vec3 N, float viewDepth, float bias, float NdotL) {
     uint shadowMode = uLight.CastsShadows & 3u;
     uint debugMode = uint(round(uLight.ShadowParams.w));
     if (debugMode == 0u && (shadowMode == 0u || NdotL <= 0.0)) {
@@ -198,7 +198,11 @@ float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
         else if (c == 2) cascadeVP = uLight.CascadeViewProj2;
         else cascadeVP = uLight.CascadeViewProj3;
 
-        vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
+        // Normal-offset bias eliminates acne on curved spheres and grounds contact shadows
+        float normalOffset = 0.02 * float(c + 1) * clamp(1.0 - NdotL * 0.5, 0.2, 1.0);
+        vec3 biasedWorldPos = worldPos + N * normalOffset;
+
+        vec4 shadowClip = cascadeVP * vec4(biasedWorldPos, 1.0);
         vec3 p = shadowClip.xyz / shadowClip.w;
 
         // Convert from Vulkan NDC [-1, 1] to texture UV [0, 1]
@@ -310,7 +314,7 @@ void main() {
     vec3 specular = numerator / denominator;
 
     float NdotL = max(dot(N, L), 0.0);
-    float shadow = EvaluateShadow(vWorldPos, vCurrClipPos.w, uLight.ShadowBias, NdotL);
+    float shadow = EvaluateShadow(vWorldPos, N, vCurrClipPos.w, uLight.ShadowBias, NdotL);
     if (uLight.ShadowParams.w > 0.5) {
         outColor = vec4(ShadowDebugColor(shadow), 1.0);
         return;

@@ -182,13 +182,21 @@ public sealed class Window : IDisposable
 
     /// <summary>
     /// Event fired when a keyboard key is pressed, released, or repeated.
-    /// Passes (GlfwKey key, GlfwInputAction action).
-    /// </summary>
-    /// <summary>
-    /// Event fired when a keyboard key is pressed, released, or repeated.
     /// Passes (GlfwKey key, GlfwKeyAction action).
     /// </summary>
     public event Action<GlfwKey, GlfwKeyAction>? KeyAction;
+
+    /// <summary>
+    /// Event fired when a mouse button is pressed or released.
+    /// Passes (GlfwMouseButton button, GlfwButtonAction action).
+    /// </summary>
+    public event Action<GlfwMouseButton, GlfwButtonAction>? MouseButtonAction;
+
+    /// <summary>
+    /// Event fired when the mouse scroll wheel is moved.
+    /// Passes (double xOffset, double yOffset).
+    /// </summary>
+    public event Action<double, double>? MouseScrolled;
 
     /// <summary>
     /// Checks if a keyboard key is currently held down.
@@ -196,6 +204,22 @@ public sealed class Window : IDisposable
     /// <param name="key">The GLFW key code to check.</param>
     /// <returns>True if the key is currently pressed, false otherwise.</returns>
     public bool IsKeyDown(GlfwKey key) => _window.GetKey(key) == GlfwKeyAction.Press;
+
+    /// <summary>
+    /// Checks if a mouse button is currently held down.
+    /// </summary>
+    /// <param name="button">The GLFW mouse button to check.</param>
+    /// <returns>True if the button is currently pressed, false otherwise.</returns>
+    public bool IsMouseButtonDown(GlfwMouseButton button) => _window.GetMouseButton(button) == GlfwButtonAction.Press;
+
+    /// <summary>
+    /// Gets or sets whether the mouse cursor is captured (hidden and locked to window for raw virtual mouse motion).
+    /// </summary>
+    public bool IsCursorCaptured
+    {
+        get => _window.GetInputMode(GlfwInputMode.Cursor) == (int)GlfwCursorMode.Disabled;
+        set => _window.SetInputMode(GlfwInputMode.Cursor, value ? (int)GlfwCursorMode.Disabled : (int)GlfwCursorMode.Normal);
+    }
 
     /// <summary>
     /// Creates and displays a new GLFW window configured specifically for Vulkan.
@@ -259,6 +283,7 @@ public sealed class Window : IDisposable
     private void HandleMouseButton(GlfwWindow window, GlfwMouseButton button, GlfwButtonAction action, GlfwModifier mods)
     {
         EngineInput.RecordMouseButton((int)button, action == GlfwButtonAction.Press);
+        MouseButtonAction?.Invoke(button, action);
     }
 
     private void HandleCursorPos(GlfwWindow window, double2 pos)
@@ -269,6 +294,7 @@ public sealed class Window : IDisposable
     private void HandleScroll(GlfwWindow window, double2 offset)
     {
         EngineInput.RecordScroll((float)offset.X, (float)offset.Y);
+        MouseScrolled?.Invoke(offset.X, offset.Y);
     }
 
     private static void EnsureGlfwInitialized()
