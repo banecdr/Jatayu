@@ -27,6 +27,7 @@ layout(location = 2) out vec2 outTexCoord;
 layout(location = 3) out float outMorphFactor;
 layout(location = 4) out float outRingIndex;
 layout(location = 5) out vec2 outGridPos;
+layout(location = 6) out vec4 outClipPos;
 
 float evaluateElevation(vec2 worldPos)
 {
@@ -69,5 +70,7 @@ void main()
     outRingIndex = ringIndex;
     outGridPos = inPosition.xz;
 
-    gl_Position = pc.ViewProjMatrix * vec4(relWorldPos, 1.0);
+    vec4 clipPos = pc.ViewProjMatrix * vec4(relWorldPos, 1.0);
+    gl_Position = clipPos;
+    outClipPos = clipPos;
 }

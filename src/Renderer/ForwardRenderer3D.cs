@@ -139,6 +139,8 @@ public sealed class ForwardRenderer3D : IDisposable
     // Preallocated render pass callbacks (0 delegate/closure allocations per frame)
     private readonly Action<RenderPassBuilder> _shadowPassSetup;
     private readonly Action<RenderPassContext> _shadowPassExecute;
+    private readonly Action<RenderPassBuilder>[] _cascadeShadowPassSetups = new Action<RenderPassBuilder>[CascadedShadowMap.CascadeCount];
+    private readonly Action<RenderPassContext>[] _cascadeShadowPassExecutes = new Action<RenderPassContext>[CascadedShadowMap.CascadeCount];
     private readonly Action<RenderPassBuilder> _skyboxPassSetup;
     private readonly Action<RenderPassContext> _skyboxPassExecute;
     private readonly Action<RenderPassBuilder> _pbrPassSetup;
@@ -159,9 +161,12 @@ public sealed class ForwardRenderer3D : IDisposable
 
     // Per-frame pass arguments stored on instance to avoid lambda captures
     private RgTextureHandle _currentShadowDepthHandle;
+    private CascadedShadowMap? _currentCascadedShadowMap;
+    private readonly RgTextureHandle[] _currentCascadeDepthHandles = new RgTextureHandle[CascadedShadowMap.CascadeCount];
+    private readonly Matrix4x4[] _currentCascadeVps = new Matrix4x4[CascadedShadowMap.CascadeCount];
     private RgTextureHandle _currentColorTarget;
     private RgTextureHandle _currentDepthTarget;
-    private ShadowMap _currentShadowMap = null!;
+    private ShadowMap? _currentShadowMap;
     private BindlessTable _currentBindlessTable = null!;
     private Matrix4x4 _currentShadowLightVp;
     private Matrix4x4 _currentVp;
@@ -286,6 +291,14 @@ public sealed class ForwardRenderer3D : IDisposable
         // 6. Preallocate RenderPass Callbacks (0 allocations per frame)
         _shadowPassSetup = SetupShadowPass;
         _shadowPassExecute = ExecuteShadowPass;
+        _cascadeShadowPassSetups[0] = SetupCascadeShadowPass0;
+        _cascadeShadowPassSetups[1] = SetupCascadeShadowPass1;
+        _cascadeShadowPassSetups[2] = SetupCascadeShadowPass2;
+        _cascadeShadowPassSetups[3] = SetupCascadeShadowPass3;
+        _cascadeShadowPassExecutes[0] = ExecuteCascadeShadowPass0;
+        _cascadeShadowPassExecutes[1] = ExecuteCascadeShadowPass1;
+        _cascadeShadowPassExecutes[2] = ExecuteCascadeShadowPass2;
+        _cascadeShadowPassExecutes[3] = ExecuteCascadeShadowPass3;
         _skyboxPassSetup = SetupSkyboxPass;
         _skyboxPassExecute = ExecuteSkyboxPass;
         _pbrPassSetup = SetupPbrPass;
@@ -550,7 +563,112 @@ public sealed class ForwardRenderer3D : IDisposable
         Scene.Scene scene,
         Camera3D camera,
         LightEnvironment lightEnv,
+        CascadedShadowMap cascadedShadowMap,
+        BindlessTable bindlessTable,
+        MaterialTable materialTable,
+        GeometryPool geometryPool,
+        DynamicInstanceRing? instanceRing,
+        DebugRenderer? debugRenderer,
+        RgTextureHandle colorTarget,
+        RgTextureHandle depthTarget,
+        OriginShift? originShift = null,
+        WorldGrid? worldGrid = null,
+        Func<AssetGuid, Mesh.Mesh?>? meshResolver = null,
+        TerrainClipmap? terrainClipmap = null,
+        InstanceBuffer? instanceBuffer = null,
+        IndirectDrawBuffer? indirectDrawBuffer = null,
+        GpuCuller? gpuCuller = null,
+        HiZBuilder? hizBuilder = null,
+        DepthBuffer? depthBuffer = null)
+    {
+        Render(
+            graph,
+            scene,
+            camera,
+            lightEnv,
+            cascadedShadowMap: cascadedShadowMap,
+            shadowMap: null,
+            bindlessTable,
+            materialTable,
+            geometryPool,
+            instanceRing,
+            debugRenderer,
+            colorTarget,
+            depthTarget,
+            originShift,
+            worldGrid,
+            meshResolver,
+            terrainClipmap,
+            instanceBuffer,
+            indirectDrawBuffer,
+            gpuCuller,
+            hizBuilder,
+            depthBuffer
+        );
+    }
+
+    /// <summary>
+    /// Records all 3D forward rendering passes using single ShadowMap fallback into the render graph.
+    /// </summary>
+    public unsafe void Render(
+        RenderGraph graph,
+        Scene.Scene scene,
+        Camera3D camera,
+        LightEnvironment lightEnv,
         ShadowMap shadowMap,
+        BindlessTable bindlessTable,
+        MaterialTable materialTable,
+        GeometryPool geometryPool,
+        DynamicInstanceRing? instanceRing,
+        DebugRenderer? debugRenderer,
+        RgTextureHandle colorTarget,
+        RgTextureHandle depthTarget,
+        OriginShift? originShift = null,
+        WorldGrid? worldGrid = null,
+        Func<AssetGuid, Mesh.Mesh?>? meshResolver = null,
+        TerrainClipmap? terrainClipmap = null,
+        InstanceBuffer? instanceBuffer = null,
+        IndirectDrawBuffer? indirectDrawBuffer = null,
+        GpuCuller? gpuCuller = null,
+        HiZBuilder? hizBuilder = null,
+        DepthBuffer? depthBuffer = null)
+    {
+        Render(
+            graph,
+            scene,
+            camera,
+            lightEnv,
+            cascadedShadowMap: null,
+            shadowMap: shadowMap,
+            bindlessTable,
+            materialTable,
+            geometryPool,
+            instanceRing,
+            debugRenderer,
+            colorTarget,
+            depthTarget,
+            originShift,
+            worldGrid,
+            meshResolver,
+            terrainClipmap,
+            instanceBuffer,
+            indirectDrawBuffer,
+            gpuCuller,
+            hizBuilder,
+            depthBuffer
+        );
+    }
+
+    /// <summary>
+    /// Records all 3D forward rendering passes into the render graph using either CascadedShadowMap or single ShadowMap.
+    /// </summary>
+    public unsafe void Render(
+        RenderGraph graph,
+        Scene.Scene scene,
+        Camera3D camera,
+        LightEnvironment lightEnv,
+        CascadedShadowMap? cascadedShadowMap,
+        ShadowMap? shadowMap,
         BindlessTable bindlessTable,
         MaterialTable materialTable,
         GeometryPool geometryPool,
@@ -572,13 +690,14 @@ public sealed class ForwardRenderer3D : IDisposable
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(lightEnv);
-        ArgumentNullException.ThrowIfNull(shadowMap);
+        if (cascadedShadowMap == null && shadowMap == null)
+            throw new ArgumentNullException(nameof(cascadedShadowMap), "Either cascadedShadowMap or shadowMap must be provided.");
         ArgumentNullException.ThrowIfNull(bindlessTable);
         ArgumentNullException.ThrowIfNull(materialTable);
         ArgumentNullException.ThrowIfNull(geometryPool);
 
         // 1. Update LightEnvironment GPU buffer (centered around camera-relative origin Vector3.Zero)
-        var lightGpuData = lightEnv.ToGpuData(Vector3.Zero);
+        var lightGpuData = lightEnv.ToGpuData(Vector3.Zero, cascadedShadowMap);
         UpdateLightBuffer(in lightGpuData);
 
         Matrix4x4 shadowLightVp = lightGpuData.LightViewProj;
@@ -591,10 +710,13 @@ public sealed class ForwardRenderer3D : IDisposable
             Range = new ByteSize64((ulong)sizeof(GpuLightEnvironmentData)),
         };
 
+        VkSampler shadowSampler = cascadedShadowMap != null ? cascadedShadowMap.ComparisonSampler : shadowMap!.ComparisonSampler;
+        VkImageView shadowView = cascadedShadowMap != null ? cascadedShadowMap.FullArrayView : shadowMap!.ImageView;
+
         var shadowImageInfo = new VkDescriptorImageInfo
         {
-            Sampler = shadowMap.ComparisonSampler,
-            ImageView = shadowMap.ImageView,
+            Sampler = shadowSampler,
+            ImageView = shadowView,
             ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
         };
 
@@ -733,22 +855,45 @@ public sealed class ForwardRenderer3D : IDisposable
             }
         }
 
-        // 4. Import Shadow Map depth target into RenderGraph
-        var shadowDepthHandle = graph.ImportTexture(
-            "ShadowMapDepth",
-            shadowMap.Texture.Image,
-            shadowMap.ImageView,
-            DepthConvention.DepthFormat,
-            (uint)shadowMap.Resolution,
-            (uint)shadowMap.Resolution,
-            VkImageLayout.Undefined
-        );
+        // 4. Import Shadow Map depth target(s) into RenderGraph
+        _currentCascadedShadowMap = cascadedShadowMap;
+        _currentShadowMap = shadowMap;
+
+        if (cascadedShadowMap != null)
+        {
+            var cascades = cascadedShadowMap.Cascades;
+            for (int i = 0; i < CascadedShadowMap.CascadeCount; i++)
+            {
+                _currentCascadeVps[i] = cascades[i].ViewProjection;
+                _currentCascadeDepthHandles[i] = graph.ImportTexture(
+                    $"CascadeDepth_{i}",
+                    cascadedShadowMap.Texture.Image,
+                    cascadedShadowMap.GetLayerView(i),
+                    DepthConvention.DepthFormat,
+                    (uint)cascadedShadowMap.Resolution,
+                    (uint)cascadedShadowMap.Resolution,
+                    VkImageLayout.Undefined,
+                    layerCount: 1,
+                    baseArrayLayer: i
+                );
+            }
+        }
+        else if (shadowMap != null)
+        {
+            _currentShadowDepthHandle = graph.ImportTexture(
+                "ShadowMapDepth",
+                shadowMap.Texture.Image,
+                shadowMap.ImageView,
+                DepthConvention.DepthFormat,
+                (uint)shadowMap.Resolution,
+                (uint)shadowMap.Resolution,
+                VkImageLayout.Undefined
+            );
+        }
 
         // Store frame arguments in fields to allow zero-allocation cached delegate execution
-        _currentShadowDepthHandle = shadowDepthHandle;
         _currentColorTarget = colorTarget;
         _currentDepthTarget = depthTarget;
-        _currentShadowMap = shadowMap;
         _currentBindlessTable = bindlessTable;
         _currentShadowLightVp = shadowLightVp;
         _currentVp = vp;
@@ -768,10 +913,20 @@ public sealed class ForwardRenderer3D : IDisposable
             graph.AddPass("GpuCullPass", _cullPassSetup, _cullPassExecute);
         }
 
-        // 6. Register Shadow Pass
+        // 6. Register Shadow Pass(es)
         if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
         {
-            graph.AddPass("ShadowPass", _shadowPassSetup, _shadowPassExecute);
+            if (cascadedShadowMap != null)
+            {
+                for (int i = 0; i < CascadedShadowMap.CascadeCount; i++)
+                {
+                    graph.AddPass($"ShadowCascadePass_{i}", _cascadeShadowPassSetups[i], _cascadeShadowPassExecutes[i]);
+                }
+            }
+            else if (shadowMap != null)
+            {
+                graph.AddPass("ShadowPass", _shadowPassSetup, _shadowPassExecute);
+            }
         }
 
         // 7. Register Skybox Pass (Renders at Reverse-Z infinity: Z = 0.0)
@@ -797,6 +952,73 @@ public sealed class ForwardRenderer3D : IDisposable
         }
     }
 
+    private void SetupCascadeShadowPass0(RenderPassBuilder b) => SetupCascadeShadowPass(b, 0);
+    private void SetupCascadeShadowPass1(RenderPassBuilder b) => SetupCascadeShadowPass(b, 1);
+    private void SetupCascadeShadowPass2(RenderPassBuilder b) => SetupCascadeShadowPass(b, 2);
+    private void SetupCascadeShadowPass3(RenderPassBuilder b) => SetupCascadeShadowPass(b, 3);
+
+    private void ExecuteCascadeShadowPass0(RenderPassContext ctx) => ExecuteCascadeShadowPass(ctx, 0);
+    private void ExecuteCascadeShadowPass1(RenderPassContext ctx) => ExecuteCascadeShadowPass(ctx, 1);
+    private void ExecuteCascadeShadowPass2(RenderPassContext ctx) => ExecuteCascadeShadowPass(ctx, 2);
+    private void ExecuteCascadeShadowPass3(RenderPassContext ctx) => ExecuteCascadeShadowPass(ctx, 3);
+
+    private void SetupCascadeShadowPass(RenderPassBuilder builder, int cascadeIndex)
+    {
+        builder.SetDepthAttachment(
+            _currentCascadeDepthHandles[cascadeIndex],
+            VkAttachmentLoadOp.Clear,
+            VkAttachmentStoreOp.Store,
+            DepthConvention.ClearDepth
+        );
+    }
+
+    private unsafe void ExecuteCascadeShadowPass(RenderPassContext ctx, int cascadeIndex)
+    {
+        if (_currentCascadedShadowMap == null) return;
+        var cmd = ctx.CommandBuffer;
+        cmd.BindPipeline(VkPipelineBindPoint.Graphics, _shadowPipeline.Handle);
+
+        int res = _currentCascadedShadowMap.Resolution;
+        _viewports[0] = new VkViewport
+        {
+            X = 0f,
+            Y = 0f,
+            Width = res,
+            Height = res,
+            MinDepth = 0f,
+            MaxDepth = 1f,
+        };
+        cmd.SetViewport(0, _viewports);
+        _scissors[0] = new VkRect2D(new VkExtent2D(res, res));
+        cmd.SetScissor(0, _scissors);
+
+        Matrix4x4 cascadeVp = _currentCascadeVps[cascadeIndex];
+
+        for (int i = 0; i < _shadowCasters.Count; i++)
+        {
+            var item = _shadowCasters[i];
+            var pc = new ShadowPushConstants
+            {
+                LightViewProj = cascadeVp,
+                ModelMatrix = item.CameraRelativeModel,
+            };
+
+            CommandBufferExtensions.PushConstants(
+                cmd,
+                _shadowPipelineLayout,
+                VkShaderStageFlags.VertexBit,
+                new ByteSize(0),
+                new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
+            );
+
+            _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+            cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+            cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+        }
+    }
+
     private void SetupShadowPass(RenderPassBuilder builder)
     {
         builder.SetDepthAttachment(
@@ -809,6 +1031,7 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private unsafe void ExecuteShadowPass(RenderPassContext ctx)
     {
+        if (_currentShadowMap == null) return;
         var cmd = ctx.CommandBuffer;
         cmd.BindPipeline(VkPipelineBindPoint.Graphics, _shadowPipeline.Handle);
 
@@ -893,7 +1116,17 @@ public sealed class ForwardRenderer3D : IDisposable
     {
         builder.SetColorAttachment(_currentColorTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
         builder.SetDepthAttachment(_currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-        builder.ReadTexture(_currentShadowDepthHandle, VkPipelineStageFlags2.FragmentShaderBit, VkAccessFlags2.ShaderSampledReadBit, VkImageLayout.ShaderReadOnlyOptimal);
+        if (_currentCascadedShadowMap != null)
+        {
+            for (int i = 0; i < CascadedShadowMap.CascadeCount; i++)
+            {
+                builder.ReadTexture(_currentCascadeDepthHandles[i], VkPipelineStageFlags2.FragmentShaderBit, VkAccessFlags2.ShaderSampledReadBit, VkImageLayout.ShaderReadOnlyOptimal);
+            }
+        }
+        else if (_currentShadowMap != null)
+        {
+            builder.ReadTexture(_currentShadowDepthHandle, VkPipelineStageFlags2.FragmentShaderBit, VkAccessFlags2.ShaderSampledReadBit, VkImageLayout.ShaderReadOnlyOptimal);
+        }
     }
 
     private unsafe void ExecutePbrPass(RenderPassContext ctx)

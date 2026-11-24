@@ -38,9 +38,15 @@ layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     vec3 AmbientGroundColor;
     float ShadowBias;
     mat4 LightViewProj;
+    vec4 CascadeSplits;
+    mat4 CascadeViewProj0;
+    mat4 CascadeViewProj1;
+    mat4 CascadeViewProj2;
+    mat4 CascadeViewProj3;
+    vec4 ShadowParams;
 } uLight;
 
-layout(set = 0, binding = 1) uniform sampler2DShadow uShadowMap;
+layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
 
 layout(std430, set = 0, binding = 2) readonly buffer MaterialStorage {
     GpuMaterialData materials[];
@@ -107,13 +113,35 @@ const vec2 POISSON_DISK[16] = vec2[](
     vec2( 0.14383161, -0.14100790)
 );
 
-// Directional shadow map evaluation with Reverse-Z comparison and 16-tap Poisson or 3x3 PCF
-float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
+// Directional shadow map evaluation with 4-Cascade CSM, Reverse-Z comparison and 16-tap Poisson or 3x3 PCF
+float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
     if (uLight.CastsShadows == 0u || NdotL <= 0.0) {
         return NdotL <= 0.0 ? 0.0 : 1.0;
     }
 
-    vec3 projCoords = shadowCoord.xyz / shadowCoord.w;
+    // Determine cascade index based on view space depth
+    int cascadeIndex = 0;
+    if (viewDepth > uLight.CascadeSplits.x) cascadeIndex = 1;
+    if (viewDepth > uLight.CascadeSplits.y) cascadeIndex = 2;
+    if (viewDepth > uLight.CascadeSplits.z) cascadeIndex = 3;
+
+    // Beyond max shadow distance -> fully unshadowed
+    if (viewDepth > uLight.CascadeSplits.w) {
+        return 1.0;
+    }
+
+    mat4 cascadeVP;
+    if (cascadeIndex == 0) cascadeVP = uLight.CascadeViewProj0;
+    else if (cascadeIndex == 1) cascadeVP = uLight.CascadeViewProj1;
+    else if (cascadeIndex == 2) cascadeVP = uLight.CascadeViewProj2;
+    else cascadeVP = uLight.CascadeViewProj3;
+
+    vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
+    vec3 projCoords = shadowClip.xyz / shadowClip.w;
+
+    // Convert from Vulkan NDC [-1, 1] to texture UV [0, 1]
+    projCoords.x = projCoords.x * 0.5 + 0.5;
+    projCoords.y = projCoords.y * 0.5 + 0.5;
 
     // Outside light frustum -> no shadow
     if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
@@ -123,20 +151,22 @@ float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
     }
 
     // In Reverse-Z, closer to light is higher depth value (1.0 = near, 0.0 = far).
-    // Slope-scaled tangent bias pushes the reference depth closer to the light, preventing grazing shadow acne.
+    // Slope-scaled tangent bias pushes the reference depth closer to the light.
+    float cascadeScale = float(cascadeIndex + 1);
     float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
-    float dynamicBias = clamp(bias * (1.0 + tanTheta * 1.5), bias * 0.5, 0.008);
+    float dynamicBias = clamp(bias * cascadeScale * (1.0 + tanTheta * 1.5), bias * 0.5, 0.015);
     float currentDepth = projCoords.z + dynamicBias;
 
-    vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0));
+    vec2 texelSize = vec2(uLight.ShadowParams.y);
     float shadow = 0.0;
+    float layer = float(cascadeIndex);
 
     if (uLight.CastsShadows >= 2u) {
         // Ultra High-Quality Mode: 16-tap Poisson Disk filter (eliminates stair-stepping jaggedness)
-        float filterRadius = 1.6;
+        float filterRadius = uLight.ShadowParams.z;
         for (int i = 0; i < 16; ++i) {
             vec2 offset = POISSON_DISK[i] * (texelSize * filterRadius);
-            shadow += texture(uShadowMap, vec3(projCoords.xy + offset, currentDepth));
+            shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
         }
         return shadow / 16.0;
     } else {
@@ -144,7 +174,7 @@ float EvaluateShadow(vec4 shadowCoord, float bias, float NdotL) {
         for (int x = -1; x <= 1; ++x) {
             for (int y = -1; y <= 1; ++y) {
                 vec2 offset = vec2(x, y) * texelSize;
-                shadow += texture(uShadowMap, vec3(projCoords.xy + offset, currentDepth));
+                shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
             }
         }
         return shadow / 9.0;
@@ -207,7 +237,7 @@ void main() {
     vec3 specular = numerator / denominator;
 
     float NdotL = max(dot(N, L), 0.0);
-    float shadow = EvaluateShadow(vShadowCoord, uLight.ShadowBias, NdotL);
+    float shadow = EvaluateShadow(vWorldPos, vCurrClipPos.w, uLight.ShadowBias, NdotL);
 
     // Directional light radiance (calibrated for SDR viewport)
     vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);

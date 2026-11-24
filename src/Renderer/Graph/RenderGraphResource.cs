@@ -85,6 +85,8 @@ internal sealed class RgTextureResource
     public uint Height { get; set; }
     public VkImageAspectFlags Aspect { get; set; }
     public VkImageUsageFlags Usage { get; set; }
+    public int BaseArrayLayer { get; set; } = 0;
+    public int LayerCount { get; set; } = 1;
 
     // Live synchronization state
     public VkImageLayout InitialLayout { get; set; }

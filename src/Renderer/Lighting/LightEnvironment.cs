@@ -10,20 +10,26 @@ using System.Runtime.InteropServices;
 namespace Jatayu.Renderer.Lighting;
 
 /// <summary>
-/// GPU-packed uniform buffer representation of the active lighting environment.
+/// GPU-packed uniform buffer representation of the active lighting environment and 4-cascade shadow matrices.
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 128)]
+[StructLayout(LayoutKind.Sequential, Size = 416)]
 public struct GpuLightEnvironmentData
 {
     public Vector3 SunDirection;       // 12 bytes: Normalized light direction
     public float SunIntensity;         // 4 bytes: Sun intensity in lux
     public Vector3 SunColor;           // 12 bytes: Linear RGB sun color
-    public uint CastsShadows;          // 4 bytes: 1 if shadow pass active, 0 otherwise
+    public uint CastsShadows;          // 4 bytes: 0=Disabled, 1=Standard (PCF), 2=Ultra HQ (Poisson)
     public Vector3 AmbientSkyColor;    // 12 bytes: Hemispherical zenith color
     public float AmbientIntensity;     // 4 bytes: Ambient intensity factor
     public Vector3 AmbientGroundColor; // 12 bytes: Hemispherical nadir ground reflection
     public float ShadowBias;           // 4 bytes: Constant depth bias
-    public Matrix4x4 LightViewProj;    // 64 bytes: Light view-projection matrix for shadow sampling
+    public Matrix4x4 LightViewProj;    // 64 bytes: Default / Cascade 0 light view-projection matrix
+    public Vector4 CascadeSplits;      // 16 bytes: View-space depth splits for cascades 0..3 (X, Y, Z, W)
+    public Matrix4x4 CascadeViewProj0; // 64 bytes: Cascade 0 light VP
+    public Matrix4x4 CascadeViewProj1; // 64 bytes: Cascade 1 light VP
+    public Matrix4x4 CascadeViewProj2; // 64 bytes: Cascade 2 light VP
+    public Matrix4x4 CascadeViewProj3; // 64 bytes: Cascade 3 light VP
+    public Vector4 ShadowParams;       // 16 bytes: X=resolution, Y=invResolution, Z=pcfRadius, W=cascadeCount
 }
 
 /// <summary>
@@ -41,9 +47,9 @@ public sealed class LightEnvironment
     public bool HighQualityShadows { get; set; } = false;
 
     /// <summary>
-    /// Packs current environment parameters into a GPU-ready struct.
+    /// Packs current environment parameters into a GPU-ready struct using either a single shadow map or CascadedShadowMap.
     /// </summary>
-    public GpuLightEnvironmentData ToGpuData(in Vector3 cameraPosition)
+    public GpuLightEnvironmentData ToGpuData(in Vector3 cameraPosition, Shadows.CascadedShadowMap? csm = null)
     {
         float extents = HighQualityShadows ? 28.0f : ShadowOrthoExtents;
         Matrix4x4 lightVp = Sun.CastsShadows ? Sun.ComputeLightViewProjection(cameraPosition, extents) : Matrix4x4.Identity;
@@ -52,6 +58,29 @@ public sealed class LightEnvironment
         if (Sun.CastsShadows)
         {
             shadowQuality = HighQualityShadows ? 2u : 1u;
+        }
+
+        if (csm != null && Sun.CastsShadows)
+        {
+            var cascades = csm.Cascades;
+            return new GpuLightEnvironmentData
+            {
+                SunDirection = Sun.Direction,
+                SunIntensity = Sun.Intensity,
+                SunColor = Sun.Color,
+                CastsShadows = shadowQuality,
+                AmbientSkyColor = AmbientSkyColor,
+                AmbientIntensity = AmbientIntensity,
+                AmbientGroundColor = AmbientGroundColor,
+                ShadowBias = ShadowBias,
+                LightViewProj = cascades[0].ViewProjection,
+                CascadeSplits = csm.CascadeSplits,
+                CascadeViewProj0 = cascades[0].ViewProjection,
+                CascadeViewProj1 = cascades[1].ViewProjection,
+                CascadeViewProj2 = cascades[2].ViewProjection,
+                CascadeViewProj3 = cascades[3].ViewProjection,
+                ShadowParams = new Vector4(csm.Resolution, 1.0f / csm.Resolution, HighQualityShadows ? 1.6f : 1.0f, Shadows.CascadedShadowMap.CascadeCount),
+            };
         }
 
         return new GpuLightEnvironmentData
@@ -65,6 +94,12 @@ public sealed class LightEnvironment
             AmbientGroundColor = AmbientGroundColor,
             ShadowBias = ShadowBias,
             LightViewProj = lightVp,
+            CascadeSplits = new Vector4(1000f, 1000f, 1000f, 1000f),
+            CascadeViewProj0 = lightVp,
+            CascadeViewProj1 = lightVp,
+            CascadeViewProj2 = lightVp,
+            CascadeViewProj3 = lightVp,
+            ShadowParams = new Vector4(2048f, 1.0f / 2048f, 1.0f, 1f),
         };
     }
 }

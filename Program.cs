@@ -350,7 +350,7 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // PHASE 6: LIGHTING, SHADOWS, DEBUG RENDERER & ORIGIN SHIFT
         // ---------------------------------------------------------------------------------------------
-        using var shadowMap = new ShadowMap(context, allocator, 2048);
+        using var cascadedShadowMap = new CascadedShadowMap(context, allocator, 2048);
 
         var lightEnv = new LightEnvironment
         {
@@ -687,7 +687,7 @@ public static class Program
         Console.WriteLine($" [Foliage]       : Procedural Wind Grass (Toggle [K]) | {foliageSystem.ActiveInstanceCount} instanced blades");
         Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [J]) | {particleSystem.MaxParticles} active billboard particles");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
-        Console.WriteLine($" [Shadow Map]    : {shadowMap.Resolution}x{shadowMap.Resolution} D32_SFLOAT (16-tap PCF, Reverse-Z Comparison Sampler)");
+        Console.WriteLine($" [Shadow Map]    : 4-Cascade CSM ({cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}x4 D32_SFLOAT, Texel Snapping, Reverse-Z)");
         Console.WriteLine($" [Clipmap]       : 6 concentric rings (4,096 vertices/ring), {terrainClipmap.ResidentTileCount} resident 256m tiles");
         Console.WriteLine($" [Bindless]      : BindlessTable active ({bindlessTable.MaxTextures} slots) | Checkerboard Slot: #{checkerSlot}");
         Console.WriteLine($" [MaterialTable] : {materialTable.Count} PBR materials registered in GPU Storage Buffer");
@@ -1282,13 +1282,23 @@ public static class Program
                     VkAccessFlags2.None
                 );
 
+                // Update 4-Cascade CSM splits and light-space matrices with texel snapping
+                cascadedShadowMap.Update(
+                    lightEnv.Sun.Direction,
+                    camera.ViewMatrix,
+                    camera.FovDegrees * (MathF.PI / 180.0f),
+                    camera.AspectRatio,
+                    camera.NearPlane,
+                    maxShadowDistance: 500.0f
+                );
+
                 // ForwardRenderer3D schedules Shadows -> Skybox -> PBR Opaque (GPU-Driven Indirect or CPU Forward) -> Debug Wireframes passes
                 forwardRenderer.Render(
                     renderGraph,
                     scene,
                     camera,
                     lightEnv,
-                    shadowMap,
+                    cascadedShadowMap,
                     bindlessTable,
                     materialTable,
                     geometryPool,

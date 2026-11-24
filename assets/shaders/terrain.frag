@@ -16,6 +16,7 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in float inMorphFactor;
 layout(location = 4) in float inRingIndex;
 layout(location = 5) in vec2 inGridPos;
+layout(location = 6) in vec4 inClipPos;
 
 layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     vec3 SunDirection;
@@ -27,9 +28,15 @@ layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     vec3 AmbientGroundColor;
     float ShadowBias;
     mat4 LightViewProj;
+    vec4 CascadeSplits;
+    mat4 CascadeViewProj0;
+    mat4 CascadeViewProj1;
+    mat4 CascadeViewProj2;
+    mat4 CascadeViewProj3;
+    vec4 ShadowParams;
 } uLight;
 
-layout(set = 0, binding = 1) uniform sampler2DShadow uShadowMap;
+layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
 
 layout(push_constant) uniform TerrainPushConstants
 {
@@ -48,6 +55,57 @@ vec3 getRingColor(int r)
     if (r == 3) return vec3(0.95, 0.50, 0.10); // Ring 3: Orange
     if (r == 4) return vec3(0.95, 0.15, 0.15); // Ring 4: Crimson Red
     return vec3(0.70, 0.10, 0.90);              // Ring 5: Deep Purple
+}
+
+// Directional shadow map evaluation with 4-Cascade CSM for terrain
+float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
+    if (uLight.CastsShadows == 0u || NdotL <= 0.0) {
+        return NdotL <= 0.0 ? 0.0 : 1.0;
+    }
+
+    int cascadeIndex = 0;
+    if (viewDepth > uLight.CascadeSplits.x) cascadeIndex = 1;
+    if (viewDepth > uLight.CascadeSplits.y) cascadeIndex = 2;
+    if (viewDepth > uLight.CascadeSplits.z) cascadeIndex = 3;
+
+    if (viewDepth > uLight.CascadeSplits.w) {
+        return 1.0;
+    }
+
+    mat4 cascadeVP;
+    if (cascadeIndex == 0) cascadeVP = uLight.CascadeViewProj0;
+    else if (cascadeIndex == 1) cascadeVP = uLight.CascadeViewProj1;
+    else if (cascadeIndex == 2) cascadeVP = uLight.CascadeViewProj2;
+    else cascadeVP = uLight.CascadeViewProj3;
+
+    vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
+    vec3 projCoords = shadowClip.xyz / shadowClip.w;
+
+    projCoords.x = projCoords.x * 0.5 + 0.5;
+    projCoords.y = projCoords.y * 0.5 + 0.5;
+
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
+        projCoords.y < 0.0 || projCoords.y > 1.0 ||
+        projCoords.z < 0.0 || projCoords.z > 1.0) {
+        return 1.0;
+    }
+
+    float cascadeScale = float(cascadeIndex + 1);
+    float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
+    float dynamicBias = clamp(bias * cascadeScale * (1.0 + tanTheta * 1.5), bias * 0.5, 0.015);
+    float currentDepth = projCoords.z + dynamicBias;
+
+    vec2 texelSize = vec2(uLight.ShadowParams.y);
+    float shadow = 0.0;
+    float layer = float(cascadeIndex);
+
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            vec2 offset = vec2(x, y) * texelSize;
+            shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
+        }
+    }
+    return shadow / 9.0;
 }
 
 void main()
@@ -83,10 +141,11 @@ void main()
         albedo = mix(albedo, ringColor, 0.75);
     }
 
-    // Directional diffuse (calibrated for viewport dynamic range)
+    // Directional diffuse (calibrated for viewport dynamic range) with 4-Cascade CSM shadows
     float NdotL = max(dot(N, L), 0.0);
+    float shadow = EvaluateShadow(inWorldPos, inClipPos.w, uLight.ShadowBias, NdotL);
     vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
-    vec3 diffuse = lightRadiance * NdotL;
+    vec3 diffuse = lightRadiance * NdotL * shadow;
 
     // Hemispherical ambient (calibrated for clear visibility in shaded valleys)
     vec3 ambient = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, N.y * 0.5 + 0.5) * (uLight.AmbientIntensity * 2.2);

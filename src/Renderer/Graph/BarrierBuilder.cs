@@ -53,7 +53,9 @@ public sealed class BarrierBuilder
         VkPipelineStageFlags2 dstStage,
         VkAccessFlags2 dstAccess,
         int srcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
-        int dstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED)
+        int dstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+        int baseArrayLayer = 0,
+        int layerCount = 1)
     {
         if (_imageBarrierCount >= _imageBarriers.Length)
         {
@@ -76,8 +78,8 @@ public sealed class BarrierBuilder
                 AspectMask = aspect,
                 BaseMipLevel = 0,
                 LevelCount = 1,
-                BaseArrayLayer = 0,
-                LayerCount = 1,
+                BaseArrayLayer = baseArrayLayer,
+                LayerCount = layerCount,
             },
         };
     }

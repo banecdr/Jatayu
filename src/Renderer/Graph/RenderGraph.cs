@@ -92,7 +92,9 @@ public sealed class RenderGraph : IDisposable
         uint height,
         VkImageLayout initialLayout,
         VkPipelineStageFlags2 initialStage = VkPipelineStageFlags2.None,
-        VkAccessFlags2 initialAccess = VkAccessFlags2.None)
+        VkAccessFlags2 initialAccess = VkAccessFlags2.None,
+        int layerCount = 1,
+        int baseArrayLayer = 0)
     {
         var handle = new RgTextureHandle((uint)(_textureCount + 1), 1);
         var aspect = RgTextureResource.DetermineAspect(format);
@@ -114,6 +116,8 @@ public sealed class RenderGraph : IDisposable
             resource.CurrentLayout = initialLayout;
             resource.CurrentStage = initialStage;
             resource.CurrentAccess = initialAccess;
+            resource.LayerCount = layerCount;
+            resource.BaseArrayLayer = baseArrayLayer;
         }
         else
         {
@@ -132,6 +136,8 @@ public sealed class RenderGraph : IDisposable
                 CurrentLayout = initialLayout,
                 CurrentStage = initialStage,
                 CurrentAccess = initialAccess,
+                LayerCount = layerCount,
+                BaseArrayLayer = baseArrayLayer,
             };
             _textures.Add(resource);
         }
@@ -403,7 +409,9 @@ public sealed class RenderGraph : IDisposable
                         res.CurrentStage == VkPipelineStageFlags2.None ? VkPipelineStageFlags2.TopOfPipeBit : res.CurrentStage,
                         res.CurrentAccess,
                         decl.Stage,
-                        decl.Access
+                        decl.Access,
+                        baseArrayLayer: res.BaseArrayLayer,
+                        layerCount: res.LayerCount
                     );
 
                     res.CurrentLayout = decl.ExpectedLayout;
