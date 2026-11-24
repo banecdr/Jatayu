@@ -257,9 +257,6 @@ public sealed class GpuCuller : IDisposable
         if (!_disposed)
         {
             _pipeline.Dispose();
-            if (_pipelineLayout.VkHandle != 0)
-                _context.Device.DestroyPipelineLayout(_pipelineLayout, null);
-
             _descriptorLayout.Dispose();
             _descriptorAllocator.Dispose();
             _uniformBuffer.Dispose();

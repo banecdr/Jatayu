@@ -163,6 +163,7 @@ public sealed class ClusteredLightCulling : IDisposable
 
         var computeShader = shaderCompiler.CompileShaderModuleFromFile(_context.Device, shaderPath, Brutal.ShaderCApi.ShaderKind.ComputeShader);
         _pipeline = PipelineBuilder.CreateComputePipeline(_context, _pipelineLayout, computeShader);
+        _context.Device.DestroyShaderModule(computeShader, null);
     }
 
     /// <summary>
@@ -295,7 +296,6 @@ public sealed class ClusteredLightCulling : IDisposable
         var device = _context.Device;
 
         _pipeline?.Dispose();
-        if (_pipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_pipelineLayout, null);
         _descriptorAllocator?.Dispose();
         _descriptorLayout?.Dispose();
 

@@ -273,7 +273,6 @@ public sealed class FoliageSystem : IDisposable
         var device = _context.Device;
 
         _pipeline?.Dispose();
-        if (_pipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_pipelineLayout, null);
         _descriptorAllocator?.Dispose();
         _descriptorLayout?.Dispose();
 

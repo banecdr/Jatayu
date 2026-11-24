@@ -374,8 +374,6 @@ public sealed class HiZBuilder : IDisposable
         if (!_disposed)
         {
             _pipeline.Dispose();
-            if (_pipelineLayout.VkHandle != 0)
-                _context.Device.DestroyPipelineLayout(_pipelineLayout, null);
 
             for (int i = 0; i < _mipLevels; i++)
             {

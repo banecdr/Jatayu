@@ -314,8 +314,6 @@ public sealed class ParticleSystem : IDisposable
 
         _computePipeline?.Dispose();
         _renderPipeline?.Dispose();
-        if (_computePipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_computePipelineLayout, null);
-        if (_renderPipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_renderPipelineLayout, null);
         _descriptorAllocator?.Dispose();
         _computeDescLayout?.Dispose();
 

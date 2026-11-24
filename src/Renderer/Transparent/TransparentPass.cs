@@ -188,7 +188,6 @@ public sealed class TransparentPass : IDisposable
         var device = _context.Device;
 
         _compositePipeline?.Dispose();
-        if (_compositePipelineLayout.VkHandle != 0) device.DestroyPipelineLayout(_compositePipelineLayout, null);
         _descriptorAllocator?.Dispose();
         _compositeDescLayout?.Dispose();
 

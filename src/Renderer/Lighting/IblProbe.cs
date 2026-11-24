@@ -39,6 +39,9 @@ public sealed class IblProbe : IDisposable
     private GpuTexture _brdfLutTexture;
     private VkImageView _brdfLutStorageView;
     private VkSampler _brdfLutSampler;
+    private VulkanPipeline? _pipeline;
+    private DescriptorLayout? _descLayout;
+    private DescriptorAllocator? _descAllocator;
     private bool _brdfLutGenerated;
     private bool _disposed;
 
@@ -177,26 +180,27 @@ public sealed class IblProbe : IDisposable
 
         var shaderModule = compiler.CompileShaderModuleFromFile(device, shaderPath, Brutal.ShaderCApi.ShaderKind.ComputeShader);
 
-        using var descLayout = DescriptorLayout.Create()
+        _descLayout = DescriptorLayout.Create()
             .AddBinding(0, VkDescriptorType.StorageImage, VkShaderStageFlags.ComputeBit)
             .Build(_context);
 
-        using var descAllocator = new DescriptorAllocator(_context, 2);
+        _descAllocator = new DescriptorAllocator(_context, 2);
 
-        var descSet = descAllocator.Allocate(descLayout);
-        descAllocator.WriteStorageImage(descSet, 0, _brdfLutStorageView, VkImageLayout.General);
+        var descSet = _descAllocator.Allocate(_descLayout);
+        _descAllocator.WriteStorageImage(descSet, 0, _brdfLutStorageView, VkImageLayout.General);
 
-        var setLayout = descLayout.Handle;
+        var setLayout = _descLayout.Handle;
         var pipeLayoutInfo = new VkPipelineLayoutCreateInfo
         {
             SetLayoutCount = 1,
             SetLayouts = &setLayout,
         };
         var pipeLayout = device.CreatePipelineLayout(in pipeLayoutInfo, null);
-        var pipeline = PipelineBuilder.CreateComputePipeline(_context, pipeLayout, shaderModule);
+        _pipeline = PipelineBuilder.CreateComputePipeline(_context, pipeLayout, shaderModule);
+        device.DestroyShaderModule(shaderModule, null);
 
         // 3. Dispatch compute shader (16x16 workgroups over 256x256 image)
-        device.PInvoke.vkCmdBindPipeline.Invoke(cmd, VkPipelineBindPoint.Compute, pipeline.Handle);
+        device.PInvoke.vkCmdBindPipeline.Invoke(cmd, VkPipelineBindPoint.Compute, _pipeline.Handle);
         device.PInvoke.vkCmdBindDescriptorSets.Invoke(cmd, VkPipelineBindPoint.Compute, pipeLayout, 0, 1, &descSet, 0, null);
         device.PInvoke.vkCmdDispatch.Invoke(cmd, BrdfLutResolution / 16, BrdfLutResolution / 16, 1);
 
@@ -221,8 +225,6 @@ public sealed class IblProbe : IDisposable
         };
         device.PInvoke.vkCmdPipelineBarrier2.Invoke(cmd, &depInfo);
 
-        pipeline.Dispose();
-        device.DestroyPipelineLayout(pipeLayout, null);
         _brdfLutGenerated = true;
     }
 
@@ -231,6 +233,10 @@ public sealed class IblProbe : IDisposable
         if (_disposed) return;
 
         var device = _context.Device;
+
+        _pipeline?.Dispose();
+        _descAllocator?.Dispose();
+        _descLayout?.Dispose();
 
         if (_brdfLutSampler.VkHandle != 0) device.DestroySampler(_brdfLutSampler, null);
         if (_brdfLutStorageView.VkHandle != 0) device.DestroyImageView(_brdfLutStorageView, null);
