@@ -48,6 +48,8 @@ public sealed class PipelineBuilder
     private PtrOwner<VkPipelineColorBlendStateCreateInfo> _colorBlend = Presets.BlendState.BlendNone;
     private VkPipelineLayout _layout;
     private VkFormat _colorFormat;
+    private VkFormat[]? _colorFormats;
+    private VkPipelineColorBlendAttachmentState[]? _colorBlendAttachments;
     private VkFormat _depthFormat = VkFormat.D32SFloat;
     private readonly List<VkDynamicState> _dynamicStates = [VkDynamicState.Viewport, VkDynamicState.Scissor];
 
@@ -149,6 +151,32 @@ public sealed class PipelineBuilder
     public PipelineBuilder SetColorAttachmentFormat(VkFormat format)
     {
         _colorFormat = format;
+        _colorFormats = null;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the dynamic-rendering formats for a pass with multiple color attachments.
+    /// </summary>
+    public PipelineBuilder SetColorAttachmentFormats(params VkFormat[] formats)
+    {
+        ArgumentNullException.ThrowIfNull(formats);
+        if (formats.Length == 0)
+            throw new ArgumentException("At least one color attachment format is required.", nameof(formats));
+        _colorFormats = (VkFormat[])formats.Clone();
+        _colorFormat = formats[0];
+        return this;
+    }
+
+    /// <summary>
+    /// Sets independent blend states for each dynamic-rendering color attachment.
+    /// </summary>
+    public PipelineBuilder SetColorBlendAttachments(params VkPipelineColorBlendAttachmentState[] attachments)
+    {
+        ArgumentNullException.ThrowIfNull(attachments);
+        if (attachments.Length == 0)
+            throw new ArgumentException("At least one color blend attachment is required.", nameof(attachments));
+        _colorBlendAttachments = (VkPipelineColorBlendAttachmentState[])attachments.Clone();
         return this;
     }
 
@@ -196,13 +224,9 @@ public sealed class PipelineBuilder
         var device = context.Device;
 
         // Dynamic rendering color and depth formats
-        var colorFormat = _colorFormat;
-        var renderingInfo = new VkPipelineRenderingCreateInfo
-        {
-            ColorAttachmentCount = 1,
-            ColorAttachmentFormats = &colorFormat,
-            DepthAttachmentFormat = _depthFormat,
-        };
+        var colorFormats = _colorFormats ?? [_colorFormat];
+        if (_colorBlendAttachments != null && _colorBlendAttachments.Length != colorFormats.Length)
+            throw new InvalidOperationException("The number of color blend attachments must match the dynamic-rendering color formats.");
 
         // Dummy viewport/scissor (overridden dynamically via vkCmdSetViewport / vkCmdSetScissor)
         var viewport = new VkViewport { Width = 1, Height = 1, MaxDepth = 1 };
@@ -217,7 +241,26 @@ public sealed class PipelineBuilder
 
         var dynamicStatesArray = _dynamicStates.ToArray();
         fixed (VkDynamicState* pDynamicStates = dynamicStatesArray)
+        fixed (VkFormat* pColorFormats = colorFormats)
+        fixed (VkPipelineColorBlendAttachmentState* pBlendAttachments = _colorBlendAttachments)
         {
+            var renderingInfo = new VkPipelineRenderingCreateInfo
+            {
+                ColorAttachmentCount = colorFormats.Length,
+                ColorAttachmentFormats = pColorFormats,
+                DepthAttachmentFormat = _depthFormat,
+            };
+            var customBlendInfo = new VkPipelineColorBlendStateCreateInfo
+            {
+                LogicOpEnable = false,
+                LogicOp = VkLogicOp.Copy,
+                AttachmentCount = _colorBlendAttachments?.Length ?? 0,
+                Attachments = pBlendAttachments,
+            };
+            VkPipelineColorBlendStateCreateInfo* colorBlendState = _colorBlendAttachments == null
+                ? (VkPipelineColorBlendStateCreateInfo*)_colorBlend
+                : &customBlendInfo;
+
             var dynamicStateInfo = new VkPipelineDynamicStateCreateInfo
             {
                 DynamicStateCount = dynamicStatesArray.Length,
@@ -241,7 +284,7 @@ public sealed class PipelineBuilder
                     RasterizationState = _rasterization,
                     MultisampleState = _multisample,
                     DepthStencilState = depthState,
-                    ColorBlendState = _colorBlend,
+                    ColorBlendState = colorBlendState,
                     DynamicState = &dynamicStateInfo,
                     Layout = _layout,
                 };
@@ -260,7 +303,8 @@ public sealed class PipelineBuilder
         VkPipelineLayout layout,
         VkShaderModule computeShaderModule,
         string entryPoint = "main",
-        VkPipelineCache cache = default)
+        VkPipelineCache cache = default,
+        bool ownsLayout = true)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (layout.VkHandle == 0)
@@ -297,7 +341,7 @@ public sealed class PipelineBuilder
             if (res != VkResult.Success)
                 throw new InvalidOperationException($"Failed to create compute pipeline: {res}");
 
-            return new VulkanPipeline(context, pipeline, layout, VkPipelineBindPoint.Compute);
+            return new VulkanPipeline(context, pipeline, layout, VkPipelineBindPoint.Compute, ownsLayout);
         }
     }
 }

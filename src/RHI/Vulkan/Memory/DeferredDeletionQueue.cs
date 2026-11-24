@@ -71,6 +71,8 @@ public sealed class DeferredDeletionQueue : IDisposable
 
         lock (_lock)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(DeferredDeletionQueue));
             _queue.Enqueue(new DeletionItem
             {
                 FrameIndex = frameIndex,
@@ -90,6 +92,8 @@ public sealed class DeferredDeletionQueue : IDisposable
 
         lock (_lock)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(DeferredDeletionQueue));
             _queue.Enqueue(new DeletionItem
             {
                 FrameIndex = frameIndex,

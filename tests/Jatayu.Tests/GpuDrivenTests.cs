@@ -65,6 +65,13 @@ public class GpuDrivenTests
     }
 
     [Fact]
+    public void CullPushConstants_IncludeShadowCasterFilter()
+    {
+        Assert.Equal(20, Marshal.SizeOf<CullPushConstants>());
+        Assert.Equal(16, Marshal.OffsetOf<CullPushConstants>(nameof(CullPushConstants.ShadowView)).ToInt32());
+    }
+
+    [Fact]
     public void MeshLodLevel_And_MeshLodRecord_StructLayouts()
     {
         Assert.Equal(16, Marshal.SizeOf<MeshLodLevel>());

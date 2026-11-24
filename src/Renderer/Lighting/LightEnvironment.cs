@@ -9,6 +9,14 @@ using System.Runtime.InteropServices;
 
 namespace Jatayu.Renderer.Lighting;
 
+public enum ShadowDebugMode
+{
+    Off,
+    Cascades,
+    Depth,
+    Bias,
+}
+
 /// <summary>
 /// GPU-packed uniform buffer representation of the active lighting environment and 4-cascade shadow matrices.
 /// </summary>
@@ -18,7 +26,7 @@ public struct GpuLightEnvironmentData
     public Vector3 SunDirection;       // 12 bytes: Normalized light direction
     public float SunIntensity;         // 4 bytes: Sun intensity in lux
     public Vector3 SunColor;           // 12 bytes: Linear RGB sun color
-    public uint CastsShadows;          // 4 bytes: 0=Disabled, 1=Standard (PCF), 2=Ultra HQ (Poisson)
+    public uint CastsShadows;          // 4 bytes: low bits select shadow mode; high bit enables environment IBL
     public Vector3 AmbientSkyColor;    // 12 bytes: Hemispherical zenith color
     public float AmbientIntensity;     // 4 bytes: Ambient intensity factor
     public Vector3 AmbientGroundColor; // 12 bytes: Hemispherical nadir ground reflection
@@ -29,7 +37,7 @@ public struct GpuLightEnvironmentData
     public Matrix4x4 CascadeViewProj1; // 64 bytes: Cascade 1 light VP
     public Matrix4x4 CascadeViewProj2; // 64 bytes: Cascade 2 light VP
     public Matrix4x4 CascadeViewProj3; // 64 bytes: Cascade 3 light VP
-    public Vector4 ShadowParams;       // 16 bytes: X=resolution, Y=invResolution, Z=pcfRadius, W=cascadeCount
+    public Vector4 ShadowParams;       // 16 bytes: X=resolution, Y=invResolution, Z=pcfRadius, W=debugMode
     public Vector4 ClusterParams;      // 16 bytes: X=Width, Y=Height, Z=NearZ, W=ClusteredLightingEnabled
 }
 
@@ -43,9 +51,11 @@ public sealed class LightEnvironment
     public Vector3 AmbientSkyColor { get; set; } = new(0.2f, 0.35f, 0.6f);
     public Vector3 AmbientGroundColor { get; set; } = new(0.1f, 0.08f, 0.05f);
     public float AmbientIntensity { get; set; } = 0.4f;
-    public float ShadowBias { get; set; } = 0.0005f;
+    public float ShadowBias { get; set; } = 0.00015f;
     public float ShadowOrthoExtents { get; set; } = 80.0f;
     public bool HighQualityShadows { get; set; } = false;
+    public float ShadowFilterRadius { get; set; } = 1.6f;
+    public ShadowDebugMode ShadowDebugMode { get; set; }
 
     /// <summary>
     /// Packs current environment parameters into a GPU-ready struct using either a single shadow map or CascadedShadowMap.
@@ -88,7 +98,11 @@ public sealed class LightEnvironment
                 CascadeViewProj1 = cascades[1].ViewProjection,
                 CascadeViewProj2 = cascades[2].ViewProjection,
                 CascadeViewProj3 = cascades[3].ViewProjection,
-                ShadowParams = new Vector4(csm.Resolution, 1.0f / csm.Resolution, HighQualityShadows ? 1.6f : 1.0f, Shadows.CascadedShadowMap.CascadeCount),
+                ShadowParams = new Vector4(
+                    csm.Resolution,
+                    1.0f / csm.Resolution,
+                    HighQualityShadows ? ShadowFilterRadius : 1.0f,
+                    (float)ShadowDebugMode),
                 ClusterParams = clusterParams,
             };
         }
@@ -109,7 +123,11 @@ public sealed class LightEnvironment
             CascadeViewProj1 = lightVp,
             CascadeViewProj2 = lightVp,
             CascadeViewProj3 = lightVp,
-            ShadowParams = new Vector4(2048f, 1.0f / 2048f, 1.0f, 1f),
+            ShadowParams = new Vector4(
+                2048f,
+                1.0f / 2048f,
+                HighQualityShadows ? ShadowFilterRadius : 1.0f,
+                (float)ShadowDebugMode),
             ClusterParams = clusterParams,
         };
     }

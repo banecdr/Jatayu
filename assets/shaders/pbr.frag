@@ -92,6 +92,8 @@ layout(std430, set = 0, binding = 7) readonly buffer LightIndexStorage {
 } uLightIndices;
 
 layout(set = 0, binding = 8) uniform sampler2D uBrdfLut;
+layout(set = 0, binding = 9) uniform samplerCube uIrradianceMap;
+layout(set = 0, binding = 10) uniform samplerCube uPrefilterMap;
 
 layout(set = 1, binding = 0) uniform sampler2D uTextures[];
 
@@ -155,8 +157,22 @@ const vec2 POISSON_DISK[16] = vec2[](
 );
 
 // Directional shadow map evaluation with 4-Cascade CSM, Reverse-Z comparison and 16-tap Poisson or 3x3 PCF
+vec3 ShadowDebugColor(float value) {
+    uint debugMode = uint(round(uLight.ShadowParams.w));
+    if (debugMode == 1u) {
+        if (value >= 0.999) return vec3(1.0, 0.0, 1.0);
+        if (value < 0.25) return vec3(1.0, 0.15, 0.1);
+        if (value < 0.5) return vec3(0.1, 0.9, 0.2);
+        if (value < 0.75) return vec3(0.1, 0.4, 1.0);
+        return vec3(1.0, 0.75, 0.05);
+    }
+    return vec3(value);
+}
+
 float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
-    if (uLight.CastsShadows == 0u || NdotL <= 0.0) {
+    uint shadowMode = uLight.CastsShadows & 3u;
+    uint debugMode = uint(round(uLight.ShadowParams.w));
+    if (debugMode == 0u && (shadowMode == 0u || NdotL <= 0.0)) {
         return NdotL <= 0.0 ? 0.0 : 1.0;
     }
 
@@ -208,16 +224,19 @@ float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
     // Slope-scaled tangent bias pushes the reference depth closer to the light.
     float cascadeScale = float(selectedCascade + 1);
     float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
-    float dynamicBias = clamp(bias * cascadeScale * (1.0 + tanTheta * 1.5), bias * 0.5, 0.015);
+    float dynamicBias = min(max(bias, 0.0) * cascadeScale * (1.0 + min(tanTheta, 4.0) * 0.25), 0.002);
+    if (debugMode == 2u) return projCoords.z;
+    if (debugMode == 3u) return clamp(dynamicBias / 0.002, 0.0, 1.0);
+    if (debugMode == 1u) return (float(selectedCascade) + 0.5) * 0.25;
     float currentDepth = projCoords.z + dynamicBias;
 
     vec2 texelSize = vec2(uLight.ShadowParams.y);
     float shadow = 0.0;
     float layer = float(selectedCascade);
 
-    if (uLight.CastsShadows >= 2u) {
-        // Ultra High-Quality Mode: 16-tap Poisson Disk filter (eliminates stair-stepping jaggedness)
-        float filterRadius = uLight.ShadowParams.z;
+    if (shadowMode >= 2u) {
+        // Ultra High-Quality Mode: 16-tap Poisson Disk filter (cascade-scaled to maintain crisp distant shadows)
+        float filterRadius = max(uLight.ShadowParams.z / sqrt(cascadeScale), 1.0);
         for (int i = 0; i < 16; ++i) {
             vec2 offset = POISSON_DISK[i] * (texelSize * filterRadius);
             shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
@@ -292,6 +311,10 @@ void main() {
 
     float NdotL = max(dot(N, L), 0.0);
     float shadow = EvaluateShadow(vWorldPos, vCurrClipPos.w, uLight.ShadowBias, NdotL);
+    if (uLight.ShadowParams.w > 0.5) {
+        outColor = vec4(ShadowDebugColor(shadow), 1.0);
+        return;
+    }
 
     // Directional light radiance (calibrated for SDR viewport)
     vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
@@ -363,12 +386,23 @@ void main() {
         }
     }
 
-    // Split-Sum IBL BRDF LUT Environment Reflection
+    // Split-sum diffuse irradiance and roughness-prefiltered environment reflections.
     vec2 brdf = texture(uBrdfLut, vec2(max(dot(N, V), 0.0), roughness)).rg;
     float skyFactor = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 ambientColor = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, skyFactor);
-    vec3 ambientDiffuse = ambientColor * albedo.rgb * (1.0 - metallic);
-    vec3 ambientSpecular = ambientColor * (F0 * brdf.x + brdf.y);
+    vec3 ambientDiffuse;
+    vec3 ambientSpecular;
+    if ((uLight.CastsShadows & 0x80000000u) != 0u) {
+        vec3 irradiance = texture(uIrradianceMap, N).rgb;
+        vec3 reflected = reflect(-V, N);
+        vec3 prefiltered = textureLod(uPrefilterMap, reflected, roughness * 4.0).rgb;
+        vec3 fresnelRoughness = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+        ambientDiffuse = irradiance * albedo.rgb * (1.0 - metallic) / PI;
+        ambientSpecular = prefiltered * (fresnelRoughness * brdf.x + brdf.y);
+    } else {
+        ambientDiffuse = ambientColor * albedo.rgb * (1.0 - metallic);
+        ambientSpecular = ambientColor * (F0 * brdf.x + brdf.y);
+    }
     vec3 ambientLighting = (ambientDiffuse + ambientSpecular) * uLight.AmbientIntensity * ao;
 
     // Emissive contribution

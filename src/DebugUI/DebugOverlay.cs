@@ -66,6 +66,8 @@ public sealed class DebugOverlay
         int visibleEntities = 0,
         int totalEntities = 0,
         int shadowCasters = 0,
+        int terrainDrawCount = 0,
+        ulong terrainTriangleCount = 0,
         bool atLargeWorld = false,
         bool debugWireframe = false,
         bool sunOrbiting = false)
@@ -171,7 +173,7 @@ public sealed class DebugOverlay
                         ImGui.Text(buf[..w]);
                     }
 
-                    ImGui.Text("Shadows:       [P] Toggle Ultra HQ (16-tap Poisson) vs Standard"u8);
+                    ImGui.Text("Shadows:       [P] Toggle PCF quality, [G] Cycle shadow debug views"u8);
                 }
 
                 if (originShift != null)
@@ -233,7 +235,17 @@ public sealed class DebugOverlay
                         buf[w] = 0;
                         ImGui.Text(buf[..w]);
                     }
-                    ImGui.Text("Shadow Map:    2048x2048 D32_SFLOAT (Reverse-Z Comparison, 16-tap PCF)"u8);
+                    ImGui.Text("Shadow Map:    Reverse-Z 4-Cascade CSM"u8);
+                    if (Utf8.TryWrite(buf, $"Shadow Filter: {(lightEnv.HighQualityShadows ? "16-tap Poisson" : "3x3 PCF")} ([P])", out w))
+                    {
+                        buf[w] = 0;
+                        ImGui.Text(buf[..w]);
+                    }
+                    if (Utf8.TryWrite(buf, $"Shadow Debug: {lightEnv.ShadowDebugMode} ([G]: cascades/depth/bias/off)", out w))
+                    {
+                        buf[w] = 0;
+                        ImGui.Text(buf[..w]);
+                    }
                     ImGui.Text("Skybox:        Reverse-Z Procedural Atmosphere (Z = 0.0 Infinity)"u8);
                 }
             }
@@ -255,6 +267,30 @@ public sealed class DebugOverlay
             // -------------------------------------------------------------------------------------
             // 6. CPU & GPU PASS TIMINGS
             // -------------------------------------------------------------------------------------
+            if (Utf8.TryWrite(buf, $"Terrain: {terrainDrawCount} draws | {terrainTriangleCount:N0} triangles", out w))
+            {
+                buf[w] = 0;
+                ImGui.TextColored(_cyan, buf[..w]);
+            }
+            float measuredCpuMs = Profiler.MeasuredCpuDurationMs;
+            float unmeasuredCpuMs = MathF.Max(0f, Profiler.FrameDurationMs - measuredCpuMs);
+            if (Utf8.TryWrite(buf, $"Frame Breakdown: Wall {Profiler.FrameDurationMs:F3} ms", out w))
+            {
+                buf[w] = 0;
+                ImGui.Text(buf[..w]);
+            }
+            ImGui.SameLine();
+            if (Utf8.TryWrite(buf, $"Measured CPU {measuredCpuMs:F3} ms", out w))
+            {
+                buf[w] = 0;
+                ImGui.TextColored(_cyan, buf[..w]);
+            }
+            if (Utf8.TryWrite(buf, $"Unmeasured CPU / queue wait: {unmeasuredCpuMs:F3} ms", out w))
+            {
+                buf[w] = 0;
+                ImGui.TextColored(unmeasuredCpuMs > 2f ? _yellow : _green, buf[..w]);
+            }
+
             if (cpuZones.Count > 0 && ImGui.CollapsingHeader("CPU Pass Timings"u8))
             {
                 for (int i = 0; i < cpuZones.Count; i++)
@@ -276,9 +312,11 @@ public sealed class DebugOverlay
 
             if (gpuPasses.Count > 0 && ImGui.CollapsingHeader("GPU Pass Timings"u8, ImGuiTreeNodeFlags.DefaultOpen))
             {
+                float gpuMeasuredMs = 0f;
                 for (int i = 0; i < gpuPasses.Count; i++)
                 {
                     var pass = gpuPasses[i];
+                    gpuMeasuredMs += pass.DurationMs;
                     if (Utf8.TryWrite(buf, $"  {pass.Name}:", out w))
                     {
                         buf[w] = 0;
@@ -291,6 +329,11 @@ public sealed class DebugOverlay
                         ImGui.TextColored(_cyan, buf[..w]);
                     }
                 }
+                if (Utf8.TryWrite(buf, $"  GPU Measured Total: {gpuMeasuredMs:F3} ms", out w))
+                {
+                    buf[w] = 0;
+                    ImGui.TextColored(_gold, buf[..w]);
+                }
             }
 
             // -------------------------------------------------------------------------------------
@@ -301,7 +344,8 @@ public sealed class DebugOverlay
                 ImGui.Text("  [G]           : Toggle GPU-Driven Indirect Multi-Draw (Hi-Z Occlusion)"u8);
                 ImGui.Text("  [K]           : Toggle Procedural Wind Grass Field"u8);
                 ImGui.Text("  [J]           : Toggle GPU Particle Fountain"u8);
-                ImGui.Text("  [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson vs 9-tap)"u8);
+                ImGui.Text("  [P]           : Toggle shadow filtering (3x3 vs 16-tap Poisson)"u8);
+                ImGui.Text("  [G]           : Cycle shadow debug view (cascades/depth/bias/off)"u8);
                 ImGui.Text("  [T]           : Teleport between 0m Origin and 50,000m Cluster"u8);
                 ImGui.Text("  [C]           : Toggle 6-DOF Flycam vs Orbit camera"u8);
                 ImGui.Text("  [F3]          : Toggle 100 m/s Supersonic Drone Tour"u8);

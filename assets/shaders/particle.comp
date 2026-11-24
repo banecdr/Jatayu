@@ -9,15 +9,10 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 struct Particle {
-    vec3 Position;
-    float Age;
-    vec3 Velocity;
-    float Lifetime;
+    vec4 PositionAge;
+    vec4 VelocityLifetime;
     vec4 Color;
-    float Size;
-    float Padding0;
-    float Padding1;
-    float Padding2;
+    vec4 SizePadding;
 };
 
 layout(std430, set = 0, binding = 0) buffer ParticleBuffer {
@@ -45,29 +40,36 @@ void main() {
     if (id >= pc.MaxParticles) return;
 
     Particle p = particles[id];
-    p.Age += pc.DeltaTime;
+    float spawnTime = float(id) / max(pc.EmitterPosition.w, 1.0);
+    if (p.VelocityLifetime.w <= 0.0 && pc.TotalTime < spawnTime) {
+        return;
+    }
 
-    if (p.Age >= p.Lifetime) {
+    p.PositionAge.w += pc.DeltaTime;
+
+    if (p.PositionAge.w >= p.VelocityLifetime.w) {
         // Respawn particle at emitter position with pseudo-random velocity
         uint seed = id + uint(pc.TotalTime * 1000.0);
         float rx = Hash(seed) * 2.0 - 1.0;
         float ry = Hash(seed + 1u) * 2.0 - 0.5;
         float rz = Hash(seed + 2u) * 2.0 - 1.0;
 
-        p.Position = pc.EmitterPosition.xyz + vec3(rx, 0.0, rz) * 0.5;
-        p.Velocity = vec3(rx * 2.5, abs(ry) * 6.0 + 2.0, rz * 2.5);
-        p.Age = 0.0;
-        p.Lifetime = pc.DefaultLifetime * (0.8 + Hash(seed + 3u) * 0.4);
-        p.Size = 0.25 + Hash(seed + 4u) * 0.25;
+        p.PositionAge = vec4(pc.EmitterPosition.xyz + vec3(rx, 0.0, rz) * 0.5, 0.0);
+        p.VelocityLifetime = vec4(
+            rx * 2.5,
+            abs(ry) * 6.0 + 2.0,
+            rz * 2.5,
+            pc.DefaultLifetime * (0.8 + Hash(seed + 3u) * 0.4));
+        p.SizePadding.x = 0.25 + Hash(seed + 4u) * 0.25;
         p.Color = vec4(1.0, 0.6 + Hash(seed + 5u) * 0.3, 0.1, 1.0);
     } else {
         // Physical integration
-        p.Velocity += pc.GravityAndDrag.xyz * pc.DeltaTime;
-        p.Velocity *= (1.0 - pc.GravityAndDrag.w * pc.DeltaTime);
-        p.Position += p.Velocity * pc.DeltaTime;
+        p.VelocityLifetime.xyz += pc.GravityAndDrag.xyz * pc.DeltaTime;
+        p.VelocityLifetime.xyz *= (1.0 - pc.GravityAndDrag.w * pc.DeltaTime);
+        p.PositionAge.xyz += p.VelocityLifetime.xyz * pc.DeltaTime;
 
         // Fade out alpha as age approaches lifetime
-        float normalizedAge = p.Age / p.Lifetime;
+        float normalizedAge = p.PositionAge.w / p.VelocityLifetime.w;
         p.Color.a = 1.0 - normalizedAge;
     }
 

@@ -28,6 +28,7 @@ public sealed class VulkanPipeline : IDisposable
     private readonly VulkanContext _context;
     private VkPipeline _pipeline;
     private VkPipelineLayout _layout;
+    private readonly bool _ownsLayout;
     private bool _disposed;
 
     /// <summary>
@@ -52,12 +53,14 @@ public sealed class VulkanPipeline : IDisposable
         VulkanContext context,
         VkPipeline pipeline,
         VkPipelineLayout layout,
-        VkPipelineBindPoint bindPoint = VkPipelineBindPoint.Graphics)
+        VkPipelineBindPoint bindPoint = VkPipelineBindPoint.Graphics,
+        bool ownsLayout = true)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _pipeline = pipeline;
         _layout = layout;
         BindPoint = bindPoint;
+        _ownsLayout = ownsLayout;
     }
 
     /// <summary>
@@ -81,7 +84,7 @@ public sealed class VulkanPipeline : IDisposable
                 _pipeline = default;
             }
 
-            if (_layout.VkHandle != 0)
+            if (_ownsLayout && _layout.VkHandle != 0)
             {
                 _context.Device.DestroyPipelineLayout(_layout, null);
                 _layout = default;

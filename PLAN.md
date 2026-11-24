@@ -476,7 +476,7 @@ When the camera travels beyond 2,000 m from the current physics/simulation origi
 
 - **Total Planned Files:** 215
 - **Total Completed Files:** 156
-- **Current Completion:** **72.6% (Sprint 7 COMPLETE: 7a GPU-Driven & 7b Scalable Lighting)**
+- **Current Completion:** **72.6% (Sprint 7 COMPLETE & ACCEPTED: 755.3 FPS ref / 0.25 ms GPU, 2.87 ms 200k stress on RTX 5060 Ti)**
 
 | Subsystem | Completed / Planned | Status |
 | :--- | :---: | :--- |
@@ -742,7 +742,7 @@ To maintain rigorous, objective performance validation across sprints, all frame
                                          │
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ SPRINT 7b: Scalable Lighting, Foliage & Transparency [ACTIVE / NEXT]             │
+│ SPRINT 7b: Scalable Lighting, Foliage & Transparency [COMPLETED]                 │
 │  - CascadedShadowMap (4 cascades, texel snapping, alpha-test shadow), SpotLight  │
 │  - ClusteredLightCulling (3D cluster grid compute pass), IblProbe (IBL shaders)  │
 │  - FoliageSystem, FoliageInstanceData, FoliageCooker, lod_dither.glsl            │
@@ -759,6 +759,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 │  - Raycasts and collision event dispatch to ECS systems                          │
 │  - OpenAL AudioEngine: SoundClip, AudioSource, AudioListener, cell emitters      │
 │  - Origin shift integration (D16 measured: batched body updates, listener sync)  │
+│  - Zero-Alloc Hardening: Pool streaming request queues and queries so that       │
+│    AllocationTracker.ZeroAllocationPercent maintains 100% steady state at 100m/s │
 │  - Result: Walk/jump across world with 3 origin shifts, stable rigid body stack  │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │
@@ -793,6 +795,17 @@ To maintain rigorous, objective performance validation across sprints, all frame
 │  - Note: Commenced only upon explicit request after Sprint 10 engine completion   │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Sprint 8 Reference Inspiration
+
+Use [AEspinosaDev/Vulkan-Engine](https://github.com/AEspinosaDev/Vulkan-Engine) as a design reference, not as a source to copy code or assets from:
+
+* Its PBR direct-lighting and ambient/IBL examples (`resources/shaders/forward/physically_based.glsl`, `resources/shaders/VXGI/`) are useful visual references for the existing Jatayu lighting stack.
+* Its organized shader, texture, mesh, and renderer example resources can inform a compact Sprint 8 integration scene: visible rigid bodies and terrain under Jatayu's existing shadows/IBL, with spatial audio reacting to movement and contact.
+* Keep Sprint 8 focused on physics, character control, and spatial audio. Do not add a new lighting/GI pipeline or import external shaders/assets; use any further post-processing inspiration when planning Sprint 9.
+* **Sprint 8 Hardening (Zero-Allocation Streaming at High Velocity):**
+  * Eliminate transient main-thread GC allocations (`new PrioritizedLoadRequest`, list resize overhead, cell coordinate dictionary lookups, and event string interpolations) during high-speed motion (`StreamingManager.Update` and `OriginShift.TryRebase`).
+  * Ensure `AllocationTracker.ZeroAllocationPercent` maintains a rock-solid 100% steady state even during the 100 m/s supersonic autopilot drone sweep across cell boundaries.
 
 ---
 
@@ -854,4 +867,8 @@ To maintain rigorous, objective performance validation across sprints, all frame
 | **CL-52** | Sprint 6b | Completed Sprint 6b: Implemented TerrainTile (256m tiles covering 2x2 cells, TileCoord = CellCoord / 2 per D15, bilinear height interpolation, origin shifting, .jtile binary codec), TerrainClipmap (concentric nested grid rings with continuous geomorphing, D22 unified renderer), TerrainMaterial (4-layer splat mapping, triplanar cliff blend parameters), TerrainHeightPyramid (Ring C far-field elevation mip pyramid), HeightfieldCooker (elevation bounds calculation, .jtile payload baking), HlodProxyCluster & HlodManager (Ring B 600m–2,000m proxy activation), HlodCooker (.jhlod binary cooker), ImpostorCooker (8-angle billboard atlas layout and view angle selection), TextureResidencyState & TextureStreamer (step-of-2 mip transitions per D21, permanent resident tail protection <= 64x64 per D5, atomic bindless swaps, VRAM pressure fallback), shaders (terrain.vert & terrain.frag), ForwardRenderer3D terrain pipeline and clipmap draw loop, and 15 new unit tests (113/113 passing) and RenderSmoke CHECK 7 verification passing. |
 | **CL-53** | Sprint 7 | Planned Sprint 7 (GPU-Driven Rendering & Scalable Lighting): Structured into Phase 7a (InstanceBuffer, IndirectDrawBuffer, HiZBuilder, GpuCuller 5-view culling, multidraw indirect conversion) and Phase 7b (CascadedShadowMap, ClusteredLightCulling, IblProbe, FoliageSystem, TransparentPass, ParticleSystem). Updated progress tracking dashboard to 128 / 215 completed files (59.5%). |
 | **CL-54** | Sprint 7a | Completed Sprint 7a: Implemented GPU-Driven Rendering Foundation. Unified 160-byte InstanceBuffer (Current & Previous transforms for continuous TAA velocity vectors per D25, BoundingCenter/Radius, MeshId, MaterialId, Flags, LodBias), multi-view IndirectDrawBuffer (5 views: Main Camera + 4 Cascades, 65,536 draws/view, vkCmdDrawIndexedIndirectCount support, CPU/GPU draw count reset, execution barrier), HiZBuilder with Reverse-Z MIN reduction sampler and compute shader hiz_build.comp, GpuCuller 5-view compute culler with cull.comp (5-plane frustum test, max draw distance clamp, LOD selection per D24, Reverse-Z Hi-Z occlusion test, atomic indirect draw compaction), multi-LOD GeometryPool with MeshLodRecord (48B) and MeshLodBuffer, and conversion of ForwardRenderer3D to vkCmdDrawIndexedIndirectCount with CPU draw fallback. Added GpuDrivenTests (121/121 unit tests passing) and hardware-verified CHECK 8 in Jatayu.RenderSmoke on NVIDIA GeForce RTX 5060 Ti. Updated dashboard to 134 / 215 files (62.3%). |
-| **CL-55** | Sprint 7b | Completed Sprint 7b: Scalable Lighting, Foliage & Transparency. Implemented 4-split Cascaded Shadow Maps with light-space texel snapping and Reverse-Z orthographic projection (ShadowCascade, CascadedShadowMap); 3D Clustered Light Culling (16x8x24 grid = 3072 clusters, PointLight 32B, SpotLight 48B, ClusterUniforms 176B, light_cull.comp); Split-Sum IBL probe pre-integration (brdf_lut.comp, ibl_irradiance.comp, ibl_prefilter.comp, IblProbe); Procedural Foliage System (FoliageInstanceData 16B packed, FoliageCooker cell baker, FoliageSystem procedural grass blade generator, foliage.vert with procedural wind oscillation, foliage.frag with Bayer stipple dissolve and subsurface scattering); GPU Particles (GpuParticle 64B std430, ParticleSystem emitter, particle.comp simulation, particle.vert camera-facing quad expansion, particle.frag soft radial falloff); and Weighted, Blended Order-Independent Transparency (TransparentPass, transparent_composite.frag). Added LightingAndFoliageTests (129/129 unit tests passing) and hardware offscreen CHECK 9 in Jatayu.RenderSmoke verifying all 10 shaders cleanly compiling to SPIR-V and running on NVIDIA GeForce RTX 5060 Ti. Dashboard updated to 156 / 215 files (72.6%). |
+| **CL-55** | Sprint 7b | Completed and Accepted Sprint 7b: Scalable Lighting, Foliage, Particles & Transparency. End-to-end Vulkan runtime validation verified on NVIDIA GeForce RTX 5060 Ti: 4-cascade texel-snapped Reverse-Z shadows (2048x2048x4 D32_SFLOAT), 3D clustered light culling (16x8x24=3,072 clusters, 224 point lights + 32 spotlights), procedural environment, diffuse irradiance, GGX prefiltered specular IBL with 2D split-sum BRDF LUT, 47,707 procedural foliage grass instances with wind oscillation, 16,384 GPU compute particles with WBOIT accumulation/composition, and watertight 7-ring clipmap terrain with 200m flat origin clearing. Replaced dynamic window title updates with static title to prevent OS window message stalls and protect frame pacing. Measured reference scene: 755.3 FPS (1.32 ms/frame), 0.25 ms total GPU time (comfortably under 5.90 ms budget), 1.92 ms total CPU measured (submission 0.54 ms, under 1.0 ms budget). Stress mode (200,010 GPU instances): 2.87 ms total GPU time (under 5.90 ms budget), 0.25 ms CPU submission. 142/142 unit tests passing and all 9 RenderSmoke checks passing with zero validation or runtime errors. Sprint 7 is formally ACCEPTED. |
+| **CL-56** | Sprint 8 | Added Vulkan-Engine as a conceptual reference for an integration scene using existing Jatayu lighting with physics and spatial audio; kept new lighting features and external code/assets out of Sprint 8. |
+| **CL-57** | Sprint 7b | Cascaded shadow stability, texel snapping, quality presets, and cascade-dependent filter radius: Upgraded CSM texel snapping to round the sub-frustum bounding center in light space, eliminating sub-pixel crawl. Added ShadowQualityPreset (Standard, High, Ultra) and runtime diagnostics ([P] filter toggle, [G] cascade/depth/bias debug modes). Calibrated slope-scaled dynamic bias across terrain.frag and pbr.frag (capped at 0.002). Scaled 16-tap Poisson filter radius inversely with sqrt(cascadeScale) to prevent distant over-blurring. 148/148 unit tests passing and all 9 hardware RenderSmoke checks passing cleanly. |
+| **CL-58** | Sprint 8 | Added Zero-Allocation Streaming Queue Pooling task to the end of Sprint 8 scope: eliminate transient main-thread GC allocations (e.g. PrioritizedLoadRequest queue items, dictionary queries, string interpolations) during high-speed/supersonic movement, ensuring AllocationTracker.ZeroAllocationPercent maintains a solid 100% steady state. |
+

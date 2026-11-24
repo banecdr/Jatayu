@@ -37,7 +37,15 @@ public static class HeightfieldCooker
         AssetGuid normalMapGuid = default,
         AssetGuid splatMapGuid = default)
     {
-        if (heights.Length != (int)(samplesX * samplesZ))
+        if (samplesX == 0 || samplesZ == 0)
+            throw new ArgumentOutOfRangeException(nameof(samplesX), "Terrain sample dimensions must be positive.");
+
+        ulong sampleCount = (ulong)samplesX * samplesZ;
+        if (sampleCount > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(samplesX), "Terrain sample dimensions are too large.");
+        if (sampleCount > (ulong)int.MaxValue / sizeof(float))
+            throw new ArgumentOutOfRangeException(nameof(samplesX), "Terrain height payload is too large.");
+        if (heights.Length != (int)sampleCount)
             throw new ArgumentException($"Height array length ({heights.Length}) does not match sample dimensions ({samplesX}x{samplesZ}).");
 
         // 1. Calculate elevation range
@@ -102,7 +110,13 @@ public static class HeightfieldCooker
         uint samples = DefaultSamplesPerTile,
         float maxElevation = 45.0f)
     {
-        var heights = new float[samples * samples];
+        if (samples < 2 || samples > 4096)
+            throw new ArgumentOutOfRangeException(nameof(samples), "A terrain tile requires at least 2 samples per axis.");
+        ulong sampleCount = (ulong)samples * samples;
+        if (sampleCount > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(samples), "Terrain sample dimensions are too large.");
+
+        var heights = new float[(int)sampleCount];
         float tileSize = WorldConstants.TileSize;
         float step = tileSize / (samples - 1);
 

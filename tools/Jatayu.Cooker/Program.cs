@@ -46,6 +46,11 @@ public static class Program
                     if (args.Length < 3) { Console.WriteLine("Usage: cook-pak <outputJpak> <inputDir>"); return 1; }
                     return ExecuteCookPak(args[1], args[2]);
 
+                case "cook-shaders":
+                    string shaderInputDir = args.Length > 1 ? args[1] : "assets/shaders";
+                    string? shaderOutputDir = args.Length > 2 ? args[2] : null;
+                    return ShaderCooker.CookAllShaders(shaderInputDir, shaderOutputDir);
+
                 case "inspect":
                     if (args.Length < 2) { Console.WriteLine("Usage: inspect <packagePath.jpak>"); return 1; }
                     return ExecuteInspect(args[1]);
@@ -103,6 +108,18 @@ public static class Program
             return 1;
         }
 
+        long fileLength = fs.Length;
+        int entrySize = Marshal.SizeOf<JpakEntry>();
+        if (header.HeaderSize != (uint)headerSize ||
+            header.TocOffset > (ulong)fileLength ||
+            (ulong)entrySize * header.EntryCount > (ulong)fileLength - header.TocOffset)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("[Error] .jpak TOC exceeds the package bounds.");
+            Console.ResetColor();
+            return 1;
+        }
+
         Console.WriteLine($"[Package] File: {Path.GetFileName(jpakPath)}");
         Console.WriteLine($"  Entries      : {header.EntryCount}");
         Console.WriteLine($"  TOC Offset   : {header.TocOffset} bytes");
@@ -112,7 +129,6 @@ public static class Program
         Console.WriteLine("--------------------------------------------------------------------------------");
 
         fs.Seek((long)header.TocOffset, SeekOrigin.Begin);
-        int entrySize = Marshal.SizeOf<JpakEntry>();
         Span<byte> entryBytes = stackalloc byte[entrySize];
 
         for (int i = 0; i < header.EntryCount; i++)
@@ -216,6 +232,7 @@ public static class Program
         Console.WriteLine("  cook-texture <inputFile> <outputFile>   : Bakes an image into .jtex with mipmaps & resident tail");
         Console.WriteLine("  cook-model <inputGltf> <outputDir>      : Bakes glTF meshes into optimized .jmesh files");
         Console.WriteLine("  cook-pak <outputJpak> <inputDir>        : Bundles cooked assets into a .jpak package");
+        Console.WriteLine("  cook-shaders [inputDir] [outputDir]     : Compiles GLSL shaders into SPIR-V (.spv) bytecode");
         Console.WriteLine("  inspect <packagePath.jpak>              : Inspects .jpak Table of Contents header");
     }
 }

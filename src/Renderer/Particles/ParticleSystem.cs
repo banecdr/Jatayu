@@ -72,6 +72,8 @@ public struct ParticleRenderPushConstants
 public sealed class ParticleSystem : IDisposable
 {
     public const int DefaultMaxParticles = 16384;
+    public const float DefaultEmissionRate = 100f;
+    private const float MaximumLifetimeScale = 1.2f;
 
     private readonly VulkanContext _context;
     private readonly GpuAllocator _allocator;
@@ -93,10 +95,13 @@ public sealed class ParticleSystem : IDisposable
     private Vector3 _gravity = new Vector3(0f, -4.9f, 0f);
     private float _drag = 0.05f;
     private float _defaultLifetime = 2.5f;
+    private readonly uint _activeParticleCount;
+    private float _simulationTime;
     private bool _disposed;
 
     public Vector3 EmitterPosition { get => _emitterPosition; set => _emitterPosition = value; }
     public uint MaxParticles => _maxParticles;
+    public uint ActiveParticleCount => _activeParticleCount;
 
     public unsafe ParticleSystem(
         VulkanContext context,
@@ -109,20 +114,23 @@ public sealed class ParticleSystem : IDisposable
         _allocator = allocator ?? throw new ArgumentNullException(nameof(allocator));
         ArgumentNullException.ThrowIfNull(shaderCompiler);
         _maxParticles = Math.Max(64, maxParticles);
+        _activeParticleCount = Math.Min(
+            _maxParticles,
+            (uint)MathF.Ceiling(DefaultEmissionRate * _defaultLifetime * MaximumLifetimeScale));
 
         var device = _context.Device;
 
-        // 1. Allocate GPU Particle Storage Buffer
+        // 1. Allocate and initialize GPU particle storage; the compute shader relies on zero lifetime
+        //    to identify slots that have not emitted yet.
         ulong bufferSize = (ulong)(Marshal.SizeOf<GpuParticle>() * _maxParticles);
         _particleBuffer = allocator.CreateBuffer(
             bufferSize,
             VkBufferUsageFlags.StorageBufferBit | VkBufferUsageFlags.TransferDstBit,
-            VmaMemoryUsage.GpuOnly
+            VmaMemoryUsage.CpuToGpu,
+            VmaAllocationCreateFlags.MappedBit
         );
-
-        // Clear initial particle ages so they spawn on first tick
-        Span<byte> zeros = stackalloc byte[(int)Math.Min(bufferSize, 1024)];
-        zeros.Clear();
+        _particleBuffer.SetData(new GpuParticle[checked((int)_maxParticles)]);
+        _particleBuffer.Flush();
 
         // 2. Unit quad vertices (6 vertices = 2 triangles)
         float[] quadVertices =
@@ -203,11 +211,33 @@ public sealed class ParticleSystem : IDisposable
             _renderPipeline = PipelineBuilder.Create()
                 .SetShaderStages(stages)
                 .SetVertexInput(vertexInput)
-                .SetColorAttachmentFormat(colorFormat)
+                .SetColorAttachmentFormats(VkFormat.R16G16B16A16SFloat, VkFormat.R8UNorm)
                 .SetDepthAttachmentFormat(DepthConvention.DepthFormat)
                 .SetDepthTest(depthTestEnable: true, depthWriteEnable: false, compareOp: DepthConvention.DepthCompareOp)
                 .SetRasterization(Presets.Rasterization.Fill.CullNone)
-                .SetColorBlend(Presets.BlendState.BlendColorAlpha)
+                .SetColorBlendAttachments(
+                    new VkPipelineColorBlendAttachmentState
+                    {
+                        BlendEnable = true,
+                        SrcColorBlendFactor = VkBlendFactor.One,
+                        DstColorBlendFactor = VkBlendFactor.One,
+                        ColorBlendOp = VkBlendOp.Add,
+                        SrcAlphaBlendFactor = VkBlendFactor.One,
+                        DstAlphaBlendFactor = VkBlendFactor.One,
+                        AlphaBlendOp = VkBlendOp.Add,
+                        ColorWriteMask = VkColorComponentFlags.RBit | VkColorComponentFlags.GBit | VkColorComponentFlags.BBit | VkColorComponentFlags.ABit,
+                    },
+                    new VkPipelineColorBlendAttachmentState
+                    {
+                        BlendEnable = true,
+                        SrcColorBlendFactor = VkBlendFactor.Zero,
+                        DstColorBlendFactor = VkBlendFactor.OneMinusSrcColor,
+                        ColorBlendOp = VkBlendOp.Add,
+                        SrcAlphaBlendFactor = VkBlendFactor.Zero,
+                        DstAlphaBlendFactor = VkBlendFactor.One,
+                        AlphaBlendOp = VkBlendOp.Add,
+                        ColorWriteMask = VkColorComponentFlags.RBit,
+                    })
                 .SetPipelineLayout(_renderPipelineLayout)
                 .Build(_context);
         }
@@ -216,9 +246,31 @@ public sealed class ParticleSystem : IDisposable
     /// <summary>
     /// Dispatches the compute shader to update particle physics.
     /// </summary>
-    public unsafe void Simulate(CommandBuffer cmd, float deltaTime, float totalTime)
+    public unsafe void Simulate(CommandBuffer cmd, float deltaTime)
     {
         var device = _context.Device;
+        float simulationDelta = Math.Clamp(deltaTime, 0f, 1f / 30f);
+        _simulationTime += simulationDelta;
+
+        // The particle buffer is shared across frames in flight. Wait for the previous frame's
+        // vertex-shader reads before overwriting it with this frame's compute dispatch.
+        var reuseBarrier = stackalloc VkBufferMemoryBarrier2[1];
+        reuseBarrier[0] = new VkBufferMemoryBarrier2
+        {
+            SrcStageMask = VkPipelineStageFlags2.ComputeShaderBit | VkPipelineStageFlags2.VertexShaderBit,
+            SrcAccessMask = VkAccessFlags2.ShaderStorageReadBit | VkAccessFlags2.ShaderStorageWriteBit,
+            DstStageMask = VkPipelineStageFlags2.ComputeShaderBit,
+            DstAccessMask = VkAccessFlags2.ShaderStorageReadBit | VkAccessFlags2.ShaderStorageWriteBit,
+            Buffer = _particleBuffer.Handle,
+            Offset = new ByteSize64(0),
+            Size = new ByteSize64(_particleBuffer.SizeInBytes),
+        };
+        var reuseDepInfo = new VkDependencyInfo
+        {
+            BufferMemoryBarrierCount = 1,
+            BufferMemoryBarriers = reuseBarrier,
+        };
+        device.PInvoke.vkCmdPipelineBarrier2.Invoke(cmd.Handle, &reuseDepInfo);
 
         device.PInvoke.vkCmdBindPipeline.Invoke(cmd.Handle, VkPipelineBindPoint.Compute, _computePipeline.Handle);
 
@@ -227,11 +279,11 @@ public sealed class ParticleSystem : IDisposable
 
         var pc = new ParticleComputePushConstants
         {
-            EmitterPosition = new Vector4(_emitterPosition, 100.0f),
+            EmitterPosition = new Vector4(_emitterPosition, DefaultEmissionRate),
             GravityAndDrag = new Vector4(_gravity, _drag),
-            DeltaTime = deltaTime,
-            TotalTime = totalTime,
-            MaxParticles = _maxParticles,
+            DeltaTime = simulationDelta,
+            TotalTime = _simulationTime,
+            MaxParticles = _activeParticleCount,
             DefaultLifetime = _defaultLifetime,
         };
 
@@ -243,7 +295,7 @@ public sealed class ParticleSystem : IDisposable
             new ReadOnlySpan<ParticleComputePushConstants>(&pc, 1)
         );
 
-        device.PInvoke.vkCmdDispatch.Invoke(cmd.Handle, (int)((_maxParticles + 63) / 64), 1, 1);
+        device.PInvoke.vkCmdDispatch.Invoke(cmd.Handle, (int)((_activeParticleCount + 63) / 64), 1, 1);
 
         // Execution barrier ensuring particle writes are visible to vertex shader
         var barrier = stackalloc VkBufferMemoryBarrier2[1];
@@ -272,6 +324,10 @@ public sealed class ParticleSystem : IDisposable
     public unsafe void Render(CommandBuffer cmd, in Matrix4x4 view, in Matrix4x4 proj, float screenWidth, float screenHeight)
     {
         cmd.BindPipeline(VkPipelineBindPoint.Graphics, _renderPipeline.Handle);
+        Span<VkViewport> viewports = [new VkViewport { Width = screenWidth, Height = screenHeight, MinDepth = 0f, MaxDepth = 1f }];
+        Span<VkRect2D> scissors = [new VkRect2D(new VkExtent2D((int)screenWidth, (int)screenHeight))];
+        cmd.SetViewport(0, viewports);
+        cmd.SetScissor(0, scissors);
 
         Span<VkDescriptorSet> sets = [_computeDescSet];
         cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, _renderPipelineLayout, 0, sets, Span<ByteSize32>.Empty);
@@ -295,7 +351,7 @@ public sealed class ParticleSystem : IDisposable
             new ReadOnlySpan<ParticleRenderPushConstants>(&pc, 1)
         );
 
-        cmd.Draw(6, (int)_maxParticles, 0, 0);
+        cmd.Draw(6, (int)_activeParticleCount, 0, 0);
     }
 
     private static string ResolveShader(string relPath)

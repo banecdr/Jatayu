@@ -39,6 +39,11 @@ public struct ShadowCascade
         float farDist,
         int resolution)
     {
+        if (resolution <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(resolution), "Shadow map resolution must be positive.");
+        }
+
         CascadeIndex = Math.Max(0, CascadeIndex);
         NearDistance = nearDist;
         SplitDistance = farDist;
@@ -107,15 +112,12 @@ public struct ShadowCascade
         Vector3 up = MathF.Abs(Vector3.Dot(lightDir, Vector3.UnitY)) > 0.99f ? Vector3.UnitZ : Vector3.UnitY;
         Matrix4x4 lightView = Matrix4x4.CreateLookAt(lightPos, center, up);
 
-        // 5. Texel snapping in light view space to eliminate edge shimmering during camera movement
+        // 5. Snap the fitted frustum center, not the light-space origin, to a shadow texel.
         Vector3 centerLight = Vector3.Transform(center, lightView);
-        float snappedX = MathF.Floor(centerLight.X / worldUnitsPerTexel) * worldUnitsPerTexel;
-        float snappedY = MathF.Floor(centerLight.Y / worldUnitsPerTexel) * worldUnitsPerTexel;
-        float diffX = snappedX - centerLight.X;
-        float diffY = snappedY - centerLight.Y;
-
-        lightView.M41 += diffX;
-        lightView.M42 += diffY;
+        float snappedX = MathF.Round(centerLight.X / worldUnitsPerTexel) * worldUnitsPerTexel;
+        float snappedY = MathF.Round(centerLight.Y / worldUnitsPerTexel) * worldUnitsPerTexel;
+        lightView.M41 += snappedX - centerLight.X;
+        lightView.M42 += snappedY - centerLight.Y;
 
         // 6. Symmetrical Reverse-Z Orthographic projection with extended light depth range
         float orthoExtent = radius * 2.0f;

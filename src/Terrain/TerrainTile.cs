@@ -183,9 +183,14 @@ public sealed class TerrainTile
         if (!header.IsValid)
             return false;
 
-        int totalSamples = (int)(header.HeightSamplesX * header.HeightSamplesZ);
-        int expectedBytes = totalSamples * sizeof(float);
-        if (header.HeightDataOffset + (ulong)expectedBytes > (ulong)data.Length)
+        ulong sampleCount = (ulong)header.HeightSamplesX * header.HeightSamplesZ;
+        if (sampleCount > int.MaxValue / sizeof(float))
+            return false;
+
+        int expectedBytes = checked((int)sampleCount * sizeof(float));
+        if (header.HeightDataOffset > (ulong)data.Length ||
+            expectedBytes > data.Length ||
+            (ulong)expectedBytes > (ulong)data.Length - header.HeightDataOffset)
             return false;
 
         var heightSpan = MemoryMarshal.Cast<byte, float>(data.Slice((int)header.HeightDataOffset, expectedBytes));
@@ -231,7 +236,12 @@ public sealed class TerrainTile
                 float h1 = MathF.Sin(fx * 0.005f) * MathF.Cos(fz * 0.005f) * maxElevation;
                 float h2 = MathF.Sin(fx * 0.015f + 1.2f) * MathF.Sin(fz * 0.015f + 0.8f) * (maxElevation * 0.35f);
                 float h3 = MathF.Cos(fx * 0.04f - 0.5f) * MathF.Sin(fz * 0.04f + 1.7f) * (maxElevation * 0.1f);
-                float h = h1 + h2 + h3;
+
+                // Flat clearing around origin (radius 200m) for testing arena and rotating cubes
+                float dist = MathF.Sqrt(fx * fx + fz * fz);
+                float t = Math.Clamp((dist - 200.0f) / 60.0f, 0.0f, 1.0f);
+                float flatFactor = t * t * (3.0f - 2.0f * t);
+                float h = (h1 + h2 + h3) * flatFactor;
 
                 heights[z * samples + x] = h;
                 if (h < minH) minH = h;

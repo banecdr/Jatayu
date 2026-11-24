@@ -109,14 +109,21 @@ public static class ModelLoader
 
                 var posSpan = loader.GetAccessorBufferSpan(posAccessorIdx);
                 var positions = MemoryMarshal.Cast<byte, float3>(posSpan);
-                int vertexCount = positions.Length;
+                int vertexCount = gltf.Accessors?[posAccessorIdx].Count ?? 0;
+                if (vertexCount <= 0 ||
+                    posSpan.Length < checked(vertexCount * Marshal.SizeOf<float3>()))
+                    continue;
+                positions = positions[..vertexCount];
 
                 // Extract NORMAL (optional)
                 ReadOnlySpan<float3> normals = default;
                 if (attrs.TryGetValue("NORMAL", out int normAccessorIdx))
                 {
                     var normSpan = loader.GetAccessorBufferSpan(normAccessorIdx);
-                    normals = MemoryMarshal.Cast<byte, float3>(normSpan);
+                    int normalCount = gltf.Accessors?[normAccessorIdx].Count ?? 0;
+                    if (normalCount == vertexCount &&
+                        normSpan.Length >= checked(normalCount * Marshal.SizeOf<float3>()))
+                        normals = MemoryMarshal.Cast<byte, float3>(normSpan)[..normalCount];
                 }
 
                 // Extract TEXCOORD_0 (optional)
@@ -124,7 +131,10 @@ public static class ModelLoader
                 if (attrs.TryGetValue("TEXCOORD_0", out int uvAccessorIdx))
                 {
                     var uvSpan = loader.GetAccessorBufferSpan(uvAccessorIdx);
-                    uvs = MemoryMarshal.Cast<byte, float2>(uvSpan);
+                    int uvCount = gltf.Accessors?[uvAccessorIdx].Count ?? 0;
+                    if (uvCount == vertexCount &&
+                        uvSpan.Length >= checked(uvCount * Marshal.SizeOf<float2>()))
+                        uvs = MemoryMarshal.Cast<byte, float2>(uvSpan)[..uvCount];
                 }
 
                 // Extract COLOR_0 (optional)
@@ -132,7 +142,10 @@ public static class ModelLoader
                 if (attrs.TryGetValue("COLOR_0", out int colorAccessorIdx))
                 {
                     var colorSpan = loader.GetAccessorBufferSpan(colorAccessorIdx);
-                    colors = MemoryMarshal.Cast<byte, float3>(colorSpan);
+                    int colorCount = gltf.Accessors?[colorAccessorIdx].Count ?? 0;
+                    if (colorCount == vertexCount &&
+                        colorSpan.Length >= checked(colorCount * Marshal.SizeOf<float3>()))
+                        colors = MemoryMarshal.Cast<byte, float3>(colorSpan)[..colorCount];
                 }
 
                 var vertices = new RawVertex[vertexCount];
@@ -153,23 +166,36 @@ public static class ModelLoader
                     int idxAccessor = prim.Indices.Value;
                     var idxSpan = loader.GetAccessorBufferSpan(idxAccessor);
                     var accessor = gltf.Accessors![idxAccessor];
+                    int indexCount = accessor.Count;
+                    if (idxSpan.Length < checked(indexCount * (accessor.ComponentType == Accessor.ComponentTypeEnum.UnsignedShort ? sizeof(ushort) : accessor.ComponentType == Accessor.ComponentTypeEnum.UnsignedInt ? sizeof(uint) : sizeof(byte))))
+                        throw new InvalidDataException($"glTF index accessor is shorter than its declared count in {filePath}");
 
-                    indices = new uint[accessor.Count];
+                    indices = new uint[indexCount];
                     if (accessor.ComponentType == Accessor.ComponentTypeEnum.UnsignedShort)
                     {
                         var u16Span = MemoryMarshal.Cast<byte, ushort>(idxSpan);
-                        for (int i = 0; i < u16Span.Length; i++)
+                        for (int i = 0; i < indexCount; i++)
                             indices[i] = u16Span[i];
                     }
                     else if (accessor.ComponentType == Accessor.ComponentTypeEnum.UnsignedInt)
                     {
                         var u32Span = MemoryMarshal.Cast<byte, uint>(idxSpan);
-                        u32Span.CopyTo(indices);
+                        u32Span[..indexCount].CopyTo(indices);
                     }
                     else if (accessor.ComponentType == Accessor.ComponentTypeEnum.UnsignedByte)
                     {
-                        for (int i = 0; i < idxSpan.Length; i++)
+                        for (int i = 0; i < indexCount; i++)
                             indices[i] = idxSpan[i];
+                    }
+                    else
+                    {
+                        throw new InvalidDataException($"Unsupported glTF index component type in {filePath}");
+                    }
+
+                    for (int i = 0; i < indices.Length; i++)
+                    {
+                        if (indices[i] >= (uint)vertexCount)
+                            throw new InvalidDataException($"glTF index {indices[i]} exceeds primitive vertex count {vertexCount} in {filePath}");
                     }
                 }
                 else

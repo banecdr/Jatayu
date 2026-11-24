@@ -9,15 +9,10 @@
 layout(location = 0) in vec2 inQuadPos; // (-1..1, -1..1)
 
 struct Particle {
-    vec3 Position;
-    float Age;
-    vec3 Velocity;
-    float Lifetime;
+    vec4 PositionAge;
+    vec4 VelocityLifetime;
     vec4 Color;
-    float Size;
-    float Padding0;
-    float Padding1;
-    float Padding2;
+    vec4 SizePadding;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer ParticleBuffer {
@@ -37,11 +32,18 @@ layout(location = 2) out float vViewZ;
 void main() {
     Particle p = particles[gl_InstanceIndex];
 
-    // If particle is expired or dead, scale to zero
-    float activeScale = (p.Age < p.Lifetime && p.Lifetime > 0.0) ? p.Size : 0.0;
+    // If particle is expired or dead, clip immediately to prevent degenerate primitives
+    float activeScale = (p.PositionAge.w < p.VelocityLifetime.w && p.VelocityLifetime.w > 0.0) ? p.SizePadding.x : 0.0;
+    if (activeScale <= 0.0001) {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // Outside Vulkan [0, 1] Reverse-Z depth range
+        vColor = vec4(0.0);
+        vTexCoord = vec2(0.0);
+        vViewZ = 0.0;
+        return;
+    }
 
     // View-space spherical billboarding
-    vec4 posView = pc.View * vec4(p.Position, 1.0);
+    vec4 posView = pc.View * vec4(p.PositionAge.xyz, 1.0);
     posView.xy += inQuadPos * activeScale;
 
     vColor = p.Color;

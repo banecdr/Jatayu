@@ -52,6 +52,21 @@ public sealed class PackWriter : IDisposable
     public void WriteToFile(string outputPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_entries.Count == 0)
+            throw new InvalidOperationException("Cannot write an empty JPAK package.");
+
+        ulong totalPayloadBytes = 0;
+        if ((ulong)_entries.Count > uint.MaxValue / (uint)Marshal.SizeOf<JpakEntry>())
+            throw new InvalidOperationException("JPAK entry count exceeds the format limit.");
+        foreach (var entry in _entries)
+        {
+            if (entry.Data.Length > int.MaxValue)
+                throw new InvalidOperationException("JPAK payload exceeds the format limit.");
+            if (totalPayloadBytes > ulong.MaxValue - (ulong)entry.Data.Length)
+                throw new InvalidOperationException("JPAK package size exceeds the format limit.");
+            totalPayloadBytes += (ulong)entry.Data.Length;
+        }
 
         string? dir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(dir))
@@ -67,6 +82,9 @@ public sealed class PackWriter : IDisposable
         ulong tocOffset = (ulong)headerSize;
         ulong tocSize = (ulong)(entryCount * entrySize);
         ulong dataOffset = (tocOffset + tocSize + 15UL) & ~15UL; // 16-byte aligned
+        if (dataOffset > long.MaxValue ||
+            totalPayloadBytes > (ulong)long.MaxValue - dataOffset)
+            throw new InvalidOperationException("JPAK package size exceeds the supported file limit.");
 
         var header = JpakHeader.Create(entryCount, tocOffset, dataOffset);
 

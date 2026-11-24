@@ -41,7 +41,12 @@ public static class Program
             }
             else if (args[i] == "--grid" && i + 1 < args.Length)
             {
-                gridDim = int.Parse(args[++i]);
+                if (!int.TryParse(args[++i], out gridDim) ||
+                    gridDim < 1 || gridDim > 128 || (gridDim & 1) != 0)
+                {
+                    Console.Error.WriteLine("[WorldGen] --grid must be an even integer between 2 and 128.");
+                    return 2;
+                }
             }
         }
 

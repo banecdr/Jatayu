@@ -94,6 +94,10 @@ public sealed class CascadedShadowMap : IDisposable
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _allocator = allocator ?? throw new ArgumentNullException(nameof(allocator));
+        if (resolution <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(resolution), "Shadow map resolution must be positive.");
+        }
         _resolution = resolution;
 
         var device = _context.Device;
@@ -196,19 +200,13 @@ public sealed class CascadedShadowMap : IDisposable
         float maxShadowDistance = 500.0f,
         float lambda = 0.75f)
     {
+        _cascadeSplits = CalculateSplitDistances(nearPlane, maxShadowDistance, lambda);
         Span<float> splitDistances = stackalloc float[CascadeCount + 1];
         splitDistances[0] = nearPlane;
-
-        // Practical split scheme (blending logarithmic and linear distributions)
-        for (int i = 1; i <= CascadeCount; i++)
-        {
-            float ratio = (float)i / CascadeCount;
-            float logSplit = nearPlane * MathF.Pow(maxShadowDistance / nearPlane, ratio);
-            float uniformSplit = nearPlane + (maxShadowDistance - nearPlane) * ratio;
-            splitDistances[i] = (lambda * logSplit) + ((1.0f - lambda) * uniformSplit);
-        }
-
-        _cascadeSplits = new Vector4(splitDistances[1], splitDistances[2], splitDistances[3], splitDistances[4]);
+        splitDistances[1] = _cascadeSplits.X;
+        splitDistances[2] = _cascadeSplits.Y;
+        splitDistances[3] = _cascadeSplits.Z;
+        splitDistances[4] = _cascadeSplits.W;
 
         for (int i = 0; i < CascadeCount; i++)
         {
@@ -224,6 +222,57 @@ public sealed class CascadedShadowMap : IDisposable
         }
     }
 
+    public static Vector4 CalculateSplitDistances(float nearPlane, float maxShadowDistance, float lambda = 0.75f)
+    {
+        if (!float.IsFinite(nearPlane) || nearPlane <= 0.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nearPlane), "Near plane must be finite and positive.");
+        }
+        if (!float.IsFinite(maxShadowDistance) || maxShadowDistance <= nearPlane)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxShadowDistance), "Maximum shadow distance must exceed the near plane.");
+        }
+        if (!float.IsFinite(lambda) || lambda < 0.0f || lambda > 1.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lambda), "Cascade split lambda must be between zero and one.");
+        }
+
+        Span<float> splits = stackalloc float[CascadeCount];
+        for (int i = 1; i <= CascadeCount; i++)
+        {
+            float ratio = (float)i / CascadeCount;
+            float logarithmic = nearPlane * MathF.Pow(maxShadowDistance / nearPlane, ratio);
+            float uniform = nearPlane + (maxShadowDistance - nearPlane) * ratio;
+            splits[i - 1] = (lambda * logarithmic) + ((1.0f - lambda) * uniform);
+        }
+
+        return new Vector4(splits[0], splits[1], splits[2], splits[3]);
+    }
+
+    public static int SelectCascadeIndex(float viewDepth, in Vector4 splits)
+    {
+        if (!float.IsFinite(viewDepth))
+        {
+            throw new ArgumentOutOfRangeException(nameof(viewDepth), "View depth must be finite.");
+        }
+
+        if (viewDepth > splits.W) return -1;
+        if (viewDepth > splits.Z) return 3;
+        if (viewDepth > splits.Y) return 2;
+        if (viewDepth > splits.X) return 1;
+        return 0;
+    }
+
+    public static Vector4 PackGpuShadowParams(int resolution, float shadowBias, float pcfRadius)
+    {
+        if (resolution <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(resolution), "Shadow map resolution must be positive.");
+        }
+
+        return new Vector4(resolution, 1.0f / resolution, shadowBias, pcfRadius);
+    }
+
     /// <summary>
     /// Extracts packed GPU cascade data for uniform buffer upload.
     /// </summary>
@@ -236,7 +285,7 @@ public sealed class CascadedShadowMap : IDisposable
             CascadeViewProj2 = _cascades[2].ViewProjection,
             CascadeViewProj3 = _cascades[3].ViewProjection,
             CascadeSplits = _cascadeSplits,
-            ShadowParams = new Vector4(_resolution, 1.0f / _resolution, shadowBias, pcfRadius),
+            ShadowParams = PackGpuShadowParams(_resolution, shadowBias, pcfRadius),
         };
     }
 

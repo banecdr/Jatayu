@@ -63,6 +63,7 @@ public sealed class DescriptorAllocator : IDisposable
         new(VkDescriptorType.StorageBuffer, 2.0f),
         new(VkDescriptorType.SampledImage, 4.0f),
         new(VkDescriptorType.Sampler, 2.0f),
+        new(VkDescriptorType.StorageImage, 2.0f),
     ];
 
     /// <summary>

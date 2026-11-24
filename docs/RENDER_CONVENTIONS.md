@@ -37,6 +37,12 @@ This document establishes the binding rendering, mathematical, coordinate, and d
   - **Far Culling**: Uses a dedicated `MaxDrawDistance` (default: 8,000 meters) rather than a finite projection far plane.
   - **Hi-Z Occlusion**: Downsampled depth pyramids use minimum reduction with a min-reduction sampler (`VK_SAMPLER_REDUCTION_MODE_MIN` via `VK_EXT_sampler_filter_minmax`).
 
+  ### Cascaded shadow conventions
+  - Directional shadows use four Reverse-Z depth cascades and `GREATER_OR_EQUAL` comparison. A positive receiver-depth bias moves the comparison reference toward the light; shader bias is slope-scaled and capped at `0.002` normalized depth.
+  - `GpuLightEnvironmentData.ShadowParams` packs cascade resolution, inverse resolution, PCF radius, and `ShadowDebugMode` (off, cascade selection, projected depth, or normalized bias). PBR and terrain use the same cascade selection, bias, and filter rules.
+  - The persisted `ShadowQuality` setting selects `Standard` (1024, 3x3 PCF), `High` (2048, 16-tap Poisson PCF, radius 1.6), or `Ultra` (2048, 16-tap Poisson PCF, radius 2.4). `Low` is an alias for `Standard`; unsupported values fall back to `High`. Ultra/High 16-tap Poisson filter radius scales inversely with `sqrt(cascadeScale)` (clamped to $\ge 1.0$ texel) to maintain crisp contact shadows in distant cascades without over-blurring.
+  - In the interactive renderer, `[P]` toggles 3x3 versus 16-tap filtering without reallocating the shadow map. `[G]` cycles cascade, projected-depth, and bias diagnostics, then returns to normal shading.
+
 ---
 
 ## 3. Matrix & Vector Mathematics

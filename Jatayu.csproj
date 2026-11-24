@@ -8,6 +8,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>none</DebugType>
+    <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildProjectDirectory)\dist\Jatayu\</PublishDir>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Jatayu.Tests" />
   </ItemGroup>
@@ -91,10 +100,46 @@
     <ProjectReference Include="src\Jatayu.AssetFormats\Jatayu.AssetFormats.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="assets\**">
+  <!-- Debug configuration: Copy GLSL source shaders for fast iteration/hot-reloading -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <None Include="assets\shaders\**\*.vert;assets\shaders\**\*.frag;assets\shaders\**\*.comp;assets\shaders\**\*.glsl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="assets\generated\world.jpak" Condition="Exists('assets\generated\world.jpak')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- Release configuration: Copy ONLY pre-compiled SPIR-V binaries and production .jpak containers -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <None Include="assets\generated\world.jpak" Condition="Exists('assets\generated\world.jpak')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <Link>assets\packages\world.jpak</Link>
+      <TargetPath>assets\packages\world.jpak</TargetPath>
+    </None>
+  </ItemGroup>
+
+  <!-- Always exclude loose shader caches and intermediate cooker generator files from all builds -->
+  <ItemGroup>
+    <None Remove="assets\shaders\cache\**" />
+    <None Remove="assets\generated\cells\**" />
+    <None Remove="assets\generated\models\**" />
+    <None Remove="assets\generated\cooked\**" />
+  </ItemGroup>
+
+  <!-- Publish shaders outside the source tree; Release runtime resolves SPIR-V beside the executable. -->
+  <Target Name="PrecompileShadersRelease" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <_ReleaseShaderOutputDir>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)release-shaders</_ReleaseShaderOutputDir>
+    </PropertyGroup>
+    <Message Importance="high" Text="[Release Publish] Compiling shaders into $(_ReleaseShaderOutputDir)" />
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)tools\Jatayu.Cooker\Jatayu.Cooker.csproj&quot; --configuration Release -- cook-shaders &quot;$(MSBuildThisFileDirectory)assets\shaders&quot; &quot;$(_ReleaseShaderOutputDir)&quot;" />
+    <ItemGroup>
+      <_ReleaseShader Include="$(_ReleaseShaderOutputDir)\*.spv" />
+    </ItemGroup>
+    <Error Condition="'@(_ReleaseShader)' == ''" Text="Release shader compilation produced no SPIR-V files." />
+    <Copy SourceFiles="@(_ReleaseShader)" DestinationFolder="$(PublishDir)assets\shaders" />
+  </Target>
 
 </Project>

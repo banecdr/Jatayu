@@ -37,7 +37,7 @@ layout(std140, set = 0, binding = 0) uniform ClusterUniforms {
     uint PointLightCount;
     uint SpotLightCount;
     uint MaxLightsPerCluster;
-    uint Padding;
+    uint MaxLightIndices;
 } ubo;
 
 layout(std430, set = 0, binding = 1) readonly buffer PointLightSSBO {
@@ -141,12 +141,15 @@ void main() {
     // Allocate range in global light index buffer
     if (localLightCount > 0u) {
         uint baseOffset = atomicAdd(globalIndexCounter, localLightCount);
-        for (uint k = 0u; k < localLightCount; ++k) {
+        uint writeCount = baseOffset < ubo.MaxLightIndices
+            ? min(localLightCount, ubo.MaxLightIndices - baseOffset)
+            : 0u;
+        for (uint k = 0u; k < writeCount; ++k) {
             globalLightIndices[baseOffset + k] = localLightIndices[k];
         }
 
         clusterRecords[clusterIndex].Offset = baseOffset;
-        clusterRecords[clusterIndex].Count = localLightCount;
+        clusterRecords[clusterIndex].Count = writeCount;
     } else {
         clusterRecords[clusterIndex].Offset = 0u;
         clusterRecords[clusterIndex].Count = 0u;

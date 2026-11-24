@@ -35,11 +35,26 @@ public static class Profiler
     private static readonly List<ZoneTiming> s_completedZones = new(64);
     private static readonly List<ZoneTiming> s_publishedSnapshot = new(64);
     private static readonly double s_tickToMs = 1000.0 / Stopwatch.Frequency;
+    private static long s_frameStartTicks;
+    private static float s_frameDurationMs;
 
     /// <summary>
     /// Gets the most recent completed frame's zone timings in milliseconds.
     /// </summary>
     public static IReadOnlyList<ZoneTiming> LatestSnapshot => s_publishedSnapshot;
+
+    public static float FrameDurationMs => s_frameDurationMs;
+
+    public static float MeasuredCpuDurationMs
+    {
+        get
+        {
+            float total = 0f;
+            foreach (var zone in s_publishedSnapshot)
+                total += zone.DurationMs;
+            return total;
+        }
+    }
 
     /// <summary>
     /// Marks the start of a CPU frame.
@@ -48,6 +63,7 @@ public static class Profiler
     {
         s_zoneStartTicks.Clear();
         s_completedZones.Clear();
+        s_frameStartTicks = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -55,6 +71,8 @@ public static class Profiler
     /// </summary>
     public static void EndFrame()
     {
+        long elapsed = Stopwatch.GetTimestamp() - s_frameStartTicks;
+        s_frameDurationMs = (float)(elapsed * s_tickToMs);
         s_publishedSnapshot.Clear();
         s_publishedSnapshot.AddRange(s_completedZones);
     }

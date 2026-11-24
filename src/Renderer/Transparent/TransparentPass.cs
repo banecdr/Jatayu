@@ -30,8 +30,8 @@ public sealed class TransparentPass : IDisposable
 {
     private readonly VulkanContext _context;
     private readonly GpuAllocator _allocator;
-    private readonly uint _width;
-    private readonly uint _height;
+    private uint _width;
+    private uint _height;
 
     private GpuTexture _accumTexture;
     private GpuTexture _revealageTexture;
@@ -42,6 +42,13 @@ public sealed class TransparentPass : IDisposable
     private readonly VkDescriptorSet _compositeDescSet;
     private readonly VkPipelineLayout _compositePipelineLayout;
     private readonly VulkanPipeline _compositePipeline;
+    private RgTextureHandle _accumHandle;
+    private RgTextureHandle _revealageHandle;
+    private RgTextureHandle _sceneColorHandle;
+    private RgTextureHandle _sceneDepthHandle;
+    private readonly Action<RenderPassBuilder> _accumulationSetup;
+    private readonly Action<RenderPassBuilder> _compositeSetup;
+    private readonly Action<RenderPassContext> _compositeExecute;
     private bool _disposed;
 
     public GpuTexture AccumTexture => _accumTexture;
@@ -58,58 +65,18 @@ public sealed class TransparentPass : IDisposable
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _allocator = allocator ?? throw new ArgumentNullException(nameof(allocator));
         ArgumentNullException.ThrowIfNull(shaderCompiler);
+        if (width <= 0 || height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(width), "Transparency targets must have positive dimensions.");
         _width = (uint)width;
         _height = (uint)height;
 
         var device = _context.Device;
+        _accumulationSetup = SetupAccumulationPass;
+        _compositeSetup = SetupCompositePass;
+        _compositeExecute = ExecuteCompositePass;
 
-        // 1. Allocate Accumulation target (RGBA16F, clear to (0,0,0,0))
-        var accumInfo = new VkImageCreateInfo
-        {
-            ImageType = VkImageType._2D,
-            Format = VkFormat.R16G16B16A16SFloat,
-            Extent = new VkExtent3D(width, height, 1),
-            MipLevels = 1,
-            ArrayLayers = 1,
-            Samples = VkSampleCountFlags._1Bit,
-            Tiling = VkImageTiling.Optimal,
-            Usage = VkImageUsageFlags.ColorAttachmentBit | VkImageUsageFlags.SampledBit,
-            SharingMode = VkSharingMode.Exclusive,
-            InitialLayout = VkImageLayout.Undefined,
-        };
-        allocator.CreateImage(accumInfo, VmaMemoryUsage.GpuOnly, VmaAllocationCreateFlags.None, out var accumImg, out var accumAlloc, out _);
-        var accumView = device.CreateImageView(new VkImageViewCreateInfo
-        {
-            Image = accumImg,
-            ViewType = VkImageViewType._2D,
-            Format = VkFormat.R16G16B16A16SFloat,
-            SubresourceRange = new VkImageSubresourceRange { AspectMask = VkImageAspectFlags.ColorBit, LevelCount = 1, LayerCount = 1 },
-        }, null);
-        _accumTexture = new GpuTexture(_context, _allocator, accumImg, accumAlloc, accumView, width, height, VkFormat.R16G16B16A16SFloat, 1, VkImageLayout.Undefined);
-
-        // 2. Allocate Revealage target (R8_UNORM, clear to 1.0)
-        var revealInfo = new VkImageCreateInfo
-        {
-            ImageType = VkImageType._2D,
-            Format = VkFormat.R8UNorm,
-            Extent = new VkExtent3D(width, height, 1),
-            MipLevels = 1,
-            ArrayLayers = 1,
-            Samples = VkSampleCountFlags._1Bit,
-            Tiling = VkImageTiling.Optimal,
-            Usage = VkImageUsageFlags.ColorAttachmentBit | VkImageUsageFlags.SampledBit,
-            SharingMode = VkSharingMode.Exclusive,
-            InitialLayout = VkImageLayout.Undefined,
-        };
-        allocator.CreateImage(revealInfo, VmaMemoryUsage.GpuOnly, VmaAllocationCreateFlags.None, out var revealImg, out var revealAlloc, out _);
-        var revealView = device.CreateImageView(new VkImageViewCreateInfo
-        {
-            Image = revealImg,
-            ViewType = VkImageViewType._2D,
-            Format = VkFormat.R8UNorm,
-            SubresourceRange = new VkImageSubresourceRange { AspectMask = VkImageAspectFlags.ColorBit, LevelCount = 1, LayerCount = 1 },
-        }, null);
-        _revealageTexture = new GpuTexture(_context, _allocator, revealImg, revealAlloc, revealView, width, height, VkFormat.R8UNorm, 1, VkImageLayout.Undefined);
+        _accumTexture = CreateRenderTarget(width, height, VkFormat.R16G16B16A16SFloat);
+        _revealageTexture = CreateRenderTarget(width, height, VkFormat.R8UNorm);
 
         // 3. Bilinear clamp sampler
         _sampler = device.CreateSampler(new VkSamplerCreateInfo
@@ -141,7 +108,7 @@ public sealed class TransparentPass : IDisposable
         };
         _compositePipelineLayout = device.CreatePipelineLayout(in pipeLayoutInfo, null);
 
-        string vertPath = ResolveShader("assets/shaders/skybox.vert"); // Reuses fullscreen procedural triangle
+        string vertPath = ResolveShader("assets/shaders/transparent_composite.vert");
         string fragPath = ResolveShader("assets/shaders/transparent_composite.frag");
         var vertModule = shaderCompiler.CompileShaderModuleFromFile(device, vertPath, Brutal.ShaderCApi.ShaderKind.VertexShader);
         var fragModule = shaderCompiler.CompileShaderModuleFromFile(device, fragPath, Brutal.ShaderCApi.ShaderKind.FragmentShader);
@@ -159,17 +126,132 @@ public sealed class TransparentPass : IDisposable
         }
     }
 
+    private unsafe GpuTexture CreateRenderTarget(int width, int height, VkFormat format)
+    {
+        var imageInfo = new VkImageCreateInfo
+        {
+            ImageType = VkImageType._2D,
+            Format = format,
+            Extent = new VkExtent3D(width, height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Samples = VkSampleCountFlags._1Bit,
+            Tiling = VkImageTiling.Optimal,
+            Usage = VkImageUsageFlags.ColorAttachmentBit | VkImageUsageFlags.SampledBit,
+            SharingMode = VkSharingMode.Exclusive,
+            InitialLayout = VkImageLayout.Undefined,
+        };
+        _allocator.CreateImage(imageInfo, VmaMemoryUsage.GpuOnly, VmaAllocationCreateFlags.None, out var image, out var allocation, out _);
+        var viewInfo = new VkImageViewCreateInfo
+        {
+            Image = image,
+            ViewType = VkImageViewType._2D,
+            Format = format,
+            SubresourceRange = new VkImageSubresourceRange
+            {
+                AspectMask = VkImageAspectFlags.ColorBit,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+        };
+        var view = _context.Device.CreateImageView(in viewInfo, null);
+        return new GpuTexture(_context, _allocator, image, allocation, view, width, height, format, 1, VkImageLayout.Undefined);
+    }
+
+    public void Resize(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(width), "Transparency targets must have positive dimensions.");
+        if (_width == (uint)width && _height == (uint)height)
+            return;
+
+        var newAccum = CreateRenderTarget(width, height, VkFormat.R16G16B16A16SFloat);
+        var newRevealage = CreateRenderTarget(width, height, VkFormat.R8UNorm);
+        var oldAccum = _accumTexture;
+        var oldRevealage = _revealageTexture;
+        _accumTexture = newAccum;
+        _revealageTexture = newRevealage;
+        _width = (uint)width;
+        _height = (uint)height;
+        _descriptorAllocator.WriteImage(_compositeDescSet, 0, _sampler, _accumTexture.ImageView, VkImageLayout.ShaderReadOnlyOptimal);
+        _descriptorAllocator.WriteImage(_compositeDescSet, 1, _sampler, _revealageTexture.ImageView, VkImageLayout.ShaderReadOnlyOptimal);
+        oldAccum.Dispose();
+        oldRevealage.Dispose();
+    }
+
     /// <summary>
     /// Executes the fullscreen composite pass blending transparent accumulation over the scene color target.
     /// </summary>
-    public void Composite(CommandBuffer cmd)
+    public void AddPasses(
+        RenderGraph graph,
+        RgTextureHandle sceneColor,
+        RgTextureHandle sceneDepth,
+        Action<RenderPassContext> renderTransparentGeometry)
     {
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(renderTransparentGeometry);
+        if (graph.GetTextureWidth(sceneColor) != _width || graph.GetTextureHeight(sceneColor) != _height ||
+            graph.GetTextureWidth(sceneDepth) != _width || graph.GetTextureHeight(sceneDepth) != _height)
+            throw new InvalidOperationException("WBOIT targets must match the scene color and depth dimensions.");
+        _sceneColorHandle = sceneColor;
+        _sceneDepthHandle = sceneDepth;
+        _accumHandle = graph.ImportTexture(
+            "WboitAccumulation",
+            _accumTexture.Image,
+            _accumTexture.ImageView,
+            _accumTexture.Format,
+            _width,
+            _height,
+            VkImageLayout.Undefined);
+        _revealageHandle = graph.ImportTexture(
+            "WboitRevealage",
+            _revealageTexture.Image,
+            _revealageTexture.ImageView,
+            _revealageTexture.Format,
+            _width,
+            _height,
+            VkImageLayout.Undefined);
+
+        graph.AddPass("WboitAccumulationPass", _accumulationSetup, renderTransparentGeometry);
+        graph.AddPass("WboitCompositePass", _compositeSetup, _compositeExecute);
+    }
+
+    private void SetupAccumulationPass(RenderPassBuilder builder)
+    {
+        builder.SetColorAttachment(
+            _accumHandle,
+            VkAttachmentLoadOp.Clear,
+            VkAttachmentStoreOp.Store,
+            new VkClearColorValue { Float32 = new Brutal.Numerics.float4(0f, 0f, 0f, 0f) });
+        builder.SetColorAttachment(
+            _revealageHandle,
+            VkAttachmentLoadOp.Clear,
+            VkAttachmentStoreOp.Store,
+            new VkClearColorValue { Float32 = new Brutal.Numerics.float4(1f, 0f, 0f, 0f) });
+        builder.SetDepthAttachment(_sceneDepthHandle, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+    }
+
+    private void SetupCompositePass(RenderPassBuilder builder)
+    {
+        builder.ReadTexture(_accumHandle);
+        builder.ReadTexture(_revealageHandle);
+        builder.SetColorAttachment(_sceneColorHandle, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
+    }
+
+    private void ExecuteCompositePass(RenderPassContext ctx)
+    {
+        var cmd = ctx.CommandBuffer;
         cmd.BindPipeline(VkPipelineBindPoint.Graphics, _compositePipeline.Handle);
 
         Span<VkDescriptorSet> sets = [_compositeDescSet];
         cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, _compositePipelineLayout, 0, sets, Span<ByteSize32>.Empty);
 
-        // Fullscreen procedural triangle (3 vertices, no buffers bound)
+        Span<VkViewport> viewports = [new VkViewport { Width = ctx.RenderArea.Width, Height = ctx.RenderArea.Height, MinDepth = 0f, MaxDepth = 1f }];
+        Span<VkRect2D> scissors = [new VkRect2D(new VkExtent2D((int)ctx.RenderArea.Width, (int)ctx.RenderArea.Height))];
+        cmd.SetViewport(0, viewports);
+        cmd.SetScissor(0, scissors);
         cmd.Draw(3, 1, 0, 0);
     }
 

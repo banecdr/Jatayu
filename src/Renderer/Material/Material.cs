@@ -47,6 +47,7 @@ public sealed class Material
     public Vector3 EmissiveColor { get; set; } = Vector3.Zero;
     public float EmissiveIntensity { get; set; } = 1.0f;
     public bool DoubleSided { get; set; } = false;
+    public bool AlphaTest { get; set; } = false;
 
     /// <summary>
     /// Converts this material into packed GPU layout format.
@@ -65,7 +66,7 @@ public sealed class Material
             EmissiveIndex = EmissiveTextureSlot,
             EmissiveIntensity = EmissiveIntensity,
             EmissiveFactor = EmissiveColor,
-            Flags = DoubleSided ? 1u : 0u,
+            Flags = (DoubleSided ? 1u : 0u) | (AlphaTest ? 2u : 0u),
         };
     }
 }

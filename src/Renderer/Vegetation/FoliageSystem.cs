@@ -206,7 +206,9 @@ public sealed class FoliageSystem : IDisposable
     /// </summary>
     public void SetInstances(ReadOnlySpan<FoliageInstanceData> instances)
     {
-        _activeInstanceCount = (uint)Math.Min(instances.Length, MaxFoliageInstances);
+        if (instances.Length > MaxFoliageInstances)
+            throw new ArgumentOutOfRangeException(nameof(instances), $"At most {MaxFoliageInstances} foliage instances are supported.");
+        _activeInstanceCount = (uint)instances.Length;
         if (_activeInstanceCount > 0)
         {
             _instanceBuffer.SetData(instances[..(int)_activeInstanceCount]);

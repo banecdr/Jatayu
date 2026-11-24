@@ -36,15 +36,16 @@ public struct CullUniforms
 }
 
 /// <summary>
-/// Push constants passed to cull.comp (16 bytes).
+/// Push constants passed to cull.comp (20 bytes).
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 16)]
+[StructLayout(LayoutKind.Sequential, Size = 20)]
 public struct CullPushConstants
 {
     public uint TotalInstanceCount;
     public uint ViewIndex;
     public uint MaxDrawsPerView;
     public uint BaseCommandOffset;
+    public uint ShadowView;
 }
 
 /// <summary>
@@ -236,6 +237,7 @@ public sealed class GpuCuller : IDisposable
             ViewIndex = (uint)viewIndex,
             MaxDrawsPerView = (uint)indirectBuffer.MaxDrawsPerView,
             BaseCommandOffset = baseCmdOffset,
+            ShadowView = viewIndex == 0 ? 0u : 1u,
         };
 
         _context.Device.PInvoke.vkCmdPushConstants.Invoke(

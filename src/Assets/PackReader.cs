@@ -49,25 +49,55 @@ public sealed class PackReader : IDisposable
 
         FilePath = filePath;
         _mmf = MemoryMappedFile.CreateFromFile(filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
-        _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-        _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref _basePointer);
-
-        int headerSize = Marshal.SizeOf<JpakHeader>();
-        var header = Marshal.PtrToStructure<JpakHeader>((nint)_basePointer);
-        if (!header.IsValid)
-            throw new InvalidDataException($"Invalid .jpak header in {filePath} (Magic: 0x{header.Magic:X8}, Version: {header.Version})");
-
-        _entries = new Dictionary<AssetGuid, JpakEntry>((int)header.EntryCount);
-
-        int entrySize = Marshal.SizeOf<JpakEntry>();
-        byte* tocPtr = _basePointer + header.TocOffset;
-
-        for (uint i = 0; i < header.EntryCount; i++)
+        try
         {
-            var entry = Marshal.PtrToStructure<JpakEntry>((nint)(tocPtr + (i * entrySize)));
-            _entries[entry.Guid] = entry;
+            _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref _basePointer);
+
+            ulong fileLength = (ulong)new FileInfo(filePath).Length;
+            int headerSize = Marshal.SizeOf<JpakHeader>();
+            if (fileLength < (ulong)headerSize)
+                throw new InvalidDataException($"Package is shorter than the JPAK header: {filePath}");
+
+            var header = Marshal.PtrToStructure<JpakHeader>((nint)_basePointer);
+            if (!header.IsValid)
+                throw new InvalidDataException($"Invalid .jpak header in {filePath} (Magic: 0x{header.Magic:X8}, Version: {header.Version})");
+            if (header.HeaderSize != (uint)headerSize)
+                throw new InvalidDataException($"Invalid JPAK header size in {filePath}");
+
+            int entrySize = Marshal.SizeOf<JpakEntry>();
+            if (!TryAdd(header.TocOffset, (ulong)entrySize * header.EntryCount, fileLength))
+                throw new InvalidDataException($"JPAK TOC exceeds file length: {filePath}");
+
+            _entries = new Dictionary<AssetGuid, JpakEntry>((int)header.EntryCount);
+            byte* tocPtr = _basePointer + header.TocOffset;
+
+            for (uint i = 0; i < header.EntryCount; i++)
+            {
+                var entry = Marshal.PtrToStructure<JpakEntry>((nint)(tocPtr + (i * entrySize)));
+                if (entry.CompressedSize > int.MaxValue ||
+                    entry.Offset > fileLength ||
+                    entry.CompressedSize > fileLength - entry.Offset)
+                    throw new InvalidDataException($"Invalid JPAK entry bounds in {filePath}: {entry.Guid}");
+
+                _entries[entry.Guid] = entry;
+            }
+        }
+        catch
+        {
+            if (_basePointer != null)
+            {
+                _accessor?.SafeMemoryMappedViewHandle.ReleasePointer();
+                _basePointer = null;
+            }
+            _accessor?.Dispose();
+            _mmf.Dispose();
+            throw;
         }
     }
+
+    private static bool TryAdd(ulong offset, ulong size, ulong limit)
+        => offset <= limit && size <= limit - offset;
 
     /// <summary>
     /// Checks if an asset exists in this package by GUID.
@@ -84,8 +114,15 @@ public sealed class PackReader : IDisposable
     /// </summary>
     public unsafe ReadOnlySpan<byte> ReadAssetBytes(AssetGuid guid)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_entries.TryGetValue(guid, out var entry))
             throw new KeyNotFoundException($"Asset GUID {guid} not found in package {FilePath}");
+
+        ulong fileLength = (ulong)new FileInfo(FilePath).Length;
+        if (entry.Offset > fileLength ||
+            entry.CompressedSize > fileLength - entry.Offset ||
+            entry.CompressedSize > int.MaxValue)
+            throw new InvalidDataException($"Invalid JPAK entry bounds for {guid}");
 
         return new ReadOnlySpan<byte>(_basePointer + entry.Offset, (int)entry.CompressedSize);
     }

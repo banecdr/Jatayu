@@ -55,16 +55,6 @@ public struct PbrPushConstants
 }
 
 /// <summary>
-/// Push constants submitted to the shadow depth shader (128 bytes).
-/// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 128)]
-public struct ShadowPushConstants
-{
-    public Matrix4x4 LightViewProj;
-    public Matrix4x4 ModelMatrix;
-}
-
-/// <summary>
 /// Push constants submitted to the skybox procedural shader (64 bytes).
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Size = 64)]
@@ -139,6 +129,7 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private readonly Skybox.Skybox _skybox = new();
     private readonly Frustum _frustum = new() { MaxDrawDistance = 100000.0f };
+    private readonly Frustum _shadowFrustum = new() { MaxDrawDistance = 100000.0f };
 
     // Preallocated render pass callbacks (0 delegate/closure allocations per frame)
     private readonly Action<RenderPassBuilder> _shadowPassSetup;
@@ -162,6 +153,8 @@ public sealed class ForwardRenderer3D : IDisposable
     private readonly GpuBuffer _dummyLightIndexBuffer;
     private readonly GpuTexture _dummyBrdfLutTexture;
     private readonly VkSampler _dummyBrdfLutSampler;
+    private readonly GpuTexture _dummyEnvironmentTexture;
+    private readonly VkSampler _dummyEnvironmentSampler;
     private InstanceBuffer? _currentInstanceBuffer;
     private IndirectDrawBuffer? _currentIndirectDrawBuffer;
     private GeometryPool? _currentGeometryPool;
@@ -185,12 +178,19 @@ public sealed class ForwardRenderer3D : IDisposable
     private uint _currentDebugVertexCount;
     private GpuBuffer _currentDebugBuffer = null!;
     private TerrainClipmap? _currentTerrainClipmap;
+    private int _terrainDrawCount;
+    private ulong _terrainTriangleCount;
     private Vector3 _currentCameraPos;
+    private double _currentCameraWorldX;
+    private double _currentCameraWorldY;
+    private double _currentCameraWorldZ;
 
     /// <summary>
     /// Gets or sets whether terrain concentric clipmap rings are rendered with distinct LOD debug colors.
     /// </summary>
     public bool DebugTerrainRingsEnabled { get; set; }
+    public int TerrainDrawCount => _terrainDrawCount;
+    public ulong TerrainTriangleCount => _terrainTriangleCount;
 
     private bool _disposed;
 
@@ -199,12 +199,14 @@ public sealed class ForwardRenderer3D : IDisposable
         public readonly Mesh.Mesh Mesh;
         public readonly Matrix4x4 CameraRelativeModel;
         public readonly uint MaterialId;
+        public readonly bool IsWorldGridStatic;
 
-        public RenderItem(Mesh.Mesh mesh, in Matrix4x4 cameraRelativeModel, uint materialId)
+        public RenderItem(Mesh.Mesh mesh, in Matrix4x4 cameraRelativeModel, uint materialId, bool isWorldGridStatic = false)
         {
             Mesh = mesh;
             CameraRelativeModel = cameraRelativeModel;
             MaterialId = materialId;
+            IsWorldGridStatic = isWorldGridStatic;
         }
     }
 
@@ -270,7 +272,11 @@ public sealed class ForwardRenderer3D : IDisposable
         }
         else
         {
+#if DEBUG
             _shaderCompiler = new ShaderCompiler("assets/shaders/cache");
+#else
+            _shaderCompiler = new ShaderCompiler();
+#endif
             _ownsShaderCompiler = true;
         }
 
@@ -364,6 +370,50 @@ public sealed class ForwardRenderer3D : IDisposable
         };
         _dummyBrdfLutSampler = _context.Device.CreateSampler(in dummySamplerInfo, null);
 
+        var dummyEnvironmentInfo = new VkImageCreateInfo
+        {
+            Flags = VkImageCreateFlags.CubeCompatibleBit,
+            ImageType = VkImageType._2D,
+            Format = VkFormat.R16G16B16A16SFloat,
+            Extent = new VkExtent3D(1, 1, 1),
+            MipLevels = 1,
+            ArrayLayers = 6,
+            Samples = VkSampleCountFlags._1Bit,
+            Tiling = VkImageTiling.Optimal,
+            Usage = VkImageUsageFlags.SampledBit,
+            SharingMode = VkSharingMode.Exclusive,
+            InitialLayout = VkImageLayout.Undefined,
+        };
+        _allocator.CreateImage(dummyEnvironmentInfo, VmaMemoryUsage.GpuOnly, VmaAllocationCreateFlags.None, out var dummyEnvironmentImage, out var dummyEnvironmentAllocation, out _);
+        var dummyEnvironmentViewInfo = new VkImageViewCreateInfo
+        {
+            Image = dummyEnvironmentImage,
+            ViewType = VkImageViewType.Cube,
+            Format = VkFormat.R16G16B16A16SFloat,
+            SubresourceRange = new VkImageSubresourceRange
+            {
+                AspectMask = VkImageAspectFlags.ColorBit,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 6,
+            },
+        };
+        var dummyEnvironmentView = _context.Device.CreateImageView(in dummyEnvironmentViewInfo, null);
+        _dummyEnvironmentTexture = new GpuTexture(_context, _allocator, dummyEnvironmentImage, dummyEnvironmentAllocation, dummyEnvironmentView, 1, 1, VkFormat.R16G16B16A16SFloat, 1, VkImageLayout.Undefined);
+        var dummyEnvironmentSamplerInfo = new VkSamplerCreateInfo
+        {
+            MagFilter = VkFilter.Linear,
+            MinFilter = VkFilter.Linear,
+            MipmapMode = VkSamplerMipmapMode.Linear,
+            AddressModeU = VkSamplerAddressMode.ClampToEdge,
+            AddressModeV = VkSamplerAddressMode.ClampToEdge,
+            AddressModeW = VkSamplerAddressMode.ClampToEdge,
+            MinLod = 0,
+            MaxLod = 0,
+        };
+        _dummyEnvironmentSampler = _context.Device.CreateSampler(in dummyEnvironmentSamplerInfo, null);
+
         // 6. Preallocate RenderPass Callbacks (0 allocations per frame)
         _shadowPassSetup = SetupShadowPass;
         _shadowPassExecute = ExecuteShadowPass;
@@ -387,7 +437,7 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private unsafe void CreateDescriptorSetLayout()
     {
-        var bindings = stackalloc VkDescriptorSetLayoutBinding[9];
+        var bindings = stackalloc VkDescriptorSetLayoutBinding[11];
 
         // Binding 0: Uniform buffer for LightEnvironment
         bindings[0] = new VkDescriptorSetLayoutBinding
@@ -470,9 +520,24 @@ public sealed class ForwardRenderer3D : IDisposable
             StageFlags = VkShaderStageFlags.FragmentBit,
         };
 
+        bindings[9] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 9,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+        bindings[10] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 10,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
         var layoutInfo = new VkDescriptorSetLayoutCreateInfo
         {
-            BindingCount = 9,
+            BindingCount = 11,
             Bindings = bindings,
         };
 
@@ -481,7 +546,7 @@ public sealed class ForwardRenderer3D : IDisposable
         // Create descriptor pool
         var poolSizes = stackalloc VkDescriptorPoolSize[3];
         poolSizes[0] = new VkDescriptorPoolSize { Type = VkDescriptorType.UniformBuffer, DescriptorCount = 2 };
-        poolSizes[1] = new VkDescriptorPoolSize { Type = VkDescriptorType.CombinedImageSampler, DescriptorCount = 4 };
+        poolSizes[1] = new VkDescriptorPoolSize { Type = VkDescriptorType.CombinedImageSampler, DescriptorCount = 8 };
         poolSizes[2] = new VkDescriptorPoolSize { Type = VkDescriptorType.StorageBuffer, DescriptorCount = 12 };
 
         var poolInfo = new VkDescriptorPoolCreateInfo
@@ -513,14 +578,14 @@ public sealed class ForwardRenderer3D : IDisposable
     {
         var device = _context.Device;
 
-        // Shadow Pipeline Layout: 128 bytes push constants
+        // Shadow alpha-test pipeline shares frame/material and bindless texture descriptors.
         var shadowPushConstant = new VkPushConstantRange
         {
-            StageFlags = VkShaderStageFlags.VertexBit,
+            StageFlags = VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
             Offset = new ByteSize32(0),
-            Size = new ByteSize32((uint)Marshal.SizeOf<ShadowPushConstants>()),
+            Size = new ByteSize32((uint)Marshal.SizeOf<PbrPushConstants>()),
         };
-        _shadowPipelineLayout = device.CreatePipelineLayout([], [shadowPushConstant], null);
+        _shadowPipelineLayout = device.CreatePipelineLayout([_frameDescriptorLayout, bindlessLayout], [shadowPushConstant], null);
 
         // Skybox Pipeline Layout: 64 bytes push constants
         var skyboxPushConstant = new VkPushConstantRange
@@ -565,11 +630,13 @@ public sealed class ForwardRenderer3D : IDisposable
 
         // 1. Build Shadow Depth Pipeline
         var shadowVert = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/shadow.vert"), ShaderKind.VertexShader);
-        using (var shadowStages = new ShaderStages(device, [Presets.ShaderStage.Vertex(shadowVert)], null))
+        var shadowFrag = _shaderCompiler.CompileShaderModuleFromFile(device, ResolveShaderPath("assets/shaders/shadow.frag"), ShaderKind.FragmentShader);
+        using (var shadowStages = new ShaderStages(device, [Presets.ShaderStage.Vertex(shadowVert), Presets.ShaderStage.Fragment(shadowFrag)], null))
         {
-            var shadowVertexInput = new VertexInput(1, 1);
+            var shadowVertexInput = new VertexInput(1, 2);
             shadowVertexInput.AddBinding(0, new ByteSize((uint)sizeof(Vertex3D)), VkVertexInputRate.Vertex);
             shadowVertexInput.AddAttribute(0, 0, VkFormat.R32G32B32SFloat, new ByteSize(0));
+            shadowVertexInput.AddAttribute(1, 0, VkFormat.R32G32SFloat, new ByteSize(36));
 
             _shadowPipeline = PipelineBuilder.Create()
                 .SetShaderStages(shadowStages)
@@ -839,11 +906,13 @@ public sealed class ForwardRenderer3D : IDisposable
         {
             lightGpuData = lightEnv.ToGpuData(Vector3.Zero, cascadedShadowMap);
         }
+        if (iblProbe != null)
+            lightGpuData.CastsShadows |= 0x80000000u;
         UpdateLightBuffer(in lightGpuData);
 
         Matrix4x4 shadowLightVp = lightGpuData.LightViewProj;
 
-        // 2. Update Set 0 Descriptors (9 bindings: Light, CSM/Shadow, Materials, Instances, PointLights, SpotLights, Clusters, Indices, BRDF LUT)
+        // 2. Update Set 0 Descriptors (11 bindings: frame lighting, materials, lights, BRDF LUT, and environment maps)
         var bufferInfo = new VkDescriptorBufferInfo
         {
             Buffer = _lightEnvironmentBuffer.Handle,
@@ -922,7 +991,24 @@ public sealed class ForwardRenderer3D : IDisposable
             ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
         };
 
-        var writes = stackalloc VkWriteDescriptorSet[9];
+        VkSampler irradianceSampler = iblProbe?.IrradianceSampler ?? _dummyEnvironmentSampler;
+        VkImageView irradianceView = iblProbe?.IrradianceTexture.ImageView ?? _dummyEnvironmentTexture.ImageView;
+        var irradianceImageInfo = new VkDescriptorImageInfo
+        {
+            Sampler = irradianceSampler,
+            ImageView = irradianceView,
+            ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
+        };
+        VkSampler prefilterSampler = iblProbe?.PrefilterSampler ?? _dummyEnvironmentSampler;
+        VkImageView prefilterView = iblProbe?.PrefilterTexture.ImageView ?? _dummyEnvironmentTexture.ImageView;
+        var prefilterImageInfo = new VkDescriptorImageInfo
+        {
+            Sampler = prefilterSampler,
+            ImageView = prefilterView,
+            ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
+        };
+
+        var writes = stackalloc VkWriteDescriptorSet[11];
         writes[0] = new VkWriteDescriptorSet
         {
             DstSet = _frameDescriptorSet,
@@ -995,8 +1081,24 @@ public sealed class ForwardRenderer3D : IDisposable
             DescriptorType = VkDescriptorType.CombinedImageSampler,
             ImageInfo = &brdfImageInfo,
         };
+        writes[9] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 9,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            ImageInfo = &irradianceImageInfo,
+        };
+        writes[10] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 10,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            ImageInfo = &prefilterImageInfo,
+        };
 
-        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 9, writes, 0, null);
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 11, writes, 0, null);
 
         // 3. Camera-Relative Frustum Culling & Matrix Extraction
         _visibleItems.Clear();
@@ -1068,7 +1170,7 @@ public sealed class ForwardRenderer3D : IDisposable
                                 Matrix4x4.CreateFromQuaternion(rot) *
                                 Matrix4x4.CreateTranslation(relPos);
 
-                            var item = new RenderItem(mesh, cameraRelativeModel, inst.MaterialId);
+                            var item = new RenderItem(mesh, cameraRelativeModel, inst.MaterialId, isWorldGridStatic: true);
                             _visibleItems.Add(item);
 
                             if ((inst.Flags & StaticInstanceFlags.CastShadow) != 0)
@@ -1124,8 +1226,22 @@ public sealed class ForwardRenderer3D : IDisposable
         _currentShadowLightVp = shadowLightVp;
         _currentVp = vp;
         _currentInvVp = _skybox.ComputeInverseViewProjection(camera.ViewMatrix, camera.ProjectionMatrix);
-        _currentTerrainClipmap = terrainClipmap;
         _currentCameraPos = camera.Position;
+        double camWorldX = camera.Position.X;
+        double camWorldY = camera.Position.Y;
+        double camWorldZ = camera.Position.Z;
+        if (originShift != null)
+        {
+            camWorldX += originShift.CurrentOrigin.X;
+            camWorldY += originShift.CurrentOrigin.Y;
+            camWorldZ += originShift.CurrentOrigin.Z;
+        }
+        _currentCameraWorldX = camWorldX;
+        _currentCameraWorldY = camWorldY;
+        _currentCameraWorldZ = camWorldZ;
+
+        _currentTerrainClipmap = terrainClipmap;
+        _currentTerrainClipmap?.Update(camWorldX, camWorldZ);
         _currentInstanceBuffer = instanceBuffer;
         _currentIndirectDrawBuffer = indirectDrawBuffer;
         _currentGeometryPool = geometryPool;
@@ -1140,7 +1256,8 @@ public sealed class ForwardRenderer3D : IDisposable
         }
 
         // 6. Register Shadow Pass(es)
-        if (_shadowCasters.Count > 0 && lightEnv.Sun.CastsShadows)
+        bool hasGpuShadowCasters = cascadedShadowMap != null && instanceBuffer is { TotalCount: > 0 };
+        if (lightEnv.Sun.CastsShadows && (_shadowCasters.Count > 0 || hasGpuShadowCasters))
         {
             if (cascadedShadowMap != null)
             {
@@ -1220,21 +1337,88 @@ public sealed class ForwardRenderer3D : IDisposable
 
         Matrix4x4 cascadeVp = _currentCascadeVps[cascadeIndex];
 
+        bool gpuInstancesDrawn = false;
+        if (_currentGpuCuller != null &&
+            _currentInstanceBuffer is { TotalCount: > 0 } instanceBuffer &&
+            _currentIndirectDrawBuffer is { } indirectDrawBuffer &&
+            _currentGeometryPool is { } geometryPool &&
+            cascadeIndex + 1 < indirectDrawBuffer.ViewCount)
+        {
+            gpuInstancesDrawn = true;
+            _pbrDescriptorSets[0] = _frameDescriptorSet;
+            _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
+            cmd.BindDescriptorSets(
+                VkPipelineBindPoint.Graphics,
+                _shadowPipelineLayout,
+                0,
+                _pbrDescriptorSets,
+                Span<ByteSize32>.Empty
+            );
+
+            var gpuPc = new PbrPushConstants
+            {
+                ModelMatrix = Matrix4x4.Identity,
+                ViewProjMatrix = cascadeVp,
+                LightViewProj = cascadeVp,
+                MaterialId = 0,
+                UseInstanceBuffer = 1,
+            };
+            CommandBufferExtensions.PushConstants(
+                cmd,
+                _shadowPipelineLayout,
+                VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+                new ByteSize(0),
+                new ReadOnlySpan<PbrPushConstants>(&gpuPc, 1)
+            );
+
+            _vertexBufferArray[0] = geometryPool.VertexBuffer.Handle;
+            _vertexOffsetArray[0] = new ByteSize64(0);
+            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+            cmd.BindIndexBuffer(geometryPool.IndexBuffer.Handle, new ByteSize64(0), geometryPool.IndexType);
+
+            int viewIndex = cascadeIndex + 1;
+            _context.Device.PInvoke.vkCmdDrawIndexedIndirectCount.Invoke(
+                cmd.Handle,
+                indirectDrawBuffer.CommandBuffer.Handle,
+                indirectDrawBuffer.GetCommandOffset(viewIndex),
+                indirectDrawBuffer.CountBuffer.Handle,
+                indirectDrawBuffer.GetCountOffset(viewIndex),
+                indirectDrawBuffer.MaxDrawsPerView,
+                sizeof(VkDrawIndexedIndirectCommand)
+            );
+        }
+
+        _pbrDescriptorSets[0] = _frameDescriptorSet;
+        _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
+        cmd.BindDescriptorSets(
+            VkPipelineBindPoint.Graphics,
+            _shadowPipelineLayout,
+            0,
+            _pbrDescriptorSets,
+            Span<ByteSize32>.Empty
+        );
+
         for (int i = 0; i < _shadowCasters.Count; i++)
         {
             var item = _shadowCasters[i];
-            var pc = new ShadowPushConstants
+            if (gpuInstancesDrawn && _currentInstanceBuffer is { StaticCount: > 0 } && item.IsWorldGridStatic)
+                continue;
+
+            var pc = new PbrPushConstants
             {
-                LightViewProj = cascadeVp,
                 ModelMatrix = item.CameraRelativeModel,
+                ViewProjMatrix = cascadeVp,
+                LightViewProj = cascadeVp,
+                MaterialId = item.MaterialId,
+                UseInstanceBuffer = 0,
             };
 
             CommandBufferExtensions.PushConstants(
                 cmd,
                 _shadowPipelineLayout,
-                VkShaderStageFlags.VertexBit,
+                VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
                 new ByteSize(0),
-                new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
+                new ReadOnlySpan<PbrPushConstants>(&pc, 1)
             );
 
             _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
@@ -1274,21 +1458,34 @@ public sealed class ForwardRenderer3D : IDisposable
         _scissors[0] = new VkRect2D(new VkExtent2D(_currentShadowMap.Resolution, _currentShadowMap.Resolution));
         cmd.SetScissor(0, _scissors);
 
+        _pbrDescriptorSets[0] = _frameDescriptorSet;
+        _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
+        cmd.BindDescriptorSets(
+            VkPipelineBindPoint.Graphics,
+            _shadowPipelineLayout,
+            0,
+            _pbrDescriptorSets,
+            Span<ByteSize32>.Empty
+        );
+
         for (int i = 0; i < _shadowCasters.Count; i++)
         {
             var item = _shadowCasters[i];
-            var pc = new ShadowPushConstants
+            var pc = new PbrPushConstants
             {
-                LightViewProj = _currentShadowLightVp,
                 ModelMatrix = item.CameraRelativeModel,
+                ViewProjMatrix = _currentShadowLightVp,
+                LightViewProj = _currentShadowLightVp,
+                MaterialId = item.MaterialId,
+                UseInstanceBuffer = 0,
             };
 
             CommandBufferExtensions.PushConstants(
                 cmd,
                 _shadowPipelineLayout,
-                VkShaderStageFlags.VertexBit,
+                VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
                 new ByteSize(0),
-                new ReadOnlySpan<ShadowPushConstants>(&pc, 1)
+                new ReadOnlySpan<PbrPushConstants>(&pc, 1)
             );
 
             _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
@@ -1387,6 +1584,8 @@ public sealed class ForwardRenderer3D : IDisposable
         // Render terrain clipmap if present (D22 unified renderer)
         if (_currentTerrainClipmap != null)
         {
+            _terrainDrawCount = 0;
+            _terrainTriangleCount = 0;
             cmd.BindPipeline(VkPipelineBindPoint.Graphics, _terrainPipeline.Handle);
             _terrainDescriptorSets[0] = _frameDescriptorSet;
             cmd.BindDescriptorSets(
@@ -1402,15 +1601,24 @@ public sealed class ForwardRenderer3D : IDisposable
             cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
             cmd.BindIndexBuffer(_currentTerrainClipmap.IndexBuffer.Handle, new ByteSize64(0), VkIndexType.UInt32);
 
-            for (int r = 0; r < TerrainClipmap.DefaultRingCount; r++)
+            var instances = _currentTerrainClipmap.Instances;
+            for (int i = 0; i < instances.Length; i++)
             {
-                float ringScale = 256.0f * (1 << r);
-                var tpc = new TerrainPushConstants
-                {
-                    ViewProjMatrix = _currentVp,
-                    CameraRelativeOrigin = new Vector4(_currentCameraPos.X, _currentCameraPos.Y, _currentCameraPos.Z, 0f),
-                    TerrainParams = new Vector4(ringScale, DebugTerrainRingsEnabled ? 1.0f : 0.0f, 200f, r)
-                };
+                ref readonly var inst = ref instances[i];
+                float centerX = (float)(inst.WorldX - _currentCameraWorldX) + inst.ExtentX * 0.5f;
+                float centerZ = (float)(inst.WorldZ - _currentCameraWorldZ) + inst.ExtentZ * 0.5f;
+                float radius = MathF.Sqrt(inst.ExtentX * inst.ExtentX + inst.ExtentZ * inst.ExtentZ) * 0.5f + 60f;
+                if (!_frustum.IsSphereVisible(new Vector3(centerX, 0f, centerZ), radius))
+                    continue;
+
+                var piece = _currentTerrainClipmap.GetPiece(inst.Type);
+                var tpc = _currentTerrainClipmap.MakePushConstants(
+                    in inst,
+                    _currentVp,
+                    _currentCameraWorldX,
+                    _currentCameraWorldY,
+                    _currentCameraWorldZ,
+                    DebugTerrainRingsEnabled);
 
                 CommandBufferExtensions.PushConstants(
                     cmd,
@@ -1420,7 +1628,9 @@ public sealed class ForwardRenderer3D : IDisposable
                     new ReadOnlySpan<TerrainPushConstants>(&tpc, 1)
                 );
 
-                cmd.DrawIndexed((int)_currentTerrainClipmap.IndexCount, 1, 0, 0, 0);
+                cmd.DrawIndexed((int)piece.IndexCount, 1, (int)piece.FirstIndex, piece.VertexOffset, 0);
+                _terrainDrawCount++;
+                _terrainTriangleCount += piece.IndexCount / 3;
             }
 
             // Restore PBR pipeline and descriptors for static items
@@ -1525,7 +1735,7 @@ public sealed class ForwardRenderer3D : IDisposable
         // 2. Clear indirect draw counts on GPU
         _currentIndirectDrawBuffer.ResetCountsGpu(cmd);
 
-        // 3. Dispatch GPU compute culling for Main Camera (view 0)
+        // 3. Dispatch GPU compute culling for the main camera (view 0).
         _currentGpuCuller.CullView(
             cmd,
             0,
@@ -1539,7 +1749,33 @@ public sealed class ForwardRenderer3D : IDisposable
             _currentHiZBuilder
         );
 
-        // 4. Emit execution barrier ensuring indirect commands and counts are visible to draw calls
+        // 4. Build per-cascade command lists; cull.comp filters out non-shadow-casting instances.
+        if (_currentCascadedShadowMap != null)
+        {
+            var cascades = _currentCascadedShadowMap.Cascades;
+            for (int cascadeIndex = 0; cascadeIndex < CascadedShadowMap.CascadeCount; cascadeIndex++)
+            {
+                int viewIndex = cascadeIndex + 1;
+                if (viewIndex >= _currentIndirectDrawBuffer.ViewCount)
+                    break;
+
+                Matrix4x4 cascadeVp = cascades[cascadeIndex].ViewProjection;
+                _shadowFrustum.Update(cascadeVp, Vector3.Zero);
+                _currentGpuCuller.CullView(
+                    cmd,
+                    viewIndex,
+                    _shadowFrustum,
+                    Vector3.Zero,
+                    100000.0f,
+                    cascadeVp,
+                    _currentInstanceBuffer,
+                    _currentIndirectDrawBuffer,
+                    _currentGeometryPool
+                );
+            }
+        }
+
+        // 5. Ensure commands and counts for every view are visible to indirect draws.
         _currentIndirectDrawBuffer.EmitExecutionBarrier(cmd);
     }
 
@@ -1588,20 +1824,7 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private static string ResolveShaderPath(string relativePath)
     {
-        if (File.Exists(relativePath)) return relativePath;
-
-        string fromBase = Path.Combine(AppContext.BaseDirectory, relativePath);
-        if (File.Exists(fromBase)) return fromBase;
-
-        string? dir = AppContext.BaseDirectory;
-        for (int i = 0; i < 5 && dir != null; i++)
-        {
-            string candidate = Path.Combine(dir, relativePath);
-            if (File.Exists(candidate)) return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-
-        return relativePath;
+        return ShaderCompiler.ResolveShaderFile(relativePath);
     }
 
     public unsafe void Dispose()
@@ -1622,7 +1845,9 @@ public sealed class ForwardRenderer3D : IDisposable
         _lightEnvironmentBuffer?.Dispose();
         _dummyInstanceBuffer?.Dispose();
         if (_dummyBrdfLutSampler.VkHandle != 0) device.DestroySampler(_dummyBrdfLutSampler, null);
+        if (_dummyEnvironmentSampler.VkHandle != 0) device.DestroySampler(_dummyEnvironmentSampler, null);
         _dummyBrdfLutTexture?.Dispose();
+        _dummyEnvironmentTexture?.Dispose();
         _dummyPointLightBuffer?.Dispose();
         _dummySpotLightBuffer?.Dispose();
         _dummyClusterRecordBuffer?.Dispose();

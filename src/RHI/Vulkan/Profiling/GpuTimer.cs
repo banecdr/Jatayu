@@ -98,6 +98,14 @@ public sealed class GpuTimer : IDisposable
         var passes = _passQueries[_currentFrame];
         if (passes.Count > 0)
         {
+            uint maxQueryIndex = 0;
+            foreach (var (_, (startIdx, endIdx)) in passes)
+            {
+                if (startIdx > maxQueryIndex) maxQueryIndex = startIdx;
+                if (endIdx > maxQueryIndex) maxQueryIndex = endIdx;
+            }
+            uint queryCount = Math.Min(maxQueryIndex + 1, (uint)_resultsBuffer.Length);
+
             var results = _resultsBuffer;
             fixed (ulong* pResults = results)
             {
@@ -105,8 +113,8 @@ public sealed class GpuTimer : IDisposable
                     _context.Device.Handle,
                     pool,
                     0,
-                    results.Length,
-                    (nuint)(results.Length * sizeof(ulong)),
+                    (int)queryCount,
+                    (nuint)(queryCount * sizeof(ulong)),
                     pResults,
                     new ByteSize64(sizeof(ulong)),
                     VkQueryResultFlags._64Bit
@@ -117,7 +125,7 @@ public sealed class GpuTimer : IDisposable
                     _publishedTimings.Clear();
                     foreach (var (name, (startIdx, endIdx)) in passes)
                     {
-                        if (startIdx < results.Length && endIdx < results.Length)
+                        if (startIdx < queryCount && endIdx < queryCount && endIdx >= startIdx)
                         {
                             ulong delta = results[endIdx] - results[startIdx];
                             float ms = (float)(delta * _timestampPeriod / 1_000_000.0);

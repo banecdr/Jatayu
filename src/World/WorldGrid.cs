@@ -23,28 +23,40 @@ public sealed class WorldGrid
 {
     private readonly Dictionary<CellCoord, WorldCell> _cells;
     private readonly List<WorldCell> _activeCells;
+    private WorldCell[] _activeCellsSnapshot;
     private readonly WorldConfig _config;
+    private readonly object _sync = new();
 
     /// <summary>
     /// Gets the number of active cells currently loaded in the world.
     /// </summary>
-    public int ActiveCellCount => _activeCells.Count;
+    public int ActiveCellCount { get { lock (_sync) { return _activeCells.Count; } } }
 
     /// <summary>
     /// Gets the total number of tracked cells in the grid (loaded, loading, and dormant).
     /// </summary>
-    public int TotalCellCount => _cells.Count;
+    public int TotalCellCount { get { lock (_sync) { return _cells.Count; } } }
 
     /// <summary>
     /// Gets a read-only list of all currently active cells.
     /// </summary>
-    public IReadOnlyList<WorldCell> ActiveCells => _activeCells;
+    public IReadOnlyList<WorldCell> ActiveCells
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _activeCellsSnapshot;
+            }
+        }
+    }
 
     public WorldGrid(WorldConfig? config = null, int initialCapacity = 512)
     {
         _config = config ?? new WorldConfig();
         _cells = new Dictionary<CellCoord, WorldCell>(initialCapacity);
         _activeCells = new List<WorldCell>(initialCapacity);
+        _activeCellsSnapshot = Array.Empty<WorldCell>();
     }
 
     /// <summary>
@@ -53,12 +65,15 @@ public sealed class WorldGrid
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public WorldCell GetOrCreateCell(in CellCoord coord)
     {
-        if (_cells.TryGetValue(coord, out var existing))
-            return existing;
+        lock (_sync)
+        {
+            if (_cells.TryGetValue(coord, out var existing))
+                return existing;
 
-        var cell = new WorldCell(coord, _config.CellSize);
-        _cells[coord] = cell;
-        return cell;
+            var cell = new WorldCell(coord, _config.CellSize);
+            _cells[coord] = cell;
+            return cell;
+        }
     }
 
     /// <summary>
@@ -67,7 +82,10 @@ public sealed class WorldGrid
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetCell(in CellCoord coord, out WorldCell cell)
     {
-        return _cells.TryGetValue(coord, out cell!);
+        lock (_sync)
+        {
+            return _cells.TryGetValue(coord, out cell!);
+        }
     }
 
     /// <summary>
@@ -85,9 +103,15 @@ public sealed class WorldGrid
     /// </summary>
     public void MarkActive(WorldCell cell)
     {
-        cell.State = CellState.Active;
-        if (!_activeCells.Contains(cell))
-            _activeCells.Add(cell);
+        lock (_sync)
+        {
+            cell.State = CellState.Active;
+            if (!_activeCells.Contains(cell))
+            {
+                _activeCells.Add(cell);
+                _activeCellsSnapshot = _activeCells.ToArray();
+            }
+        }
     }
 
     /// <summary>
@@ -95,8 +119,14 @@ public sealed class WorldGrid
     /// </summary>
     public void MarkUnloaded(WorldCell cell)
     {
-        cell.Unload();
-        _activeCells.Remove(cell);
+        lock (_sync)
+        {
+            cell.Unload();
+            if (_activeCells.Remove(cell))
+            {
+                _activeCellsSnapshot = _activeCells.ToArray();
+            }
+        }
     }
 
     /// <summary>
@@ -148,13 +178,16 @@ public sealed class WorldGrid
         destination.Clear();
         double radiusSq = radiusMeters * radiusMeters;
 
-        for (int i = 0; i < _activeCells.Count; i++)
+        lock (_sync)
         {
-            var cell = _activeCells[i];
-            double distSq = cell.Center.DistanceSquaredTo(center);
-            if (distSq <= radiusSq)
+            for (int i = 0; i < _activeCells.Count; i++)
             {
-                destination.Add(cell);
+                var cell = _activeCells[i];
+                double distSq = cell.Center.DistanceSquaredTo(center);
+                if (distSq <= radiusSq)
+                {
+                    destination.Add(cell);
+                }
             }
         }
     }
@@ -165,9 +198,12 @@ public sealed class WorldGrid
     /// </summary>
     public void ShiftOrigin(double deltaX, double deltaY, double deltaZ)
     {
-        foreach (var cell in _cells.Values)
+        lock (_sync)
         {
-            cell.ShiftOrigin(deltaX, deltaY, deltaZ);
+            foreach (var cell in _cells.Values)
+            {
+                cell.ShiftOrigin(deltaX, deltaY, deltaZ);
+            }
         }
     }
 
@@ -176,11 +212,15 @@ public sealed class WorldGrid
     /// </summary>
     public void Clear()
     {
-        foreach (var cell in _cells.Values)
+        lock (_sync)
         {
-            cell.Unload();
+            foreach (var cell in _cells.Values)
+            {
+                cell.Unload();
+            }
+            _cells.Clear();
+            _activeCells.Clear();
+            _activeCellsSnapshot = Array.Empty<WorldCell>();
         }
-        _cells.Clear();
-        _activeCells.Clear();
     }
 }

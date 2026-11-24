@@ -92,7 +92,11 @@ public static class MeshCooker
         // 1. Copy raw indices into int[] for MeshOptimizer
         var optIndices = new int[indexCount];
         for (int i = 0; i < indexCount; i++)
+        {
+            if (indices[i] >= (uint)vertexCount)
+                throw new ArgumentOutOfRangeException(nameof(indices), $"Index {indices[i]} exceeds vertex count {vertexCount}.");
             optIndices[i] = (int)indices[i];
+        }
 
         var optVertices = new CookedVertex[vertexCount];
         vertices.CopyTo(optVertices);

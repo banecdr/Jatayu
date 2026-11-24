@@ -14,7 +14,7 @@ Right now it sets up a basic Vulkan 1.3 render pipeline, draws a lit 3D cube wit
 - **Vulkan 1.3 setup**: Window creation via GLFW, swapchain with window resize handling, and depth buffering.
 - **3D camera**: Basic orbit and zoom controls with perspective projection.
 - **Panini projection**: Vertex shader projection that straightens out wide FOV views (toggle between 60° and 110°).
-- **Shader compilation**: Compiles GLSL shaders (`cube.vert`, `cube.frag`) at startup using ShaderC.
+- **Shader loading**: Debug uses GLSL sources with ShaderC; Release loads offline-compiled SPIR-V.
 
 ## Controls
 
@@ -42,6 +42,18 @@ Right now it sets up a basic Vulkan 1.3 render pipeline, draws a lit 3D cube wit
 ```bash
 dotnet run
 ```
+
+### Build a Release package
+
+On Windows, run:
+
+```powershell
+.\tools\Publish-Release.ps1
+```
+
+This stages a self-contained `win-x64` publish and replaces `dist\Jatayu` only after validation succeeds. The package contains `Jatayu.exe`, precompiled SPIR-V files under `assets\shaders`, and `assets\packages\world.jpak` when that source package exists. Release shader binaries are generated under `obj` rather than the source tree; no loose GLSL, settings file, shader cache, PDB, or DLL sidecar is included.
+
+The managed and application-native dependencies are bundled into the single-file executable; .NET extracts native libraries to its runtime extraction cache as needed, so `assets\libs` is not required. A Vulkan-capable Windows GPU driver remains a system prerequisite. Debug builds continue copying GLSL sources to the normal `bin\Debug` output for development.
 
 ## License
 

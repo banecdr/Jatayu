@@ -8,6 +8,7 @@
  *   - Multi-layer procedural splat blending (Grass, Dirt, Rock).
  *   - Visualizes concentric clipmap LOD rings when debug ring color mode is active.
  *   - Directional sunlight PBR diffuse lighting with hemispherical ambient.
+ *   - 4-Cascade CSM directional shadows.
  * ================================================================================================= */
 
 layout(location = 0) in vec3 inWorldPos;
@@ -15,8 +16,7 @@ layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec2 inTexCoord;
 layout(location = 3) in float inMorphFactor;
 layout(location = 4) in float inRingIndex;
-layout(location = 5) in vec2 inGridPos;
-layout(location = 6) in vec4 inClipPos;
+layout(location = 5) in vec4 inClipPos;
 
 layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     vec3 SunDirection;
@@ -39,11 +39,11 @@ layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
 
 layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
 
-layout(push_constant) uniform TerrainPushConstants
+layout(push_constant) uniform PushConstants
 {
-    mat4 ViewProjMatrix;
-    vec4 CameraRelativeOrigin; // xyz = camera world position, w = geomorph factor
-    vec4 TerrainParams;        // x = ring scale, y = debug ring colors flag, z = max height, w = ring index
+    mat4 viewProj;
+    vec4 originScale;
+    vec4 params;
 } pc;
 
 layout(location = 0) out vec4 outColor;
@@ -55,12 +55,46 @@ vec3 getRingColor(int r)
     if (r == 2) return vec3(0.95, 0.90, 0.10); // Ring 2: Bright Yellow
     if (r == 3) return vec3(0.95, 0.50, 0.10); // Ring 3: Orange
     if (r == 4) return vec3(0.95, 0.15, 0.15); // Ring 4: Crimson Red
-    return vec3(0.70, 0.10, 0.90);              // Ring 5: Deep Purple
+    if (r == 5) return vec3(0.70, 0.10, 0.90); // Ring 5: Deep Purple
+    return vec3(0.30, 0.70, 0.90);              // Ring 6: Light Blue
 }
 
+const vec2 POISSON_DISK[16] = vec2[](
+    vec2(-0.94201624, -0.39906216),
+    vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870),
+    vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432),
+    vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845),
+    vec2( 0.97484398,  0.75648379),
+    vec2( 0.44323325, -0.97511554),
+    vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023),
+    vec2( 0.79197514,  0.19090143),
+    vec2(-0.24188840,  0.99706507),
+    vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367),
+    vec2( 0.14383161, -0.14100790)
+);
+
 // Directional shadow map evaluation with 4-Cascade CSM for terrain
+vec3 ShadowDebugColor(float value) {
+    uint debugMode = uint(round(uLight.ShadowParams.w));
+    if (debugMode == 1u) {
+        if (value >= 0.999) return vec3(1.0, 0.0, 1.0);
+        if (value < 0.25) return vec3(1.0, 0.15, 0.1);
+        if (value < 0.5) return vec3(0.1, 0.9, 0.2);
+        if (value < 0.75) return vec3(0.1, 0.4, 1.0);
+        return vec3(1.0, 0.75, 0.05);
+    }
+    return vec3(value);
+}
+
 float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
-    if (uLight.CastsShadows == 0u || NdotL <= 0.0) {
+    uint shadowMode = uLight.CastsShadows & 3u;
+    uint debugMode = uint(round(uLight.ShadowParams.w));
+    if (debugMode == 0u && (shadowMode == 0u || NdotL <= 0.0)) {
         return NdotL <= 0.0 ? 0.0 : 1.0;
     }
 
@@ -108,34 +142,38 @@ float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
 
     float cascadeScale = float(selectedCascade + 1);
     float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
-    float dynamicBias = clamp(bias * cascadeScale * (1.0 + tanTheta * 1.5), bias * 0.5, 0.015);
+    float dynamicBias = min(max(bias, 0.0) * cascadeScale * (1.0 + min(tanTheta, 4.0) * 0.25), 0.002);
+    if (debugMode == 2u) return projCoords.z;
+    if (debugMode == 3u) return clamp(dynamicBias / 0.002, 0.0, 1.0);
+    if (debugMode == 1u) return (float(selectedCascade) + 0.5) * 0.25;
     float currentDepth = projCoords.z + dynamicBias;
 
-    vec2 texelSize = vec2(uLight.ShadowParams.y);
-    float shadow = 0.0;
     float layer = float(selectedCascade);
+    vec2 texelSize = vec2(uLight.ShadowParams.y);
 
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            vec2 offset = vec2(x, y) * texelSize;
+    if (shadowMode >= 2u) {
+        // Ultra High-Quality Mode: 16-tap Poisson Disk filter (cascade-scaled to maintain crisp distant shadows)
+        float filterRadius = max(uLight.ShadowParams.z / sqrt(cascadeScale), 1.0);
+        float shadow = 0.0;
+        for (int i = 0; i < 16; ++i) {
+            vec2 offset = POISSON_DISK[i] * (texelSize * filterRadius);
             shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
         }
+        return shadow / 16.0;
+    } else {
+        float shadow = 0.0;
+        for (int x = -1; x <= 1; ++x) {
+            for (int y = -1; y <= 1; ++y) {
+                vec2 offset = vec2(x, y) * texelSize;
+                shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
+            }
+        }
+        return shadow / 9.0;
     }
-    return shadow / 9.0;
 }
 
 void main()
 {
-    // Eliminate Z-fighting by discarding the inner region of outer rings (already drawn by finer ring)
-    if (inRingIndex > 0.5)
-    {
-        vec2 absGrid = abs(inGridPos);
-        if (absGrid.x < 0.245 && absGrid.y < 0.245)
-        {
-            discard;
-        }
-    }
-
     vec3 N = normalize(inNormal);
     vec3 L = normalize(-uLight.SunDirection); // Direction pointing towards sunlight source
 
@@ -150,8 +188,8 @@ void main()
     vec3 albedo = mix(grassColor, dirtColor, smoothstep(0.15, 0.45, slope));
     albedo = mix(albedo, rockColor, smoothstep(0.40, 0.70, slope));
 
-    // If debug ring colors are enabled (TerrainParams.y > 0.5), blend LOD ring color
-    if (pc.TerrainParams.y > 0.5)
+    // If debug ring colors are enabled (inRingIndex >= 0.0), blend LOD ring color
+    if (inRingIndex >= 0.0)
     {
         vec3 ringColor = getRingColor(int(inRingIndex + 0.5));
         albedo = mix(albedo, ringColor, 0.75);
@@ -160,6 +198,11 @@ void main()
     // Directional diffuse (calibrated for viewport dynamic range) with 4-Cascade CSM shadows
     float NdotL = max(dot(N, L), 0.0);
     float shadow = EvaluateShadow(inWorldPos, inClipPos.w, uLight.ShadowBias, NdotL);
+    if (uLight.ShadowParams.w > 0.5)
+    {
+        outColor = vec4(ShadowDebugColor(shadow), 1.0);
+        return;
+    }
     vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
     vec3 diffuse = lightRadiance * NdotL * shadow;
 

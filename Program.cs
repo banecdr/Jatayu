@@ -28,7 +28,8 @@
  *   [L]          : Toggle Sun Light Orbit animation (animates soft PCF directional shadows)
  *   [B]          : Toggle 3D Wireframe Debug bounds & coordinate axes (DebugRenderer)
  *   [Space]      : Toggle Auto-Orbit camera rotation On / Off
- *   [P]          : Cycle Panini Projection (OFF -> Moderate d=0.5 -> Full d=1.0)
+ *   [P]          : Toggle shadow PCF quality (3x3 vs 16-tap Poisson)
+ *   [G]          : Cycle shadow debug view (cascades, depth, bias, off)
  *   [F]          : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)
  *   [-] / [=]    : Fine-tune Panini distance 'd' (-0.1 / +0.1)
  *   [Left/Right] : Orbit camera horizontally (Yaw)
@@ -52,6 +53,7 @@ using Brutal.VulkanApi.Abstractions;
 using Brutal.VulkanApi.Vma;
 using Jatayu.AssetFormats.Loaders;
 using Jatayu.Core;
+using Jatayu.Core.Config;
 using Jatayu.Core.Events;
 using Jatayu.Core.Mathematics;
 using Jatayu.Core.Profiling;
@@ -67,6 +69,7 @@ using Jatayu.Renderer.Material;
 using Jatayu.Renderer.Mesh;
 using Jatayu.Renderer.Particles;
 using Jatayu.Renderer.Shadows;
+using Jatayu.Renderer.Transparent;
 using Jatayu.Renderer.Vegetation;
 using Jatayu.RHI.Vulkan.Commands;
 using Jatayu.RHI.Vulkan.Context;
@@ -96,11 +99,45 @@ public static class Program
     public static unsafe void Main(string[] args)
     {
         _ = Vulkan.GetInstanceProcAddr;
-        RunEngineDemo();
+        RunEngineDemo(args);
     }
 
-    private static unsafe void RunEngineDemo()
+    private static unsafe void RunEngineDemo(string[]? args = null)
     {
+        int maxFrames = int.MaxValue;
+        bool initialStress = false;
+        bool initialNoVsync = false;
+        bool benchmarkMode = false;
+        bool initialAutopilot = false;
+
+        if (args != null)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--frames" && i + 1 < args.Length && int.TryParse(args[i + 1], out int f))
+                {
+                    maxFrames = f;
+                    i++;
+                }
+                else if (args[i] == "--stress")
+                {
+                    initialStress = true;
+                }
+                else if (args[i] == "--no-vsync")
+                {
+                    initialNoVsync = true;
+                }
+                else if (args[i] == "--benchmark")
+                {
+                    benchmarkMode = true;
+                }
+                else if (args[i] == "--autotour")
+                {
+                    initialAutopilot = true;
+                }
+            }
+        }
+
         const int InitialWidth = 1280;
         const int InitialHeight = 720;
 
@@ -112,7 +149,7 @@ public static class Program
             width: InitialWidth,
             height: InitialHeight,
             resizable: true,
-            vsync: true
+            vsync: !initialNoVsync
         );
 
         using var context = new VulkanContext(window);
@@ -132,8 +169,8 @@ public static class Program
         using var depthBuffer = new DepthBuffer(context, allocator, swapchain.Width, swapchain.Height);
 
         var camera = new Camera3D(
-            position: new Vector3(0f, 2.0f, 4.5f),
-            target: Vector3.Zero,
+            position: new Vector3(0f, 3.5f, 9.0f),
+            target: new Vector3(0f, 1.2f, 0f),
             width: swapchain.Width,
             height: swapchain.Height,
             fovDegrees: 60f,
@@ -143,12 +180,12 @@ public static class Program
 
         var cameraController = new CameraController(camera)
         {
-            Distance = 5.0f,
-            Pitch = 0.35f,
+            Distance = 9.0f,
+            Pitch = 0.28f,
             Yaw = 0.0f,
             AutoOrbitEnabled = true,
-            OrbitSpeed = 0.5f,
-            MoveSpeed = 8.0f,
+            OrbitSpeed = 0.35f,
+            MoveSpeed = 10.0f,
         };
 
         window.Resized += (newWidth, newHeight) =>
@@ -251,13 +288,15 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         using var geometryPool = new GeometryPool(context, allocator);
 
-        // 1. Ground Plane geometry (200m x 200m quad at Y = -1.0)
+        // 1. Central Exhibition Pavilion Plinth (32m x 32m paved slate platform at Y = 0.01)
+        const float PlinthExtent = 16.0f;
+        const float PlinthY = 0.01f;
         Vertex3D[] groundVertices =
         [
-            new(new float3(-100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
-            new(new float3( 100f, -1.0f,  100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 0f)),
-            new(new float3( 100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(20f, 20f)),
-            new(new float3(-100f, -1.0f, -100f), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 20f)),
+            new(new float3(-PlinthExtent, PlinthY,  PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 0f)),
+            new(new float3( PlinthExtent, PlinthY,  PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(8f, 0f)),
+            new(new float3( PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(8f, 8f)),
+            new(new float3(-PlinthExtent, PlinthY, -PlinthExtent), new float3(1f, 1f, 1f), new float3(0f, 1f, 0f), new float2(0f, 8f)),
         ];
         ushort[] groundIndices = [0, 1, 2, 2, 3, 0];
 
@@ -322,9 +361,9 @@ public static class Program
             groundSlice.VertexOffsetBytes,
             groundSlice.IndexOffsetBytes,
             VkIndexType.UInt16,
-            boundingMin: new Vector3(-100f, -1.1f, -100f),
-            boundingMax: new Vector3(100f, -0.9f, 100f),
-            boundingRadius: 142.0f,
+            boundingMin: new Vector3(-PlinthExtent, -0.05f, -PlinthExtent),
+            boundingMax: new Vector3(PlinthExtent, 0.05f, PlinthExtent),
+            boundingRadius: PlinthExtent * 1.4142f,
             ownsBuffers: false
         );
 
@@ -350,7 +389,14 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // PHASE 6: LIGHTING, SHADOWS, DEBUG RENDERER & ORIGIN SHIFT
         // ---------------------------------------------------------------------------------------------
-        using var cascadedShadowMap = new CascadedShadowMap(context, allocator, 2048);
+        var settings = Settings.Load();
+        if (!ShadowQualityPreset.TryParse(settings.ShadowQuality, out var shadowQuality))
+        {
+            Console.WriteLine($"[Settings] Unknown shadow quality '{settings.ShadowQuality}'. Falling back to High.");
+            shadowQuality = ShadowQualityPreset.High;
+        }
+
+        using var cascadedShadowMap = new CascadedShadowMap(context, allocator, shadowQuality.Resolution);
 
         var lightEnv = new LightEnvironment
         {
@@ -364,7 +410,9 @@ public static class Program
             AmbientSkyColor = new Vector3(0.2f, 0.35f, 0.6f),
             AmbientGroundColor = new Vector3(0.1f, 0.08f, 0.05f),
             AmbientIntensity = 0.40f,
-            ShadowBias = 0.0015f
+            ShadowBias = 0.0005f,
+            HighQualityShadows = shadowQuality.HighQualityFiltering,
+            ShadowFilterRadius = shadowQuality.FilterRadius
         };
 
         using var debugRenderer = new DebugRenderer(context, allocator);
@@ -378,7 +426,11 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // PHASE 7: 3D FORWARD RENDERER PIPELINE & ECS SCENE
         // ---------------------------------------------------------------------------------------------
+#if DEBUG
         using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
+#else
+        using var shaderCompiler = new ShaderCompiler();
+#endif
         using var forwardRenderer = new ForwardRenderer3D(
             context,
             allocator,
@@ -389,45 +441,45 @@ public static class Program
 
         using var scene = new Jatayu.Scene.Scene();
 
-        // 1. Ground Plane receiving soft PCF directional shadows
+        // 1. Central Exhibition Pavilion Plinth (32m x 32m paved slate platform at Y = 0.01)
         scene.CreateEntity(
-            new Transform(0.0, -1.0, 0.0),
+            new Transform(0.0, 0.0, 0.0),
             new MeshRenderer(groundMesh, materialId: groundMatId, castShadows: false)
         );
 
-        // 2. Hero Gold Cube at origin
+        // 2. Hero Gold Cube floating at plinth center
         var heroCube = scene.CreateEntity(
-            new Transform(0.0, 0.5, 0.0),
+            new Transform(0.0, 1.2, 0.0),
             new MeshRenderer(cubeMesh, materialId: goldMatId, castShadows: true)
         );
 
         // 3. Orbiting Copper Cube
         var copperCube = scene.CreateEntity(
-            new Transform(-3.0, 0.5, 0.0, Quaternion.Identity, new Vector3(0.8f)),
+            new Transform(-4.0, 1.0, 0.0, Quaternion.Identity, new Vector3(0.8f)),
             new MeshRenderer(cubeMesh, materialId: copperMatId, castShadows: true)
         );
 
         // 4. Smooth Chrome Cube
         var chromeCube = scene.CreateEntity(
-            new Transform(3.0, 0.5, 0.0, Quaternion.Identity, new Vector3(0.8f)),
+            new Transform(4.0, 1.0, 0.0, Quaternion.Identity, new Vector3(0.8f)),
             new MeshRenderer(cubeMesh, materialId: chromeMatId, castShadows: true)
         );
 
         // 5. Rough Terracotta Cube
         var terracottaCube = scene.CreateEntity(
-            new Transform(0.0, 0.5, -3.0, Quaternion.Identity, new Vector3(0.8f)),
+            new Transform(0.0, 1.0, -4.0, Quaternion.Identity, new Vector3(0.8f)),
             new MeshRenderer(cubeMesh, materialId: terracottaMatId, castShadows: true)
         );
 
-        // 6. Emissive Neon Blue Crystal
+        // 6. Emissive Neon Blue Crystal floating above hero cube
         var emissiveCube = scene.CreateEntity(
-            new Transform(0.0, 2.5, 0.0, Quaternion.Identity, new Vector3(0.5f, 1.5f, 0.5f)),
+            new Transform(0.0, 3.2, 0.0, Quaternion.Identity, new Vector3(0.5f, 1.5f, 0.5f)),
             new MeshRenderer(cubeMesh, materialId: emissiveMatId, castShadows: true)
         );
 
         // 7. Textured Checkerboard Cube (via BindlessTable slot)
         var checkerCube = scene.CreateEntity(
-            new Transform(0.0, 0.5, 3.0, Quaternion.Identity, new Vector3(0.8f)),
+            new Transform(0.0, 1.0, 4.0, Quaternion.Identity, new Vector3(0.8f)),
             new MeshRenderer(cubeMesh, materialId: checkerMatId, castShadows: true)
         );
 
@@ -460,7 +512,11 @@ public static class Program
         var debugOverlay = new DebugOverlay();
         var streamingOverlay = new StreamingDebugOverlay();
 
-        string worldPakPath = Path.Combine(AppContext.BaseDirectory, "assets/generated/world.jpak");
+        string worldPakPath = Path.Combine(AppContext.BaseDirectory, "assets", "packages", "world.jpak");
+        if (!File.Exists(worldPakPath))
+            worldPakPath = Path.Combine(AppContext.BaseDirectory, "assets", "generated", "world.jpak");
+        if (!File.Exists(worldPakPath) && File.Exists("assets/packages/world.jpak"))
+            worldPakPath = "assets/packages/world.jpak";
         if (!File.Exists(worldPakPath) && File.Exists("assets/generated/world.jpak"))
             worldPakPath = "assets/generated/world.jpak";
 
@@ -487,7 +543,12 @@ public static class Program
             float h1 = MathF.Sin(fx * 0.005f) * MathF.Cos(fz * 0.005f) * maxElev;
             float h2 = MathF.Sin(fx * 0.015f + 1.2f) * MathF.Sin(fz * 0.015f + 0.8f) * (maxElev * 0.35f);
             float h3 = MathF.Cos(fx * 0.04f - 0.5f) * MathF.Sin(fz * 0.04f + 1.7f) * (maxElev * 0.1f);
-            return h1 + h2 + h3;
+
+            // Flat clearing around origin (radius 200m) for testing arena and rotating cubes
+            float dist = MathF.Sqrt(fx * fx + fz * fz);
+            float t = Math.Clamp((dist - 200.0f) / 60.0f, 0.0f, 1.0f);
+            float flatFactor = t * t * (3.0f - 2.0f * t);
+            return (h1 + h2 + h3) * flatFactor;
         });
 
         using var textureStreamer = new TextureStreamer(context, allocator, bindlessTable, deletionQueue, vramBudget);
@@ -495,51 +556,56 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // SPRINT 7: GPU-DRIVEN RENDERING, PROCEDURAL FOLIAGE & GPU PARTICLES
         // ---------------------------------------------------------------------------------------------
-        using var instanceBuffer = new InstanceBuffer(context, allocator, 65536);
-        using var indirectDrawBuffer = new IndirectDrawBuffer(context, allocator, 5, 65536);
+        const int ReferenceStaticInstanceCount = 200000;
+        const int MaxGpuInstanceCount = 262144;
+        using var instanceBuffer = new InstanceBuffer(context, allocator, MaxGpuInstanceCount);
+        using var indirectDrawBuffer = new IndirectDrawBuffer(context, allocator, 5, MaxGpuInstanceCount);
         using var hizBuilder = new HiZBuilder(context, allocator, shaderCompiler, (uint)swapchain.Width, (uint)swapchain.Height);
         using var gpuCuller = new GpuCuller(context, allocator, shaderCompiler);
 
-        // Procedural wind foliage grass field (Sprint 7b)
+        // Procedural wind foliage grass field (Sprint 7b - 50,000 blades surrounding the plinth)
         using var foliageSystem = new FoliageSystem(context, allocator, shaderCompiler, swapchain.ColorFormat);
-        var foliageList = new List<FoliageInstanceData>(4096);
+        var foliageList = new List<FoliageInstanceData>(50000);
         var foliageRng = new Random(1337);
-        for (int i = 0; i < 4096; i++)
+        for (int i = 0; i < 50000; i++)
         {
-            float fx = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
-            float fz = (float)(foliageRng.NextDouble() * 120.0 - 60.0);
-            if (MathF.Abs(fx) < 4.5f && fz > -2.0f && fz < 6.0f) continue; // Keep central exhibition area clean
+            float fx = (float)(foliageRng.NextDouble() * 160.0 - 80.0);
+            float fz = (float)(foliageRng.NextDouble() * 160.0 - 80.0);
+            if (MathF.Abs(fx) < PlinthExtent + 1.0f && MathF.Abs(fz) < PlinthExtent + 1.0f) continue; // Keep central exhibition plinth clean
             float rot = (float)(foliageRng.NextDouble() * Math.PI * 2.0);
             float scale = 0.8f + (float)foliageRng.NextDouble() * 0.5f;
             byte tint = (byte)foliageRng.Next(150, 255);
             byte windPhase = (byte)foliageRng.Next(0, 256);
-            float fy = MathF.Max(terrainClipmap.SampleElevation(fx, fz), -1.0f);
+            float fy = MathF.Max(terrainClipmap.SampleElevation(fx, fz), 0.0f);
             foliageList.Add(new FoliageInstanceData(new Vector3(fx, fy, fz), rot, scale, tint, windPhase));
         }
         foliageSystem.SetInstances(CollectionsMarshal.AsSpan(foliageList));
 
-        // GPU compute particle emitter fountain (Sprint 7b)
-        using var particleSystem = new ParticleSystem(context, allocator, shaderCompiler, swapchain.ColorFormat, maxParticles: 2048)
+        // GPU compute particle emitter fountain (Sprint 7b - erupts above the emissive crystal)
+        using var particleSystem = new ParticleSystem(context, allocator, shaderCompiler, swapchain.ColorFormat, maxParticles: 16384)
         {
-            EmitterPosition = new Vector3(0.0f, 3.2f, 0.0f)
+            EmitterPosition = new Vector3(0.0f, 4.0f, 0.0f)
         };
+        using var transparentPass = new TransparentPass(context, allocator, shaderCompiler, swapchain.ColorFormat, swapchain.Width, swapchain.Height);
 
         // Sprint 7b: Image-Based Lighting BRDF LUT pre-integration & 3D Clustered Light Culling
         using var iblProbe = new IblProbe(context, allocator);
         commandPool.ExecuteImmediate(queue, cmd =>
         {
             iblProbe.GenerateBrdfLut(cmd.Handle, shaderCompiler);
+            iblProbe.GenerateEnvironmentMaps(cmd.Handle, shaderCompiler);
         });
 
         using var clusteredLightCulling = new ClusteredLightCulling(context, allocator, shaderCompiler);
-        var pointLights = new PointLight[2];
-        var spotLights = new SpotLight[1];
+        var pointLights = new PointLight[224];
+        var spotLights = new SpotLight[32];
 
         var dynInstances = new GpuInstanceData[10];
-        var streamingGpuInstances = new GpuInstanceData[4096];
+        var streamingGpuInstances = new GpuInstanceData[ReferenceStaticInstanceCount];
         bool gpuDrivenEnabled = true;
         bool foliageEnabled = true;
         bool particlesEnabled = true;
+        bool referenceScaleEnabled = initialStress;
 
         using var renderGraph = new RenderGraph();
 
@@ -555,7 +621,7 @@ public static class Program
         bool debugWireframeEnabled = true;
         bool atLargeWorldCluster = false;
         bool flyCamEnabled = false;
-        bool autopilotTourEnabled = false;
+        bool autopilotTourEnabled = initialAutopilot;
         double tourTime = 0.0;
 
         window.KeyAction += (key, action) =>
@@ -575,7 +641,18 @@ public static class Program
                 else if (key == GlfwKey.P)
                 {
                     lightEnv.HighQualityShadows = !lightEnv.HighQualityShadows;
-                    Console.WriteLine($"[Shadows] Ultra High-Quality Shadows -> {(lightEnv.HighQualityShadows ? "ENABLED (16-Tap Poisson Disk, 2.8x Texel Density Focus)" : "DISABLED (Standard 9-Tap PCF)")}");
+                    Console.WriteLine($"[Shadows] {(lightEnv.HighQualityShadows ? "16-Tap Poisson PCF" : "3x3 PCF")} at {cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}");
+                }
+                else if (key == GlfwKey.G)
+                {
+                    lightEnv.ShadowDebugMode = lightEnv.ShadowDebugMode switch
+                    {
+                        ShadowDebugMode.Off => ShadowDebugMode.Cascades,
+                        ShadowDebugMode.Cascades => ShadowDebugMode.Depth,
+                        ShadowDebugMode.Depth => ShadowDebugMode.Bias,
+                        _ => ShadowDebugMode.Off
+                    };
+                    Console.WriteLine($"[Shadows] Debug view -> {lightEnv.ShadowDebugMode}");
                 }
                 else if (key == GlfwKey.F)
                 {
@@ -623,11 +700,11 @@ public static class Program
                     }
                     else
                     {
-                        camera.Target = Vector3.Zero;
-                        cameraController.Distance = 5.0f;
-                        cameraController.Pitch = 0.35f;
+                        camera.Target = new Vector3(0.0f, 1.2f, 0.0f);
+                        cameraController.Distance = 9.0f;
+                        cameraController.Pitch = 0.28f;
                         cameraController.Yaw = 0.0f;
-                        Console.WriteLine("[Teleport] Teleported back to Origin (X=0, Y=0, Z=0)");
+                        Console.WriteLine("[Teleport] Teleported back to Origin (X=0, Y=1.2, Z=0)");
                     }
                 }
                 else if (key == GlfwKey.C)
@@ -677,7 +754,12 @@ public static class Program
                 else if (key == GlfwKey.J)
                 {
                     particlesEnabled = !particlesEnabled;
-                    Console.WriteLine($"[Particles] GPU Particle Fountain -> {(particlesEnabled ? $"ENABLED ({particleSystem.MaxParticles} particles)" : "DISABLED")}");
+                    Console.WriteLine($"[Particles] GPU Particle Fountain -> {(particlesEnabled ? $"ENABLED ({particleSystem.ActiveParticleCount} active, {particleSystem.MaxParticles} capacity)" : "DISABLED")}");
+                }
+                else if (key == GlfwKey.H)
+                {
+                    referenceScaleEnabled = !referenceScaleEnabled;
+                    Console.WriteLine($"[Reference Scale] 200k GPU static instances -> {(referenceScaleEnabled ? "ENABLED (high GPU/CPU upload load)" : "DISABLED")}");
                 }
                 else if (key == GlfwKey.Escape)
                 {
@@ -695,22 +777,24 @@ public static class Program
         Console.WriteLine($" [Window]        : {window.Width}x{window.Height} (Framebuffer: {window.FramebufferWidth}x{window.FramebufferHeight} px)");
         Console.WriteLine($" [Renderer]      : ForwardRenderer3D (GPU-Driven Indirect + Shadows + Skybox + Terrain + Foliage + Particles)");
         Console.WriteLine($" [GPU-Driven]    : Indirect Multi-Draw (Toggle [G]) | vkCmdDrawIndexedIndirectCount + Hi-Z Culling");
+        Console.WriteLine($" [Reference]     : 200k GPU static instance stress (Toggle [H], requires [G])");
         Console.WriteLine($" [Foliage]       : Procedural Wind Grass (Toggle [K]) | {foliageSystem.ActiveInstanceCount} instanced blades");
-        Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [J]) | {particleSystem.MaxParticles} active billboard particles");
+        Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [J]) | {particleSystem.ActiveParticleCount} active / {particleSystem.MaxParticles} capacity, {ParticleSystem.DefaultEmissionRate:0} particles/s");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
         Console.WriteLine($" [Shadow Map]    : 4-Cascade CSM ({cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}x4 D32_SFLOAT, Texel Snapping, Reverse-Z)");
-        Console.WriteLine($" [Clipmap]       : 6 concentric rings (4,096 vertices/ring), {terrainClipmap.ResidentTileCount} resident 256m tiles");
+        Console.WriteLine($" [Clipmap]       : 7 nested LOD rings (8.4 km span), 10 modular piece meshes, 144 instances, watertight geomorphing");
+        Console.WriteLine($" [Arena]         : 200m flat origin clearing for central pavilion plinth & rotating testing boxes");
         Console.WriteLine($" [Bindless]      : BindlessTable active ({bindlessTable.MaxTextures} slots) | Checkerboard Slot: #{checkerSlot}");
         Console.WriteLine($" [MaterialTable] : {materialTable.Count} PBR materials registered in GPU Storage Buffer");
-        Console.WriteLine($" [GeometryPool]  : Monolithic shared pool active (Ground Plane + Unit Cube meshes)");
+        Console.WriteLine($" [GeometryPool]  : Monolithic shared pool active (Exhibition Pavilion Plinth + Unit Cube meshes)");
         Console.WriteLine($" [Large World]   : 64-bit precision WorldPosition active (Monolith cluster at 50,000m)");
         Console.WriteLine($" [Origin Shift]  : Snapped to 256m terrain tile multiple (Threshold: {originShift.ThresholdDistance:F0}m)");
         Console.WriteLine($" [Diagnostics]   : Dear ImGui HUD Active (Toggle [F1]) | World Radar (Toggle [F2])");
         Console.WriteLine("--------------------------------------------------------------------------------");
         Console.WriteLine(" INTERACTIVE HOTKEYS:");
         Console.WriteLine("   [G]           : Toggle GPU-Driven Multi-Draw vs CPU Draw (Live rendering comparison!)");
-        Console.WriteLine("   [K]           : Toggle Procedural Foliage Grass Field (4,096 swaying grass blades)");
-        Console.WriteLine("   [J]           : Toggle GPU Particle Fountain (2,048 compute-simulated particles)");
+        Console.WriteLine("   [K]           : Toggle Procedural Foliage Grass Field (50,000 swaying wind blades)");
+        Console.WriteLine("   [J]           : Toggle GPU Particle Fountain (16K compute physics + WBOIT transparency)");
         Console.WriteLine("   [C]           : Toggle 6-DOF Free-Flycam (WASD + Q/E to fly, Shift for 100 m/s boost, Arrows to aim)");
         Console.WriteLine("   [F3]          : Toggle 100 m/s Supersonic Autopilot Drone Tour (360 km/h open-world stress sweep)");
         Console.WriteLine("   [F4]          : Toggle Terrain Clipmap LOD Ring Colors (Green/Cyan/Yellow/Orange/Red/Purple)");
@@ -720,7 +804,8 @@ public static class Program
         Console.WriteLine("   [L]           : Toggle Sun Light Orbit animation (animates soft shadows)");
         Console.WriteLine("   [B]           : Toggle 3D Wireframe Debug bounds and coordinate axes");
         Console.WriteLine("   [Space]       : Toggle Auto-Orbit rotation On / Off");
-        Console.WriteLine("   [P]           : Toggle Ultra High-Quality Shadows (16-tap Poisson Disk vs 9-tap PCF)");
+        Console.WriteLine("   [P]           : Toggle shadow filtering (3x3 PCF vs 16-tap Poisson)");
+        Console.WriteLine("   [G]           : Cycle shadow debug view (cascades, depth, bias, off)");
         Console.WriteLine("   [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
         Console.WriteLine("   [Left/Right]  : Manual horizontal orbit (Yaw)");
         Console.WriteLine("   [Up/Down]     : Manual vertical orbit (Pitch)");
@@ -754,11 +839,6 @@ public static class Program
             foliageSystem.Render(ctx.CommandBuffer, folVp, -camera.Position, (float)time.TotalTime);
         };
 
-        Action<RenderPassBuilder> particlePassSetup = setup =>
-        {
-            setup.SetColorAttachment(currentSwapchainTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-            setup.SetDepthAttachment(currentDepthTarget, VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store);
-        };
         Action<RenderPassContext> particlePassExecute = ctx =>
         {
             particleSystem.Render(ctx.CommandBuffer, camera.ViewMatrix, camera.ProjectionMatrix, swapchain.Width, swapchain.Height);
@@ -803,7 +883,28 @@ public static class Program
                 continue;
             }
 
-            // 2. Tick high-precision game clock
+            // 2. Synchronize with GPU presentation engine before ticking clock
+            using (Profiler.Scope("WaitForFence"))
+            {
+                frameSync.WaitForFrameFence();
+            }
+
+            int imageIndex;
+            var acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out imageIndex);
+            if (acquireResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
+            {
+                swapchain.Recreate();
+                depthBuffer.Recreate(swapchain.Width, swapchain.Height);
+                transparentPass.Resize(swapchain.Width, swapchain.Height);
+                camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
+                Profiler.EndFrame();
+                AllocationTracker.EndFrame();
+                continue;
+            }
+
+            frameSync.ResetFrameFence();
+
+            // 3. Tick high-precision game clock (smooth, uniform interval aligned with display)
             using (Profiler.Scope("GameTime"))
             {
                 time.Update();
@@ -947,42 +1048,73 @@ public static class Program
             // 5b. Open-World Region Streaming (Sprint 6a) & Texture Mip Streaming (Sprint 6b)
             Vector3 camVelocity = (camera.Position - prevCamPos) / Math.Max(0.0001f, (float)dt);
             prevCamPos = camera.Position;
-            streamingManager.Update(dt, in camWorldPos, in camVelocity);
-            textureStreamer.Update((ulong)frameSync.CurrentFrame);
+            using (Profiler.Scope("WorldStreaming"))
+            {
+                streamingManager.Update(dt, in camWorldPos, in camVelocity);
+                textureStreamer.Update((ulong)frameSync.CurrentFrame);
+            }
 
             // 5c. Update Dynamic Clustered Lights (Sprint 7b)
-            float totalSec = (float)time.TotalTime;
-            // Glowing Neon Blue Crystal Point Light (at 0, 2.5, 0)
-            Vector3 bluePosRel = new Vector3(0.0f, 2.5f, 0.0f) - camera.Position;
-            pointLights[0] = new PointLight(bluePosRel, radius: 10.0f, color: new Vector3(0.2f, 0.8f, 1.0f), intensity: 60000.0f);
+            using (Profiler.Scope("LightUpdate"))
+            {
+                float totalSec = (float)time.TotalTime;
+            // Glowing Neon Blue Crystal Point Light (at 0, 3.2, 0)
+            Vector3 bluePosRel = new Vector3(0.0f, 3.2f, 0.0f) - camera.Position;
+            pointLights[0] = new PointLight(bluePosRel, radius: 12.0f, color: new Vector3(0.2f, 0.8f, 1.0f), intensity: 60000.0f);
 
-            // Orbiting warm amber campfire Point Light around the Hero cube
-            Vector3 firePosWorld = new Vector3(MathF.Cos(totalSec * 1.5f) * 3.5f, 1.2f, MathF.Sin(totalSec * 1.5f) * 3.5f);
+            // Orbiting warm amber campfire Point Light around the exhibition cubes
+            Vector3 firePosWorld = new Vector3(MathF.Cos(totalSec * 1.5f) * 5.0f, 1.5f, MathF.Sin(totalSec * 1.5f) * 5.0f);
             Vector3 firePosRel = firePosWorld - camera.Position;
-            pointLights[1] = new PointLight(firePosRel, radius: 8.0f, color: new Vector3(1.0f, 0.6f, 0.2f), intensity: 45000.0f);
+            pointLights[1] = new PointLight(firePosRel, radius: 10.0f, color: new Vector3(1.0f, 0.6f, 0.2f), intensity: 45000.0f);
+            for (int i = 2; i < pointLights.Length; i++)
+            {
+                float angle = totalSec * 0.12f + i * 2.39996323f;
+                float radius = 30.0f + (i % 9) * 7.0f;
+                float height = 1.0f + (i % 13) * 0.75f;
+                var position = new Vector3(MathF.Cos(angle) * radius, height, MathF.Sin(angle) * radius);
+                var color = new Vector3(
+                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.31f)),
+                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.47f + 1.0f)),
+                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.59f + 2.0f)));
+                pointLights[i] = new PointLight(position, radius: 16.0f, color, intensity: 1800.0f);
+            }
 
-            // Spotlight pointing down from above the hero cube
-            Vector3 spotPosRel = new Vector3(0.0f, 6.0f, 0.0f) - camera.Position;
-            spotLights[0] = new SpotLight(spotPosRel, range: 12.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color: new Vector3(1.0f, 0.95f, 0.8f));
+            // Spotlight pointing down from above the exhibition center
+            Vector3 spotPosRel = new Vector3(0.0f, 8.0f, 0.0f) - camera.Position;
+            spotLights[0] = new SpotLight(spotPosRel, range: 18.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color: new Vector3(1.0f, 0.95f, 0.8f));
+            for (int i = 1; i < spotLights.Length; i++)
+            {
+                float angle = -totalSec * 0.08f + i * 2.39996323f;
+                float radius = 20.0f + (i % 7) * 6.0f;
+                var position = new Vector3(MathF.Cos(angle) * radius, 12.0f, MathF.Sin(angle) * radius);
+                var color = new Vector3(
+                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.23f)),
+                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.41f + 1.0f)),
+                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.61f + 2.0f)));
+                spotLights[i] = new SpotLight(position, range: 22.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color);
+            }
 
-            clusteredLightCulling.UpdateLights(pointLights, spotLights);
+                clusteredLightCulling.UpdateLights(pointLights, spotLights);
+            }
 
             // 5d. Update GPU-Driven Instance Buffer (Sprint 7a)
-            if (gpuDrivenEnabled)
+            using (Profiler.Scope("InstanceBufferUpdate"))
             {
+                if (gpuDrivenEnabled)
+                {
                 float camX = camera.Position.X;
                 float camY = camera.Position.Y;
                 float camZ = camera.Position.Z;
 
-                // 0: Ground Plane
-                Vector3 groundRel = new Vector3(-camX, -1f - camY, -camZ);
+                // 0: Exhibition Pavilion Plinth
+                Vector3 groundRel = new Vector3(-camX, -camY, -camZ);
                 Matrix4x4 groundModel = Matrix4x4.CreateTranslation(groundRel);
                 dynInstances[0] = new GpuInstanceData
                 {
                     CurrentTransform = groundModel,
                     PreviousTransform = groundModel,
                     BoundingCenter = groundRel,
-                    BoundingRadius = 142f,
+                    BoundingRadius = PlinthExtent * 1.4142f,
                     MeshId = groundSlice.MeshId,
                     MaterialId = groundMatId,
                     Flags = 0,
@@ -1169,8 +1301,40 @@ public static class Program
                     }
                 }
 
-                instanceBuffer.SetStaticInstances(streamingGpuInstances.AsSpan(0, staticInstIdx));
-                instanceBuffer.SetDynamicInstances(dynInstances);
+                if (referenceScaleEnabled && staticInstIdx < ReferenceStaticInstanceCount)
+                {
+                    Vector3 forward = camera.Forward;
+                    Vector3 right = camera.Right;
+                    Vector3 up = camera.UpVector;
+                    float tanHalfFov = MathF.Tan(camera.FovDegrees * (MathF.PI / 360.0f));
+                    float aspect = camera.AspectRatio;
+                    int syntheticCount = ReferenceStaticInstanceCount - staticInstIdx;
+                    for (int i = 0; staticInstIdx < ReferenceStaticInstanceCount; i++, staticInstIdx++)
+                    {
+                        float depth = 12.0f + (i % 512) * 5.5f;
+                        float radial = 0.72f * MathF.Sqrt((float)(i / 512 + 1) / ((syntheticCount + 511) / 512));
+                        float angle = i * 2.39996323f;
+                        float horizontal = MathF.Cos(angle) * radial * depth * tanHalfFov * aspect;
+                        float vertical = MathF.Sin(angle) * radial * depth * tanHalfFov;
+                        Vector3 relPos = forward * depth + right * horizontal + up * vertical;
+                        Matrix4x4 model = Matrix4x4.CreateScale(0.35f) * Matrix4x4.CreateTranslation(relPos);
+                        streamingGpuInstances[staticInstIdx] = new GpuInstanceData
+                        {
+                            CurrentTransform = model,
+                            PreviousTransform = model,
+                            BoundingCenter = relPos,
+                            BoundingRadius = 0.6f,
+                            MeshId = cubeSlice.MeshId,
+                            MaterialId = copperMatId,
+                            Flags = 1u,
+                            LodBias = 0f,
+                        };
+                    }
+                }
+
+                    instanceBuffer.SetStaticInstances(streamingGpuInstances.AsSpan(0, staticInstIdx));
+                    instanceBuffer.SetDynamicInstances(dynInstances);
+                }
             }
 
             // 6. Immediate-Mode 3D Debug Wireframes
@@ -1184,11 +1348,13 @@ public static class Program
                 if (!atLargeWorldCluster)
                 {
                     // AABB wireframe bounding boxes for local objects
-                    debugRenderer.DrawBox(new Vector3(-1f, -0.5f, -1f), new Vector3(1f, 1.5f, 1f), new Vector4(1f, 1f, 0f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-3.8f, -0.3f, -0.8f), new Vector3(-2.2f, 1.3f, 0.8f), new Vector4(0.9f, 0.6f, 0.4f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(2.2f, -0.3f, -0.8f), new Vector3(3.8f, 1.3f, 0.8f), new Vector4(0.8f, 0.8f, 0.9f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-0.8f, -0.3f, -3.8f), new Vector3(0.8f, 1.3f, -2.2f), new Vector4(0.85f, 0.35f, 0.2f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-0.8f, -0.3f, 2.2f), new Vector3(0.8f, 1.3f, 3.8f), new Vector4(0.2f, 0.8f, 0.2f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(-PlinthExtent, 0f, -PlinthExtent), new Vector3(PlinthExtent, 0.02f, PlinthExtent), new Vector4(0.5f, 0.5f, 0.6f, 0.4f));
+                    debugRenderer.DrawBox(new Vector3(-1f, 0.2f, -1f), new Vector3(1f, 2.2f, 1f), new Vector4(1f, 1f, 0f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(-4.8f, 0.2f, -0.8f), new Vector3(-3.2f, 1.8f, 0.8f), new Vector4(0.9f, 0.6f, 0.4f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(3.2f, 0.2f, -0.8f), new Vector3(4.8f, 1.8f, 0.8f), new Vector4(0.8f, 0.8f, 0.9f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, -4.8f), new Vector3(0.8f, 1.8f, -3.2f), new Vector4(0.85f, 0.35f, 0.2f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, 3.2f), new Vector3(0.8f, 1.8f, 4.8f), new Vector4(0.2f, 0.8f, 0.2f, 0.8f));
+                    debugRenderer.DrawBox(new Vector3(-0.5f, 1.7f, -0.5f), new Vector3(0.5f, 4.7f, 0.5f), new Vector4(0.2f, 0.8f, 1.0f, 0.8f));
                 }
                 else
                 {
@@ -1217,6 +1383,8 @@ public static class Program
                             visibleEntities: forwardRenderer.VisibleItemCount,
                             totalEntities: 10,
                             shadowCasters: forwardRenderer.ShadowCasterCount,
+                            terrainDrawCount: forwardRenderer.TerrainDrawCount,
+                            terrainTriangleCount: forwardRenderer.TerrainTriangleCount,
                             atLargeWorld: atLargeWorldCluster,
                             debugWireframe: debugWireframeEnabled,
                             sunOrbiting: sunOrbitEnabled
@@ -1236,37 +1404,6 @@ public static class Program
                 }
             }
 
-            // Handle dynamic swapchain / window resize
-            if (swapchain.IsOutOfDate)
-            {
-                swapchain.Recreate();
-                depthBuffer.Recreate(swapchain.Width, swapchain.Height);
-                camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
-                Profiler.EndFrame();
-                AllocationTracker.EndFrame();
-                continue;
-            }
-
-            // 8. Wait for current frame fence
-            using (Profiler.Scope("WaitForFence"))
-            {
-                frameSync.WaitForFrameFence();
-            }
-
-            // 9. Acquire next swapchain image
-            var acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out var imageIndex);
-            if (acquireResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
-            {
-                swapchain.Recreate();
-                depthBuffer.Recreate(swapchain.Width, swapchain.Height);
-                camera.UpdateAspectRatio(swapchain.Width, swapchain.Height);
-                Profiler.EndFrame();
-                AllocationTracker.EndFrame();
-                continue;
-            }
-
-            frameSync.ResetFrameFence();
-
             var cmd = commandBuffers[frameSync.CurrentFrame];
             var image = swapchain.Images[imageIndex];
             var imageView = swapchain.ImageViews[imageIndex];
@@ -1280,7 +1417,7 @@ public static class Program
                 // Run GPU particle compute physics simulation (Sprint 7b)
                 if (particlesEnabled)
                 {
-                    particleSystem.Simulate(cmd, (float)dt, (float)time.TotalTime);
+                    particleSystem.Simulate(cmd, (float)dt);
                 }
 
                 // Run 3D Clustered Light Culling compute shader (Sprint 7b)
@@ -1361,7 +1498,7 @@ public static class Program
                 // GPU Particle Pass (Sprint 7b - Soft Radial Billboard Particles)
                 if (particlesEnabled)
                 {
-                    renderGraph.AddPass("ParticlePass", particlePassSetup, particlePassExecute);
+                    transparentPass.AddPasses(renderGraph, currentSwapchainTarget, currentDepthTarget, particlePassExecute);
                 }
 
                 // ImGui Diagnostics HUD Pass
@@ -1462,10 +1599,59 @@ public static class Program
             AllocationTracker.EndFrame();
             AllocationTracker.AssertZeroAllocations();
 
-            if (time.FrameCount % 30 == 0)
+            if (benchmarkMode && time.FrameCount % 60 == 0)
             {
-                window.Title = $"Jatayu Engine - Sprint 7 | FPS: {time.Fps:F0} | [P] HQ Shadows: {(lightEnv.HighQualityShadows ? "ON (16-tap Poisson)" : "OFF (9-tap)")} | [G] Indirect: {(gpuDrivenEnabled ? "ON" : "OFF")} | [K] Grass: {(foliageEnabled ? "ON" : "OFF")}";
+                float gpuTotal = 0f;
+                var gpuSnap = gpuTimer.LatestSnapshot;
+                for (int gi = 0; gi < gpuSnap.Count; gi++) gpuTotal += gpuSnap[gi].DurationMs;
+                float currentFps = time.Fps > 0f ? time.Fps : (time.TotalTime > 0.001 ? (float)(time.FrameCount / time.TotalTime) : 0f);
+                Console.WriteLine($"[Benchmark] Frame {time.FrameCount}: {currentFps:F1} FPS ({(currentFps > 0f ? 1000.0 / currentFps : 0.0):F2} ms) | GPU: {gpuTotal:F2} ms | Static: {instanceBuffer.TotalCount} | Grass: {foliageSystem.ActiveInstanceCount} | Particles: {particleSystem.ActiveParticleCount}");
             }
+
+            if (time.FrameCount >= (ulong)maxFrames)
+            {
+                break;
+            }
+        }
+
+        if (benchmarkMode)
+        {
+            float effectiveFps = time.Fps > 0f ? time.Fps : (time.TotalTime > 0.001 ? (float)(time.FrameCount / time.TotalTime) : 0f);
+            float effectiveMs = effectiveFps > 0f ? 1000.0f / effectiveFps : 0f;
+
+            Console.WriteLine();
+            Console.WriteLine("================================================================================");
+            Console.WriteLine("                    JATAYU SPRINT 7 RUNTIME BENCHMARK REPORT                    ");
+            Console.WriteLine("================================================================================");
+            Console.WriteLine($" [Device]        : {context.DeviceName}");
+            Console.WriteLine($" [Resolution]    : {swapchain.Width}x{swapchain.Height} (VSync: {(window.VSync ? "ON" : "OFF")})");
+            Console.WriteLine($" [Frame Count]   : {time.FrameCount}");
+            Console.WriteLine($" [Frame Rate]    : {effectiveFps:F1} FPS ({effectiveMs:F2} ms/frame)");
+            Console.WriteLine($" [Static Meshes] : {instanceBuffer.TotalCount} instances (GPU-Driven: {(gpuDrivenEnabled ? "ON" : "OFF")})");
+            Console.WriteLine($" [Foliage]       : {foliageSystem.ActiveInstanceCount} grass instances");
+            Console.WriteLine($" [Particles]     : {particleSystem.ActiveParticleCount} active / {particleSystem.MaxParticles} max");
+            Console.WriteLine($" [Lights]        : 224 point lights + 32 spotlights (3,072 clusters)");
+            Console.WriteLine($" [Shadows]       : 4-Cascade CSM (2048x2048x4 D32_SFLOAT, texel snapping)");
+            Console.WriteLine($" [IBL]           : Diffuse Irradiance + GGX Prefilter + 2D BRDF LUT");
+            Console.WriteLine($" [WBOIT]         : R16G16B16A16_SFLOAT Accum + R8_UNORM Revealage");
+            Console.WriteLine("--------------------------------------------------------------------------------");
+            Console.WriteLine(" CPU Zone Breakdown (Profiler):");
+            float cpuSum = 0f;
+            foreach (var cpu in Profiler.LatestSnapshot)
+            {
+                cpuSum += cpu.DurationMs;
+                Console.WriteLine($"   - {cpu.Name,-25} : {cpu.DurationMs,6:F2} ms");
+            }
+            Console.WriteLine($"   * {"TOTAL CPU MEASURED",-25} : {cpuSum,6:F2} ms");
+            Console.WriteLine(" GPU Pass Breakdown (GpuTimer):");
+            float gpuSum = 0f;
+            foreach (var pass in gpuTimer.LatestSnapshot)
+            {
+                gpuSum += pass.DurationMs;
+                Console.WriteLine($"   - {pass.Name,-25} : {pass.DurationMs,6:F2} ms");
+            }
+            Console.WriteLine($"   * {"TOTAL GPU TIME",-25} : {gpuSum,6:F2} ms");
+            Console.WriteLine("================================================================================");
         }
 
         // ---------------------------------------------------------------------------------------------

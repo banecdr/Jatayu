@@ -147,11 +147,22 @@ public sealed class GpuBuffer : IDisposable
     /// <param name="offsetInBytes">Target offset in bytes from the start of the buffer.</param>
     public unsafe void SetData<T>(ReadOnlySpan<T> data, ulong offsetInBytes = 0) where T : unmanaged
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (data.IsEmpty)
             return;
 
-        var byteCount = (ulong)(data.Length * sizeof(T));
-        if (offsetInBytes + byteCount > SizeInBytes)
+        ulong elementSize = (ulong)sizeof(T);
+        ulong byteCount;
+        try
+        {
+            byteCount = checked((ulong)data.Length * elementSize);
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentOutOfRangeException(nameof(data), "Data size exceeds supported buffer limits.");
+        }
+
+        if (offsetInBytes > SizeInBytes || byteCount > SizeInBytes - offsetInBytes)
             throw new ArgumentOutOfRangeException(nameof(data), "Data size exceeds the buffer capacity.");
 
         if (MappedData != null)
@@ -197,9 +208,15 @@ public sealed class GpuBuffer : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
+        lock (this)
         {
-            Allocator.DestroyBuffer(Handle, Allocation);
+            if (_disposed)
+                return;
+
+            if (Handle.VkHandle != 0)
+            {
+                Allocator.DestroyBuffer(Handle, Allocation);
+            }
             _disposed = true;
             GC.SuppressFinalize(this);
         }

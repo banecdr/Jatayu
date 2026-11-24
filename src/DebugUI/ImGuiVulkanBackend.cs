@@ -124,7 +124,11 @@ public sealed class ImGuiVulkanBackend : IDisposable
         texData.SetStatus(ImTextureStatus.OK);
 
         // 4. Compile ImGui shaders
+#if DEBUG
         using var shaderCompiler = new ShaderCompiler("assets/shaders/cache");
+#else
+        using var shaderCompiler = new ShaderCompiler();
+#endif
         var vertShader = shaderCompiler.CompileShaderModuleFromFile(context.Device, "assets/shaders/imgui.vert", ShaderKind.VertexShader);
         var fragShader = shaderCompiler.CompileShaderModuleFromFile(context.Device, "assets/shaders/imgui.frag", ShaderKind.FragmentShader);
 

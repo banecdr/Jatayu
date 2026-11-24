@@ -21,6 +21,10 @@ public static class AllocationTracker
     private static long s_lastFrameAllocatedBytes;
     private static long s_totalFrames;
     private static long s_nonZeroFrames;
+    private static readonly bool[] s_zeroAllocationWindow = new bool[120];
+    private static int s_windowIndex;
+    private static int s_windowCount;
+    private static int s_zeroAllocationCount;
 
     /// <summary>
     /// Gets the number of bytes allocated on the GC managed heap during the most recent frame.
@@ -31,8 +35,8 @@ public static class AllocationTracker
     /// <summary>
     /// Gets the percentage of measured frames that achieved zero GC allocations.
     /// </summary>
-    public static float ZeroAllocationPercent => s_totalFrames > 0 
-        ? 100.0f * (float)(s_totalFrames - s_nonZeroFrames) / s_totalFrames 
+    public static float ZeroAllocationPercent => s_windowCount > 0
+        ? 100.0f * s_zeroAllocationCount / s_windowCount
         : 100.0f;
 
     /// <summary>
@@ -52,10 +56,27 @@ public static class AllocationTracker
         s_lastFrameAllocatedBytes = Math.Max(0, current - s_startBytes);
 
         s_totalFrames++;
-        if (s_lastFrameAllocatedBytes > 0)
+        bool isZeroAllocation = s_lastFrameAllocatedBytes == 0;
+        if (!isZeroAllocation)
         {
             s_nonZeroFrames++;
         }
+
+        if (s_windowCount < s_zeroAllocationWindow.Length)
+        {
+            s_windowCount++;
+        }
+        else
+        {
+            if (s_zeroAllocationWindow[s_windowIndex])
+                s_zeroAllocationCount--;
+        }
+
+        s_zeroAllocationWindow[s_windowIndex] = isZeroAllocation;
+        if (isZeroAllocation)
+            s_zeroAllocationCount++;
+
+        s_windowIndex = (s_windowIndex + 1) % s_zeroAllocationWindow.Length;
     }
 
     /// <summary>

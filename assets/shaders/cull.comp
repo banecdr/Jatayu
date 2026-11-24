@@ -69,6 +69,7 @@ layout(push_constant) uniform PushConstants {
     uint ViewIndex;
     uint MaxDrawsPerView;
     uint BaseCommandOffset;
+    uint ShadowView;
 } u_Push;
 
 void main() {
@@ -78,6 +79,10 @@ void main() {
     }
 
     GpuInstanceData inst = instances[threadId];
+    if (u_Push.ShadowView != 0u && (inst.Flags & 1u) == 0u) {
+        return;
+    }
+
     vec3 center = inst.BoundingCenter;
     float radius = inst.BoundingRadius;
 

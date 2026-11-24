@@ -17,11 +17,11 @@ void main() {
     float revealage = texture(revealageTexture, vTexCoord).r;
 
     // If completely opaque or nothing drawn in transparent pass, discard
-    if (revealage >= 1.0) discard;
+    if (revealage >= 0.9999 || accum.a <= 0.00001) discard;
 
     // WBOIT reconstruction: average color = accum.rgb / max(accum.a, 0.00001)
     vec3 averageColor = accum.rgb / max(accum.a, 0.00001);
-    float alpha = 1.0 - revealage;
+    float alpha = clamp(1.0 - revealage, 0.0, 1.0);
 
     outColor = vec4(averageColor, alpha);
 }

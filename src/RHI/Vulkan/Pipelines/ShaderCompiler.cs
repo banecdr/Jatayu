@@ -123,7 +123,9 @@ public sealed class ShaderCompiler : IDisposable
     }
 
     /// <summary>
-    /// Compiles a GLSL shader file from disk and creates a native Vulkan VkShaderModule.
+    /// Loads a pre-compiled SPIR-V shader module directly, or compiles GLSL source from disk.
+    /// In Release builds (or when loose GLSL is absent), loads companion .spv files directly
+    /// with zero ShaderC compilation overhead.
     /// </summary>
     public VkShaderModule CompileShaderModuleFromFile(
         Device device,
@@ -132,11 +134,64 @@ public sealed class ShaderCompiler : IDisposable
     {
         ArgumentNullException.ThrowIfNull(device);
 
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException($"Shader source file not found: {filePath}", filePath);
+        string resolvedPath = ResolveShaderFile(filePath);
 
-        string source = File.ReadAllText(filePath);
-        return CompileShaderModule(device, source, kind, Path.GetFileName(filePath));
+        if (resolvedPath.EndsWith(".spv", StringComparison.OrdinalIgnoreCase))
+        {
+            byte[] spirv = File.ReadAllBytes(resolvedPath);
+            return ShaderModuleExtensions.FromSpirv(device, spirv, null);
+        }
+
+        string source = File.ReadAllText(resolvedPath);
+        return CompileShaderModule(device, source, kind, Path.GetFileName(resolvedPath));
+    }
+
+    /// <summary>
+    /// Resolves a shader path by checking direct paths, companion .spv binaries, and base/parent directories.
+    /// In Release builds, prefers pre-compiled .spv binaries for fast startup.
+    /// In Debug builds, prefers raw GLSL sources to enable live shader iteration.
+    /// </summary>
+    public static string ResolveShaderFile(string filePath)
+    {
+        string spvCandidate = filePath.EndsWith(".spv", StringComparison.OrdinalIgnoreCase)
+            ? filePath
+            : filePath + ".spv";
+        string baseSpv = Path.Combine(AppContext.BaseDirectory, spvCandidate);
+        string baseSrc = Path.Combine(AppContext.BaseDirectory, filePath);
+
+#if !DEBUG
+        // Release builds must load the assets shipped beside the executable.
+        if (File.Exists(baseSpv)) return baseSpv;
+        if (File.Exists(baseSrc)) return baseSrc;
+        if (File.Exists(spvCandidate)) return spvCandidate;
+        if (File.Exists(filePath)) return filePath;
+#else
+        // Debug build priority: prefer loose source for hot-reloading, fall back to .spv
+        if (File.Exists(filePath)) return filePath;
+        if (File.Exists(spvCandidate)) return spvCandidate;
+        if (File.Exists(baseSrc)) return baseSrc;
+        if (File.Exists(baseSpv)) return baseSpv;
+#endif
+
+        // Search upward directory tree (up to 5 parents)
+        string? dir = AppContext.BaseDirectory;
+        for (int i = 0; i < 5 && dir != null; i++)
+        {
+            string candSpv = Path.Combine(dir, spvCandidate);
+            string candSrc = Path.Combine(dir, filePath);
+
+#if !DEBUG
+            if (File.Exists(candSpv)) return candSpv;
+            if (File.Exists(candSrc)) return candSrc;
+#else
+            if (File.Exists(candSrc)) return candSrc;
+            if (File.Exists(candSpv)) return candSpv;
+#endif
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        throw new FileNotFoundException(
+            $"Shader not found: neither source '{filePath}' nor pre-compiled binary '{spvCandidate}' could be located.", filePath);
     }
 
     private string? GetCacheFilePath(byte[] sourceBytes, ShaderKind kind, string fileName)

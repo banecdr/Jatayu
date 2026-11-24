@@ -197,6 +197,9 @@ public sealed class StreamingManager : IDisposable
 
         void JobAction()
         {
+            if (Volatile.Read(ref _disposed))
+                return;
+
             DecodedCellPayload? payload = null;
 
             if (reader != null)
@@ -305,11 +308,15 @@ public sealed class StreamingManager : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_stateLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
 
-        EventBus.Unsubscribe<OriginShiftedEvent>(_originShiftHandler);
-        _pendingRequests.Clear();
-        _inFlightLoads.Clear();
+            EventBus.Unsubscribe<OriginShiftedEvent>(_originShiftHandler);
+            _pendingRequests.Clear();
+            _inFlightLoads.Clear();
+            while (_readyToFinalize.TryDequeue(out _)) { }
+        }
     }
 }

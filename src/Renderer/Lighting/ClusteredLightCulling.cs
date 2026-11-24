@@ -46,7 +46,7 @@ public struct ClusterUniforms
     public uint PointLightCount;
     public uint SpotLightCount;
     public uint MaxLightsPerCluster;
-    public uint Padding;
+    public uint MaxLightIndices;
 }
 
 /// <summary>
@@ -171,13 +171,18 @@ public sealed class ClusteredLightCulling : IDisposable
     /// </summary>
     public void UpdateLights(ReadOnlySpan<PointLight> pointLights, ReadOnlySpan<SpotLight> spotLights)
     {
-        _activePointLightCount = (uint)Math.Min(pointLights.Length, MaxLights);
+        if (pointLights.Length > MaxLights)
+            throw new ArgumentOutOfRangeException(nameof(pointLights), $"At most {MaxLights} point lights are supported.");
+        if (spotLights.Length > MaxLights)
+            throw new ArgumentOutOfRangeException(nameof(spotLights), $"At most {MaxLights} spot lights are supported.");
+
+        _activePointLightCount = (uint)pointLights.Length;
         if (_activePointLightCount > 0)
         {
             _pointLightBuffer.SetData(pointLights[..(int)_activePointLightCount]);
         }
 
-        _activeSpotLightCount = (uint)Math.Min(spotLights.Length, MaxLights);
+        _activeSpotLightCount = (uint)spotLights.Length;
         if (_activeSpotLightCount > 0)
         {
             _spotLightBuffer.SetData(spotLights[..(int)_activeSpotLightCount]);
@@ -207,7 +212,7 @@ public sealed class ClusteredLightCulling : IDisposable
             PointLightCount = _activePointLightCount,
             SpotLightCount = _activeSpotLightCount,
             MaxLightsPerCluster = 64,
-            Padding = 0,
+            MaxLightIndices = MaxIndices,
         };
 
         _uniformBuffer.SetData(new ReadOnlySpan<ClusterUniforms>(&uniforms, 1));

@@ -504,6 +504,11 @@ public static class Program
                 throw new InvalidOperationException($"CullUniforms size mismatch: expected 192 bytes, got {cullUboSize}");
             Console.WriteLine($"  [CullUniforms] CullUniforms 192-byte packing (5 Frustum Planes, CameraPos, VP, HiZScreenSize): VERIFIED");
 
+            int cullPushSize = System.Runtime.InteropServices.Marshal.SizeOf<Jatayu.Renderer.GpuDriven.CullPushConstants>();
+            if (cullPushSize != 20)
+                throw new InvalidOperationException($"CullPushConstants size mismatch: expected 20 bytes, got {cullPushSize}");
+            Console.WriteLine("  [CullPushConstants] Per-view shadow-caster filtering flag: VERIFIED");
+
             // 4. MeshLodRecord 48-byte layout (3 LOD levels x 16 bytes)
             int lodRecordSize = System.Runtime.InteropServices.Marshal.SizeOf<Jatayu.Renderer.GpuDriven.MeshLodRecord>();
             if (lodRecordSize != 48)
@@ -571,6 +576,17 @@ public static class Program
                 if (magic != 0x07230203)
                     throw new InvalidOperationException("PBR fragment shader SPIR-V magic mismatch.");
                 Console.WriteLine($"  [FragmentShader] pbr.frag compiled cleanly with velocity inputs ({spirv.Length} bytes): VERIFIED");
+            }
+
+            string terrainFragPath = ResolveShader("assets/shaders/terrain.frag");
+            if (System.IO.File.Exists(terrainFragPath))
+            {
+                string fragSrc = System.IO.File.ReadAllText(terrainFragPath);
+                byte[] spirv = compiler.CompileToSpirv(fragSrc, Brutal.ShaderCApi.ShaderKind.FragmentShader, "terrain.frag");
+                uint magic = BitConverter.ToUInt32(spirv, 0);
+                if (magic != 0x07230203)
+                    throw new InvalidOperationException("Terrain fragment shader SPIR-V magic mismatch.");
+                Console.WriteLine($"  [FragmentShader] terrain.frag compiled with matching shadow debug and Reverse-Z sampling ({spirv.Length} bytes): VERIFIED");
             }
 
             Console.ForegroundColor = ConsoleColor.Green;
@@ -667,6 +683,7 @@ public static class Program
 
             VerifyShader("assets/shaders/light_cull.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
             VerifyShader("assets/shaders/brdf_lut.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
+            VerifyShader("assets/shaders/ibl_environment.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
             VerifyShader("assets/shaders/ibl_irradiance.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
             VerifyShader("assets/shaders/ibl_prefilter.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
             VerifyShader("assets/shaders/foliage.vert", Brutal.ShaderCApi.ShaderKind.VertexShader, "VertexShader");
@@ -674,7 +691,10 @@ public static class Program
             VerifyShader("assets/shaders/particle.comp", Brutal.ShaderCApi.ShaderKind.ComputeShader, "ComputeShader");
             VerifyShader("assets/shaders/particle.vert", Brutal.ShaderCApi.ShaderKind.VertexShader, "VertexShader");
             VerifyShader("assets/shaders/particle.frag", Brutal.ShaderCApi.ShaderKind.FragmentShader, "FragmentShader");
+            VerifyShader("assets/shaders/transparent_composite.vert", Brutal.ShaderCApi.ShaderKind.VertexShader, "VertexShader");
             VerifyShader("assets/shaders/transparent_composite.frag", Brutal.ShaderCApi.ShaderKind.FragmentShader, "FragmentShader");
+            VerifyShader("assets/shaders/shadow.vert", Brutal.ShaderCApi.ShaderKind.VertexShader, "VertexShader");
+            VerifyShader("assets/shaders/shadow.frag", Brutal.ShaderCApi.ShaderKind.FragmentShader, "FragmentShader");
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine(">> Sprint 7b Scalable Lighting, Foliage & Transparency: VERIFIED");

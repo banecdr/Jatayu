@@ -125,6 +125,26 @@ public sealed class IndirectDrawBuffer : IDisposable
             (ByteSize64)((ulong)(_viewCount * sizeof(uint))),
             0
         );
+
+        var barrier = stackalloc VkBufferMemoryBarrier2[1];
+        barrier[0] = new VkBufferMemoryBarrier2
+        {
+            SrcStageMask = VkPipelineStageFlags2.TransferBit,
+            SrcAccessMask = VkAccessFlags2.TransferWriteBit,
+            DstStageMask = VkPipelineStageFlags2.ComputeShaderBit,
+            DstAccessMask = VkAccessFlags2.ShaderStorageReadBit | VkAccessFlags2.ShaderStorageWriteBit,
+            Buffer = _countBuffer.Handle,
+            Offset = new ByteSize64(0),
+            Size = new ByteSize64(_countBuffer.SizeInBytes),
+            SrcQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+            DstQueueFamilyIndex = VK.QUEUE_FAMILY_IGNORED,
+        };
+        var depInfo = new VkDependencyInfo
+        {
+            BufferMemoryBarrierCount = 1,
+            BufferMemoryBarriers = barrier,
+        };
+        _context.Device.PInvoke.vkCmdPipelineBarrier2.Invoke(cmd, &depInfo);
     }
 
     /// <summary>

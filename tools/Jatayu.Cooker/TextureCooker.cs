@@ -23,6 +23,20 @@ namespace Jatayu.Cooker;
 /// </summary>
 public static class TextureCooker
 {
+    private static bool TryCheckedPixelSize(int width, int height, out int byteCount)
+    {
+        byteCount = 0;
+        if (width <= 0 || height <= 0)
+            return false;
+
+        long pixels = (long)width * height;
+        if (pixels > int.MaxValue / 4)
+            return false;
+
+        byteCount = (int)pixels * 4;
+        return true;
+    }
+
     /// <summary>
     /// Cooks raw RGBA8 pixel data into a .jtex binary blob with mipmaps and resident tail.
     /// </summary>
@@ -35,6 +49,12 @@ public static class TextureCooker
     {
         if (width <= 0 || height <= 0 || basePixels.IsEmpty)
             throw new ArgumentException("Invalid texture dimensions or pixel data.");
+        if (width > 16384 || height > 16384)
+            throw new ArgumentOutOfRangeException(nameof(width), "Texture dimensions exceed the supported 16384-pixel limit.");
+        if (!TryCheckedPixelSize(width, height, out int expectedPixels))
+            throw new ArgumentOutOfRangeException(nameof(basePixels), "Texture pixel buffer size exceeds supported limits.");
+        if (basePixels.Length != expectedPixels)
+            throw new ArgumentException($"Texture buffer length {basePixels.Length} does not match {width}x{height} RGBA8 ({expectedPixels} bytes).", nameof(basePixels));
 
         // 1. Calculate mip level count down to 1x1
         int mipLevels = 1 + (int)MathF.Floor(MathF.Log2(Math.Max(width, height)));
@@ -153,10 +173,12 @@ public static class TextureCooker
                 Size = (uint)mips[m].Length,
             };
 
-            if (m >= residentStartMip)
-            {
-                residentTailSize += (uint)mips[m].Length;
-            }
+        }
+
+        if (residentTailOffset != 0)
+        {
+            long residentTailEnd = ms.Position;
+            residentTailSize = (uint)Math.Clamp(residentTailEnd - (long)residentTailOffset, 0, uint.MaxValue);
         }
 
         header.ResidentTailOffset = residentTailOffset;
