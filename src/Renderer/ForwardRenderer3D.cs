@@ -152,6 +152,12 @@ public sealed class ForwardRenderer3D : IDisposable
 
     // GPU-Driven Resources
     private readonly GpuBuffer _dummyInstanceBuffer;
+    private readonly GpuBuffer _dummyPointLightBuffer;
+    private readonly GpuBuffer _dummySpotLightBuffer;
+    private readonly GpuBuffer _dummyClusterRecordBuffer;
+    private readonly GpuBuffer _dummyLightIndexBuffer;
+    private readonly GpuTexture _dummyBrdfLutTexture;
+    private readonly VkSampler _dummyBrdfLutSampler;
     private InstanceBuffer? _currentInstanceBuffer;
     private IndirectDrawBuffer? _currentIndirectDrawBuffer;
     private GeometryPool? _currentGeometryPool;
@@ -281,12 +287,78 @@ public sealed class ForwardRenderer3D : IDisposable
         // 4. Compile Shaders & Build Pipelines
         BuildPipelines(colorFormat);
 
-        // 5. Allocate dummy instance buffer for fallback (160 bytes, CpuToGpu)
+        // 5. Allocate dummy fallback buffers (InstanceBuffer, PointLight, SpotLight, ClusterRecord, LightIndex, BrdfLut)
         _dummyInstanceBuffer = _allocator.CreateBuffer(
             (ulong)Marshal.SizeOf<GpuInstanceData>(),
             VkBufferUsageFlags.StorageBufferBit | VkBufferUsageFlags.TransferDstBit,
             VmaMemoryUsage.CpuToGpu
         );
+
+        _dummyPointLightBuffer = _allocator.CreateBuffer(
+            (ulong)Marshal.SizeOf<PointLight>(),
+            VkBufferUsageFlags.StorageBufferBit,
+            VmaMemoryUsage.CpuToGpu
+        );
+
+        _dummySpotLightBuffer = _allocator.CreateBuffer(
+            (ulong)Marshal.SizeOf<SpotLight>(),
+            VkBufferUsageFlags.StorageBufferBit,
+            VmaMemoryUsage.CpuToGpu
+        );
+
+        _dummyClusterRecordBuffer = _allocator.CreateBuffer(
+            (ulong)Marshal.SizeOf<ClusterRecord>(),
+            VkBufferUsageFlags.StorageBufferBit,
+            VmaMemoryUsage.GpuOnly
+        );
+
+        _dummyLightIndexBuffer = _allocator.CreateBuffer(
+            (ulong)(sizeof(uint) * 2),
+            VkBufferUsageFlags.StorageBufferBit,
+            VmaMemoryUsage.GpuOnly
+        );
+
+        var dummyLutInfo = new VkImageCreateInfo
+        {
+            ImageType = VkImageType._2D,
+            Format = VkFormat.R16G16SFloat,
+            Extent = new VkExtent3D(1, 1, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Samples = VkSampleCountFlags._1Bit,
+            Tiling = VkImageTiling.Optimal,
+            Usage = VkImageUsageFlags.SampledBit | VkImageUsageFlags.TransferDstBit,
+            SharingMode = VkSharingMode.Exclusive,
+            InitialLayout = VkImageLayout.Undefined,
+        };
+        _allocator.CreateImage(dummyLutInfo, VmaMemoryUsage.GpuOnly, VmaAllocationCreateFlags.None, out var dummyImg, out var dummyAlloc, out _);
+        var dummyViewInfo = new VkImageViewCreateInfo
+        {
+            Image = dummyImg,
+            ViewType = VkImageViewType._2D,
+            Format = VkFormat.R16G16SFloat,
+            SubresourceRange = new VkImageSubresourceRange
+            {
+                AspectMask = VkImageAspectFlags.ColorBit,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+        };
+        var dummyView = _context.Device.CreateImageView(in dummyViewInfo, null);
+        _dummyBrdfLutTexture = new GpuTexture(_context, _allocator, dummyImg, dummyAlloc, dummyView, 1, 1, VkFormat.R16G16SFloat, 1, VkImageLayout.Undefined);
+
+        var dummySamplerInfo = new VkSamplerCreateInfo
+        {
+            MagFilter = VkFilter.Linear,
+            MinFilter = VkFilter.Linear,
+            MipmapMode = VkSamplerMipmapMode.Nearest,
+            AddressModeU = VkSamplerAddressMode.ClampToEdge,
+            AddressModeV = VkSamplerAddressMode.ClampToEdge,
+            AddressModeW = VkSamplerAddressMode.ClampToEdge,
+        };
+        _dummyBrdfLutSampler = _context.Device.CreateSampler(in dummySamplerInfo, null);
 
         // 6. Preallocate RenderPass Callbacks (0 allocations per frame)
         _shadowPassSetup = SetupShadowPass;
@@ -311,7 +383,7 @@ public sealed class ForwardRenderer3D : IDisposable
 
     private unsafe void CreateDescriptorSetLayout()
     {
-        var bindings = stackalloc VkDescriptorSetLayoutBinding[4];
+        var bindings = stackalloc VkDescriptorSetLayoutBinding[9];
 
         // Binding 0: Uniform buffer for LightEnvironment
         bindings[0] = new VkDescriptorSetLayoutBinding
@@ -349,9 +421,54 @@ public sealed class ForwardRenderer3D : IDisposable
             StageFlags = VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
         };
 
+        // Binding 4: Storage buffer for PointLightStorage
+        bindings[4] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 4,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
+        // Binding 5: Storage buffer for SpotLightStorage
+        bindings[5] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 5,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
+        // Binding 6: Storage buffer for ClusterRecordStorage
+        bindings[6] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 6,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
+        // Binding 7: Storage buffer for LightIndexStorage
+        bindings[7] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 7,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
+        // Binding 8: Combined image sampler for BRDF LUT
+        bindings[8] = new VkDescriptorSetLayoutBinding
+        {
+            Binding = 8,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            DescriptorCount = 1,
+            StageFlags = VkShaderStageFlags.FragmentBit,
+        };
+
         var layoutInfo = new VkDescriptorSetLayoutCreateInfo
         {
-            BindingCount = 4,
+            BindingCount = 9,
             Bindings = bindings,
         };
 
@@ -360,8 +477,8 @@ public sealed class ForwardRenderer3D : IDisposable
         // Create descriptor pool
         var poolSizes = stackalloc VkDescriptorPoolSize[3];
         poolSizes[0] = new VkDescriptorPoolSize { Type = VkDescriptorType.UniformBuffer, DescriptorCount = 2 };
-        poolSizes[1] = new VkDescriptorPoolSize { Type = VkDescriptorType.CombinedImageSampler, DescriptorCount = 2 };
-        poolSizes[2] = new VkDescriptorPoolSize { Type = VkDescriptorType.StorageBuffer, DescriptorCount = 4 };
+        poolSizes[1] = new VkDescriptorPoolSize { Type = VkDescriptorType.CombinedImageSampler, DescriptorCount = 4 };
+        poolSizes[2] = new VkDescriptorPoolSize { Type = VkDescriptorType.StorageBuffer, DescriptorCount = 12 };
 
         var poolInfo = new VkDescriptorPoolCreateInfo
         {
@@ -579,7 +696,9 @@ public sealed class ForwardRenderer3D : IDisposable
         IndirectDrawBuffer? indirectDrawBuffer = null,
         GpuCuller? gpuCuller = null,
         HiZBuilder? hizBuilder = null,
-        DepthBuffer? depthBuffer = null)
+        DepthBuffer? depthBuffer = null,
+        ClusteredLightCulling? clusteredLights = null,
+        IblProbe? iblProbe = null)
     {
         Render(
             graph,
@@ -603,7 +722,9 @@ public sealed class ForwardRenderer3D : IDisposable
             indirectDrawBuffer,
             gpuCuller,
             hizBuilder,
-            depthBuffer
+            depthBuffer,
+            clusteredLights,
+            iblProbe
         );
     }
 
@@ -631,7 +752,9 @@ public sealed class ForwardRenderer3D : IDisposable
         IndirectDrawBuffer? indirectDrawBuffer = null,
         GpuCuller? gpuCuller = null,
         HiZBuilder? hizBuilder = null,
-        DepthBuffer? depthBuffer = null)
+        DepthBuffer? depthBuffer = null,
+        ClusteredLightCulling? clusteredLights = null,
+        IblProbe? iblProbe = null)
     {
         Render(
             graph,
@@ -655,7 +778,9 @@ public sealed class ForwardRenderer3D : IDisposable
             indirectDrawBuffer,
             gpuCuller,
             hizBuilder,
-            depthBuffer
+            depthBuffer,
+            clusteredLights,
+            iblProbe
         );
     }
 
@@ -684,7 +809,9 @@ public sealed class ForwardRenderer3D : IDisposable
         IndirectDrawBuffer? indirectDrawBuffer = null,
         GpuCuller? gpuCuller = null,
         HiZBuilder? hizBuilder = null,
-        DepthBuffer? depthBuffer = null)
+        DepthBuffer? depthBuffer = null,
+        ClusteredLightCulling? clusteredLights = null,
+        IblProbe? iblProbe = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(scene);
@@ -697,12 +824,22 @@ public sealed class ForwardRenderer3D : IDisposable
         ArgumentNullException.ThrowIfNull(geometryPool);
 
         // 1. Update LightEnvironment GPU buffer (centered around camera-relative origin Vector3.Zero)
-        var lightGpuData = lightEnv.ToGpuData(Vector3.Zero, cascadedShadowMap);
+        GpuLightEnvironmentData lightGpuData;
+        if (clusteredLights != null)
+        {
+            float screenWidth = graph.GetTextureWidth(colorTarget);
+            float screenHeight = graph.GetTextureHeight(colorTarget);
+            lightGpuData = lightEnv.ToGpuData(Vector3.Zero, cascadedShadowMap, screenWidth, screenHeight, camera.NearPlane, clusteredLightingEnabled: true);
+        }
+        else
+        {
+            lightGpuData = lightEnv.ToGpuData(Vector3.Zero, cascadedShadowMap);
+        }
         UpdateLightBuffer(in lightGpuData);
 
         Matrix4x4 shadowLightVp = lightGpuData.LightViewProj;
 
-        // 2. Update Set 0 Descriptors
+        // 2. Update Set 0 Descriptors (9 bindings: Light, CSM/Shadow, Materials, Instances, PointLights, SpotLights, Clusters, Indices, BRDF LUT)
         var bufferInfo = new VkDescriptorBufferInfo
         {
             Buffer = _lightEnvironmentBuffer.Handle,
@@ -736,7 +873,52 @@ public sealed class ForwardRenderer3D : IDisposable
             Range = new ByteSize64(instBufferSize),
         };
 
-        var writes = stackalloc VkWriteDescriptorSet[4];
+        VkBuffer pointLightHandle = clusteredLights?.PointLightBuffer.Handle ?? _dummyPointLightBuffer.Handle;
+        ulong pointLightSize = clusteredLights != null ? clusteredLights.PointLightBuffer.SizeInBytes : (ulong)Marshal.SizeOf<PointLight>();
+        var pointLightInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = pointLightHandle,
+            Offset = new ByteSize64(0),
+            Range = new ByteSize64(pointLightSize),
+        };
+
+        VkBuffer spotLightHandle = clusteredLights?.SpotLightBuffer.Handle ?? _dummySpotLightBuffer.Handle;
+        ulong spotLightSize = clusteredLights != null ? clusteredLights.SpotLightBuffer.SizeInBytes : (ulong)Marshal.SizeOf<SpotLight>();
+        var spotLightInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = spotLightHandle,
+            Offset = new ByteSize64(0),
+            Range = new ByteSize64(spotLightSize),
+        };
+
+        VkBuffer clusterRecordHandle = clusteredLights?.ClusterRecordBuffer.Handle ?? _dummyClusterRecordBuffer.Handle;
+        ulong clusterRecordSize = clusteredLights != null ? clusteredLights.ClusterRecordBuffer.SizeInBytes : (ulong)Marshal.SizeOf<ClusterRecord>();
+        var clusterRecordInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = clusterRecordHandle,
+            Offset = new ByteSize64(0),
+            Range = new ByteSize64(clusterRecordSize),
+        };
+
+        VkBuffer lightIndexHandle = clusteredLights?.LightIndexBuffer.Handle ?? _dummyLightIndexBuffer.Handle;
+        ulong lightIndexSize = clusteredLights != null ? clusteredLights.LightIndexBuffer.SizeInBytes : (ulong)(sizeof(uint) * 2);
+        var lightIndexInfo = new VkDescriptorBufferInfo
+        {
+            Buffer = lightIndexHandle,
+            Offset = new ByteSize64(0),
+            Range = new ByteSize64(lightIndexSize),
+        };
+
+        VkSampler brdfSampler = iblProbe?.BrdfLutSampler ?? _dummyBrdfLutSampler;
+        VkImageView brdfView = iblProbe != null ? iblProbe.BrdfLutTexture.ImageView : _dummyBrdfLutTexture.ImageView;
+        var brdfImageInfo = new VkDescriptorImageInfo
+        {
+            Sampler = brdfSampler,
+            ImageView = brdfView,
+            ImageLayout = VkImageLayout.ShaderReadOnlyOptimal,
+        };
+
+        var writes = stackalloc VkWriteDescriptorSet[9];
         writes[0] = new VkWriteDescriptorSet
         {
             DstSet = _frameDescriptorSet,
@@ -769,8 +951,48 @@ public sealed class ForwardRenderer3D : IDisposable
             DescriptorType = VkDescriptorType.StorageBuffer,
             BufferInfo = &instBufferInfo,
         };
+        writes[4] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 4,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            BufferInfo = &pointLightInfo,
+        };
+        writes[5] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 5,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            BufferInfo = &spotLightInfo,
+        };
+        writes[6] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 6,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            BufferInfo = &clusterRecordInfo,
+        };
+        writes[7] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 7,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.StorageBuffer,
+            BufferInfo = &lightIndexInfo,
+        };
+        writes[8] = new VkWriteDescriptorSet
+        {
+            DstSet = _frameDescriptorSet,
+            DstBinding = 8,
+            DescriptorCount = 1,
+            DescriptorType = VkDescriptorType.CombinedImageSampler,
+            ImageInfo = &brdfImageInfo,
+        };
 
-        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 4, writes, 0, null);
+        _context.Device.PInvoke.vkUpdateDescriptorSets.Invoke(_context.Device.Handle, 9, writes, 0, null);
 
         // 3. Camera-Relative Frustum Culling & Matrix Extraction
         _visibleItems.Clear();
@@ -1395,6 +1617,12 @@ public sealed class ForwardRenderer3D : IDisposable
 
         _lightEnvironmentBuffer?.Dispose();
         _dummyInstanceBuffer?.Dispose();
+        if (_dummyBrdfLutSampler.VkHandle != 0) device.DestroySampler(_dummyBrdfLutSampler, null);
+        _dummyBrdfLutTexture?.Dispose();
+        _dummyPointLightBuffer?.Dispose();
+        _dummySpotLightBuffer?.Dispose();
+        _dummyClusterRecordBuffer?.Dispose();
+        _dummyLightIndexBuffer?.Dispose();
 
         if (_ownsShaderCompiler)
         {

@@ -524,6 +524,17 @@ public static class Program
             EmitterPosition = new Vector3(0.0f, 3.2f, 0.0f)
         };
 
+        // Sprint 7b: Image-Based Lighting BRDF LUT pre-integration & 3D Clustered Light Culling
+        using var iblProbe = new IblProbe(context, allocator);
+        commandPool.ExecuteImmediate(queue, cmd =>
+        {
+            iblProbe.GenerateBrdfLut(cmd.Handle, shaderCompiler);
+        });
+
+        using var clusteredLightCulling = new ClusteredLightCulling(context, allocator, shaderCompiler);
+        var pointLights = new PointLight[2];
+        var spotLights = new SpotLight[1];
+
         var dynInstances = new GpuInstanceData[10];
         var streamingGpuInstances = new GpuInstanceData[4096];
         bool gpuDrivenEnabled = true;
@@ -939,7 +950,24 @@ public static class Program
             streamingManager.Update(dt, in camWorldPos, in camVelocity);
             textureStreamer.Update((ulong)frameSync.CurrentFrame);
 
-            // 5c. Update GPU-Driven Instance Buffer (Sprint 7a)
+            // 5c. Update Dynamic Clustered Lights (Sprint 7b)
+            float totalSec = (float)time.TotalTime;
+            // Glowing Neon Blue Crystal Point Light (at 0, 2.5, 0)
+            Vector3 bluePosRel = new Vector3(0.0f, 2.5f, 0.0f) - camera.Position;
+            pointLights[0] = new PointLight(bluePosRel, radius: 10.0f, color: new Vector3(0.2f, 0.8f, 1.0f), intensity: 60000.0f);
+
+            // Orbiting warm amber campfire Point Light around the Hero cube
+            Vector3 firePosWorld = new Vector3(MathF.Cos(totalSec * 1.5f) * 3.5f, 1.2f, MathF.Sin(totalSec * 1.5f) * 3.5f);
+            Vector3 firePosRel = firePosWorld - camera.Position;
+            pointLights[1] = new PointLight(firePosRel, radius: 8.0f, color: new Vector3(1.0f, 0.6f, 0.2f), intensity: 45000.0f);
+
+            // Spotlight pointing down from above the hero cube
+            Vector3 spotPosRel = new Vector3(0.0f, 6.0f, 0.0f) - camera.Position;
+            spotLights[0] = new SpotLight(spotPosRel, range: 12.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color: new Vector3(1.0f, 0.95f, 0.8f));
+
+            clusteredLightCulling.UpdateLights(pointLights, spotLights);
+
+            // 5d. Update GPU-Driven Instance Buffer (Sprint 7a)
             if (gpuDrivenEnabled)
             {
                 float camX = camera.Position.X;
@@ -1255,6 +1283,9 @@ public static class Program
                     particleSystem.Simulate(cmd, (float)dt, (float)time.TotalTime);
                 }
 
+                // Run 3D Clustered Light Culling compute shader (Sprint 7b)
+                clusteredLightCulling.Cull(cmd.Handle, camera.ViewMatrix, camera.ProjectionMatrix, swapchain.Width, swapchain.Height, camera.NearPlane, 500.0f);
+
                 gpuTimer.BeginFrame(cmd, frameSync.CurrentFrame);
                 renderGraph.Reset();
 
@@ -1314,7 +1345,9 @@ public static class Program
                     indirectDrawBuffer: gpuDrivenEnabled ? indirectDrawBuffer : null,
                     gpuCuller: gpuDrivenEnabled ? gpuCuller : null,
                     hizBuilder: gpuDrivenEnabled ? hizBuilder : null,
-                    depthBuffer: gpuDrivenEnabled ? depthBuffer : null
+                    depthBuffer: gpuDrivenEnabled ? depthBuffer : null,
+                    clusteredLights: clusteredLightCulling,
+                    iblProbe: iblProbe
                 );
                 currentSwapchainTarget = swapchainTarget;
                 currentDepthTarget = depthTarget;

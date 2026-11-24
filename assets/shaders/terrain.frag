@@ -34,6 +34,7 @@ layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     mat4 CascadeViewProj2;
     mat4 CascadeViewProj3;
     vec4 ShadowParams;
+    vec4 ClusterParams;
 } uLight;
 
 layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;

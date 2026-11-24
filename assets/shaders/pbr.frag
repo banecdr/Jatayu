@@ -44,6 +44,7 @@ layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
     mat4 CascadeViewProj2;
     mat4 CascadeViewProj3;
     vec4 ShadowParams;
+    vec4 ClusterParams;
 } uLight;
 
 layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
@@ -51,6 +52,46 @@ layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
 layout(std430, set = 0, binding = 2) readonly buffer MaterialStorage {
     GpuMaterialData materials[];
 } uMaterialTable;
+
+struct PointLight {
+    vec3 Position;
+    float Radius;
+    vec3 Color;
+    float Intensity;
+};
+
+struct SpotLight {
+    vec3 Position;
+    float Range;
+    vec3 Direction;
+    float CosInner;
+    vec3 Color;
+    float CosOuter;
+};
+
+struct ClusterRecord {
+    uint Offset;
+    uint Count;
+};
+
+layout(std430, set = 0, binding = 4) readonly buffer PointLightStorage {
+    PointLight pointLights[];
+} uPointLights;
+
+layout(std430, set = 0, binding = 5) readonly buffer SpotLightStorage {
+    SpotLight spotLights[];
+} uSpotLights;
+
+layout(std430, set = 0, binding = 6) readonly buffer ClusterRecordStorage {
+    ClusterRecord clusterRecords[];
+} uClusterRecords;
+
+layout(std430, set = 0, binding = 7) readonly buffer LightIndexStorage {
+    uint globalIndexCounter;
+    uint lightIndices[];
+} uLightIndices;
+
+layout(set = 0, binding = 8) uniform sampler2D uBrdfLut;
 
 layout(set = 1, binding = 0) uniform sampler2D uTextures[];
 
@@ -243,11 +284,78 @@ void main() {
     vec3 lightRadiance = uLight.SunColor * (uLight.SunIntensity * 0.000025);
     vec3 directLighting = (kD * albedo.rgb + specular * PI) * lightRadiance * NdotL * shadow;
 
-    // Hemispherical ambient environment lighting with metallic ambient specular fallback
+    // 3D Clustered Local Lighting (Point & Spot lights assigned to 16x8x24 grid)
+    vec3 localLighting = vec3(0.0);
+    if (uLight.ClusterParams.w > 0.5) {
+        float tileWidth = uLight.ClusterParams.x / 16.0;
+        float tileHeight = uLight.ClusterParams.y / 8.0;
+        uint clusterX = clamp(uint(gl_FragCoord.x / tileWidth), 0u, 15u);
+        uint clusterY = clamp(uint(gl_FragCoord.y / tileHeight), 0u, 7u);
+
+        float nearZ = uLight.ClusterParams.z;
+        float farZ = 500.0;
+        float viewZ = max(vCurrClipPos.w, nearZ);
+        float sliceZ = log(viewZ / nearZ) / log(farZ / nearZ);
+        uint clusterZ = clamp(uint(sliceZ * 24.0), 0u, 23u);
+
+        uint clusterIndex = clusterX + clusterY * 16u + clusterZ * 128u;
+        ClusterRecord rec = uClusterRecords.clusterRecords[clusterIndex];
+
+        for (uint i = 0u; i < rec.Count; ++i) {
+            uint lightIndex = uLightIndices.lightIndices[rec.Offset + i];
+            if ((lightIndex & 0x80000000u) != 0u) {
+                // Spot Light
+                uint spotIdx = lightIndex & 0x7FFFFFFFu;
+                SpotLight sl = uSpotLights.spotLights[spotIdx];
+                vec3 toLight = sl.Position - vWorldPos;
+                float dist = length(toLight);
+                if (dist < sl.Range) {
+                    vec3 dir = toLight / dist;
+                    float NdotL_local = max(dot(N, dir), 0.0);
+                    if (NdotL_local > 0.0) {
+                        float spotDot = dot(-dir, sl.Direction);
+                        float spotFactor = clamp((spotDot - sl.CosOuter) / max(sl.CosInner - sl.CosOuter, 0.0001), 0.0, 1.0);
+                        float att = clamp(1.0 - (dist / sl.Range), 0.0, 1.0);
+                        att *= att * spotFactor;
+                        vec3 H_local = normalize(V + dir);
+                        float NDF_local = DistributionGGX(N, H_local, roughness);
+                        float G_local = GeometrySmith(N, V, dir, roughness);
+                        vec3 F_local = FresnelSchlick(max(dot(H_local, V), 0.0), F0);
+                        vec3 spec = (NDF_local * G_local * F_local) / (4.0 * max(dot(N, V), 0.0) * NdotL_local + 0.0001);
+                        vec3 diff = (vec3(1.0) - F_local) * (1.0 - metallic) * albedo.rgb;
+                        localLighting += (diff + spec * PI) * sl.Color * (att * 5.0) * NdotL_local;
+                    }
+                }
+            } else {
+                // Point Light
+                PointLight pl = uPointLights.pointLights[lightIndex];
+                vec3 toLight = pl.Position - vWorldPos;
+                float dist = length(toLight);
+                if (dist < pl.Radius) {
+                    vec3 dir = toLight / dist;
+                    float NdotL_local = max(dot(N, dir), 0.0);
+                    if (NdotL_local > 0.0) {
+                        float att = clamp(1.0 - (dist / pl.Radius), 0.0, 1.0);
+                        att *= att;
+                        vec3 H_local = normalize(V + dir);
+                        float NDF_local = DistributionGGX(N, H_local, roughness);
+                        float G_local = GeometrySmith(N, V, dir, roughness);
+                        vec3 F_local = FresnelSchlick(max(dot(H_local, V), 0.0), F0);
+                        vec3 spec = (NDF_local * G_local * F_local) / (4.0 * max(dot(N, V), 0.0) * NdotL_local + 0.0001);
+                        vec3 diff = (vec3(1.0) - F_local) * (1.0 - metallic) * albedo.rgb;
+                        localLighting += (diff + spec * PI) * pl.Color * (pl.Intensity * 0.000025 * att) * NdotL_local;
+                    }
+                }
+            }
+        }
+    }
+
+    // Split-Sum IBL BRDF LUT Environment Reflection
+    vec2 brdf = texture(uBrdfLut, vec2(max(dot(N, V), 0.0), roughness)).rg;
     float skyFactor = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 ambientColor = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, skyFactor);
     vec3 ambientDiffuse = ambientColor * albedo.rgb * (1.0 - metallic);
-    vec3 ambientSpecular = ambientColor * F0 * (1.0 - roughness * 0.5);
+    vec3 ambientSpecular = ambientColor * (F0 * brdf.x + brdf.y);
     vec3 ambientLighting = (ambientDiffuse + ambientSpecular) * uLight.AmbientIntensity * ao;
 
     // Emissive contribution
@@ -256,7 +364,7 @@ void main() {
         emissive *= texture(uTextures[nonuniformEXT(mat.EmissiveIndex)], vTexCoord).rgb;
     }
 
-    vec3 finalColor = directLighting + ambientLighting + emissive;
+    vec3 finalColor = directLighting + localLighting + ambientLighting + emissive;
 
     outColor = vec4(finalColor, albedo.a);
 }

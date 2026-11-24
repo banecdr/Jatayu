@@ -12,7 +12,7 @@ namespace Jatayu.Renderer.Lighting;
 /// <summary>
 /// GPU-packed uniform buffer representation of the active lighting environment and 4-cascade shadow matrices.
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Size = 416)]
+[StructLayout(LayoutKind.Sequential, Size = 432)]
 public struct GpuLightEnvironmentData
 {
     public Vector3 SunDirection;       // 12 bytes: Normalized light direction
@@ -30,6 +30,7 @@ public struct GpuLightEnvironmentData
     public Matrix4x4 CascadeViewProj2; // 64 bytes: Cascade 2 light VP
     public Matrix4x4 CascadeViewProj3; // 64 bytes: Cascade 3 light VP
     public Vector4 ShadowParams;       // 16 bytes: X=resolution, Y=invResolution, Z=pcfRadius, W=cascadeCount
+    public Vector4 ClusterParams;      // 16 bytes: X=Width, Y=Height, Z=NearZ, W=ClusteredLightingEnabled
 }
 
 /// <summary>
@@ -49,7 +50,13 @@ public sealed class LightEnvironment
     /// <summary>
     /// Packs current environment parameters into a GPU-ready struct using either a single shadow map or CascadedShadowMap.
     /// </summary>
-    public GpuLightEnvironmentData ToGpuData(in Vector3 cameraPosition, Shadows.CascadedShadowMap? csm = null)
+    public GpuLightEnvironmentData ToGpuData(
+        in Vector3 cameraPosition,
+        Shadows.CascadedShadowMap? csm = null,
+        float screenWidth = 1280f,
+        float screenHeight = 720f,
+        float nearZ = 0.1f,
+        bool clusteredLightingEnabled = false)
     {
         float extents = HighQualityShadows ? 28.0f : ShadowOrthoExtents;
         Matrix4x4 lightVp = Sun.CastsShadows ? Sun.ComputeLightViewProjection(cameraPosition, extents) : Matrix4x4.Identity;
@@ -59,6 +66,8 @@ public sealed class LightEnvironment
         {
             shadowQuality = HighQualityShadows ? 2u : 1u;
         }
+
+        Vector4 clusterParams = clusteredLightingEnabled ? new Vector4(screenWidth, screenHeight, nearZ, 1.0f) : Vector4.Zero;
 
         if (csm != null && Sun.CastsShadows)
         {
@@ -80,6 +89,7 @@ public sealed class LightEnvironment
                 CascadeViewProj2 = cascades[2].ViewProjection,
                 CascadeViewProj3 = cascades[3].ViewProjection,
                 ShadowParams = new Vector4(csm.Resolution, 1.0f / csm.Resolution, HighQualityShadows ? 1.6f : 1.0f, Shadows.CascadedShadowMap.CascadeCount),
+                ClusterParams = clusterParams,
             };
         }
 
@@ -100,6 +110,7 @@ public sealed class LightEnvironment
             CascadeViewProj2 = lightVp,
             CascadeViewProj3 = lightVp,
             ShadowParams = new Vector4(2048f, 1.0f / 2048f, 1.0f, 1f),
+            ClusterParams = clusterParams,
         };
     }
 }
