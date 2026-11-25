@@ -174,7 +174,7 @@ public sealed class WorldCell
     /// <summary>
     /// Spawns static physics colliders in the physics engine for this cell in Ring A.
     /// </summary>
-    public void SpawnPhysicsBodies(Physics.PhysicsEngine physicsEngine, in WorldPosition cameraPos)
+    public void SpawnPhysicsBodies(Physics.PhysicsEngine physicsEngine, in WorldPosition worldOrigin)
     {
         if (physicsEngine == null || Colliders.Length == 0) return;
         DespawnPhysicsBodies(physicsEngine);
@@ -186,9 +186,9 @@ public sealed class WorldCell
             double worldY = Origin.Y + col.OffsetY;
             double worldZ = Origin.Z + col.OffsetZ;
 
-            float relX = (float)(worldX - cameraPos.X);
-            float relY = (float)(worldY - cameraPos.Y);
-            float relZ = (float)(worldZ - cameraPos.Z);
+            float relX = (float)(worldX - worldOrigin.X);
+            float relY = (float)(worldY - worldOrigin.Y);
+            float relZ = (float)(worldZ - worldOrigin.Z);
             var pos = new Brutal.Numerics.float3(relX, relY, relZ);
 
             Physics.PhysicsBody? body = null;
@@ -234,7 +234,7 @@ public sealed class WorldCell
     /// <summary>
     /// Spawns 3D spatial audio emitters for this cell in Ring A.
     /// </summary>
-    public void SpawnAudioEmitters(Audio.AudioEngine audioEngine, in WorldPosition cameraPos)
+    public void SpawnAudioEmitters(Audio.AudioEngine audioEngine, in WorldPosition worldOrigin)
     {
         if (audioEngine == null || !audioEngine.IsHardwareAvailable || AudioEmitters.Length == 0) return;
         DespawnAudioEmitters(audioEngine);
@@ -246,9 +246,9 @@ public sealed class WorldCell
             double worldY = Origin.Y + emitter.OffsetY;
             double worldZ = Origin.Z + emitter.OffsetZ;
 
-            float relX = (float)(worldX - cameraPos.X);
-            float relY = (float)(worldY - cameraPos.Y);
-            float relZ = (float)(worldZ - cameraPos.Z);
+            float relX = (float)(worldX - worldOrigin.X);
+            float relY = (float)(worldY - worldOrigin.Y);
+            float relZ = (float)(worldZ - worldOrigin.Z);
 
             var source = audioEngine.CreateSource();
             if (source != null)

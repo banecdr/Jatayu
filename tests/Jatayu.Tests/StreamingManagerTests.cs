@@ -5,8 +5,12 @@
 // ==================================================================================================
 
 using System.Numerics;
+using System.IO;
 using System.Threading;
+using Jatayu.AssetFormats;
 using Jatayu.AssetFormats.World;
+using Jatayu.Assets;
+using Jatayu.Cooker;
 using Jatayu.Core.Events;
 using Jatayu.Core.Mathematics;
 using Jatayu.World;
@@ -116,7 +120,7 @@ public class StreamingManagerTests
     }
 
     [Fact]
-    public void OriginShiftEvent_TranslatesWorldGridOrigins()
+    public void OriginShiftEvent_DoesNotTranslateAbsoluteCellOrigins()
     {
         var grid = new WorldGrid();
         using var streamer = new StreamingManager(grid);
@@ -124,10 +128,96 @@ public class StreamingManagerTests
         var cell = grid.GetOrCreateCell(new CellCoord(2, 3));
         var initialOrigin = cell.Origin;
 
-        // Publish origin shift through EventBus
         EventBus.Publish(new OriginShiftedEvent(256.0, 0.0, 512.0));
 
-        Assert.Equal(initialOrigin.X + 256.0, cell.Origin.X, 3);
-        Assert.Equal(initialOrigin.Z + 512.0, cell.Origin.Z, 3);
+        Assert.Equal(initialOrigin.X, cell.Origin.X, 3);
+        Assert.Equal(initialOrigin.Z, cell.Origin.Z, 3);
+    }
+
+    [Fact]
+    public void ReturningToSpawnAfterFarTrip_ReloadsCellAtItsWorldOrigin()
+    {
+        var config = new WorldConfig
+        {
+            LoadRadiusRingA = 100f,
+            UnloadRadiusRingA = 150f,
+            MaxConcurrentLoadingJobs = 1,
+            FinalizationBudgetMs = 10f
+        };
+        var grid = new WorldGrid(config);
+        using var streamer = new StreamingManager(grid, config);
+        var spawnCoord = new CellCoord(0, 0);
+        var spawnCell = grid.GetOrCreateCell(spawnCoord);
+
+        spawnCell.State = CellState.Active;
+        grid.MarkActive(spawnCell);
+
+        var farPosition = new WorldPosition(10000, 0, 10000);
+        EventBus.Publish(new OriginShiftedEvent(9984, 0, 9984));
+        streamer.Update(0.016, in farPosition, Vector3.Zero);
+        Assert.Equal(CellState.Unloaded, spawnCell.State);
+
+        var spawnPosition = new WorldPosition(0, 0, 0);
+        EventBus.Publish(new OriginShiftedEvent(-9984, 0, -9984));
+        for (int i = 0; i < 1000 && spawnCell.State != CellState.Active; i++)
+        {
+            streamer.Update(0.016, in spawnPosition, Vector3.Zero);
+            Thread.Sleep(1);
+        }
+
+        Assert.Equal(CellState.Active, spawnCell.State);
+        Assert.Equal(0.0, spawnCell.Origin.X);
+        Assert.Equal(0.0, spawnCell.Origin.Z);
+    }
+
+    [Fact]
+    public void MissingPackCells_AreCachedWithoutLoadErrors()
+    {
+        string packPath = Path.Combine(Path.GetTempPath(), $"Jatayu_MissingCells_{System.Guid.NewGuid():N}.jpak");
+        var existingCoord = new CellCoord(0, 0);
+        byte[] payload = CellCooker.CookCellWithInstances(existingCoord, Array.Empty<CookedStaticInstance>());
+
+        using (var writer = new PackWriter())
+        {
+            writer.AddEntry(existingCoord.ToAssetGuid(), AssetType.WorldCell, payload);
+            writer.WriteToFile(packPath);
+        }
+
+        try
+        {
+            using var reader = new PackReader(packPath);
+            var config = new WorldConfig
+            {
+                LoadRadiusRingA = 150f,
+                UnloadRadiusRingA = 200f,
+                MaxConcurrentLoadingJobs = 4,
+                FinalizationBudgetMs = 10f
+            };
+            var grid = new WorldGrid(config);
+            using var streamer = new StreamingManager(grid, config, reader);
+            var position = new WorldPosition(64, 0, 64);
+
+            for (int i = 0; i < 100; i++)
+            {
+                streamer.Update(0.016, in position, Vector3.Zero);
+                Thread.Sleep(1);
+            }
+
+            int missingCount = streamer.KnownMissingCellCount;
+            Assert.True(missingCount > 0);
+            Assert.Null(streamer.LastLoadError);
+            Assert.Equal(0, streamer.InFlightCount);
+
+            for (int i = 0; i < 10; i++)
+                streamer.Update(0.016, in position, Vector3.Zero);
+
+            Assert.Equal(missingCount, streamer.KnownMissingCellCount);
+            Assert.Null(streamer.LastLoadError);
+            Assert.Equal(0, streamer.InFlightCount);
+        }
+        finally
+        {
+            File.Delete(packPath);
+        }
     }
 }

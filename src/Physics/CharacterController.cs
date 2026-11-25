@@ -39,6 +39,8 @@ public sealed class CharacterController : IDisposable
     public float StepHeight { get; set; } = 0.35f;
 
     private float _verticalVelocity = 0.0f;
+    private bool _jumpRequested = false;
+    private bool _isJumping = false;
 
     /// <summary>
     /// Gets the current camera-relative position of the character controller.
@@ -128,6 +130,7 @@ public sealed class CharacterController : IDisposable
         settings.SetMaxSlopeAngle(MaxSlopeAngleDegrees * (MathF.PI / 180.0f));
         settings.SetUp(new float3(0.0f, 1.0f, 0.0f));
         settings.SetMass(80.0f);
+        settings.SetMaxStrength(2500.0f);
         settings.SetInnerBodyLayer(PhysicsLayers.Character);
         settings.SetPredictiveContactDistance(0.1f);
         settings.SetPenetrationRecoverySpeed(1.0f);
@@ -144,6 +147,8 @@ public sealed class CharacterController : IDisposable
     /// </summary>
     public void Jump()
     {
+        _jumpRequested = true;
+        _isJumping = true;
         _verticalVelocity = JumpVelocity;
         var v = LinearVelocity;
         _character.SetLinearVelocity(new float3(v.X, _verticalVelocity, v.Z));
@@ -169,9 +174,21 @@ public sealed class CharacterController : IDisposable
 
         // 2. Vertical gravity and jumping
         float gravityY = _engine.Gravity.Y;
-        if (jump)
+        if ((jump && grounded) || _jumpRequested)
         {
+            _jumpRequested = false;
+            _isJumping = true;
             _verticalVelocity = JumpVelocity;
+        }
+        else if (_isJumping)
+        {
+            _verticalVelocity += gravityY * deltaTime;
+            // Landed back on ground after jump apex
+            if (_verticalVelocity <= 0.0f && grounded)
+            {
+                _isJumping = false;
+                _verticalVelocity = -1.0f;
+            }
         }
         else if (grounded)
         {
@@ -181,9 +198,10 @@ public sealed class CharacterController : IDisposable
         else
         {
             _verticalVelocity += gravityY * deltaTime;
-            if (_verticalVelocity < -50.0f)
-                _verticalVelocity = -50.0f; // Terminal velocity clamp
         }
+
+        if (_verticalVelocity < -50.0f)
+            _verticalVelocity = -50.0f; // Terminal velocity clamp
 
         float3 desiredVelocity = new(targetVx, _verticalVelocity, targetVz);
         _character.SetLinearVelocity(desiredVelocity);
@@ -199,8 +217,32 @@ public sealed class CharacterController : IDisposable
             _tempAllocator
         );
 
-        // 4. Stair stepping & floor sticking
-        if (grounded && (MathF.Abs(targetVx) > 0.01f || MathF.Abs(targetVz) > 0.01f))
+        // 3b. Push dynamic rigid bodies contacted by virtual character
+        var contacts = _character.GetActiveContacts();
+        if (contacts.Length > 0)
+        {
+            var bi = _engine.BodyInterface;
+            for (int i = 0; i < contacts.Length; i++)
+            {
+                ref readonly var c = ref contacts[i];
+                if (c.MotionTypeB == MotionType.Dynamic)
+                {
+                    float pushMagnitude = MathF.Max(MathF.Abs(targetVx), MathF.Abs(targetVz)) * 30.0f;
+                    if (pushMagnitude > 0.01f)
+                    {
+                        float3 pushImpulse = new(
+                            -c.ContactNormal.X * pushMagnitude * deltaTime,
+                            0f,
+                            -c.ContactNormal.Z * pushMagnitude * deltaTime
+                        );
+                        bi.AddImpulse(c.BodyB, pushImpulse, c.Position);
+                    }
+                }
+            }
+        }
+
+        // 4. Stair stepping & floor sticking (only when grounded and not airborne jumping)
+        if (grounded && !_isJumping && (MathF.Abs(targetVx) > 0.01f || MathF.Abs(targetVz) > 0.01f))
         {
             float3 stepUp = new(0, StepHeight, 0);
             float3 stepForward = new(targetVx * deltaTime, 0, targetVz * deltaTime);

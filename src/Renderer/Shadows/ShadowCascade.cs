@@ -4,7 +4,7 @@
  * 
  * WHAT THIS FILE DOES:
  *   Represents a single cascade partition in a 4-split Cascaded Shadow Map (CSM).
- *   Calculates sub-frustum bounding spheres, light view-projection matrices, and applies
+ *   Calculates tight (on-axis) sub-frustum bounding spheres, light view-projection matrices, and applies
  *   texel snapping in light space to eliminate sub-pixel shadow edge shimmering during camera motion.
  * ================================================================================================= */
 
@@ -61,45 +61,36 @@ public struct ShadowCascade
             invCamView = Matrix4x4.Identity;
         }
 
-        // 1. Calculate the 8 sub-frustum corners in camera-relative space
+        // 1. Tight bounding sphere of the sub-frustum (Dimitrov, "Cascaded Shadow Maps").
+        //    The optimal sphere centre lies on the view axis; compared with the average of the eight
+        //    corners this shrinks the fitted radius, which directly raises effective shadow resolution.
+        //    The sphere depends only on (near, far, fov, aspect), so it is rotation invariant and the
+        //    texel snapping below only has to handle translation.
         float tanHalfFov = MathF.Tan(fovRadians * 0.5f);
-        float nearY = tanHalfFov * nearDist;
-        float nearX = nearY * aspect;
-        float farY = tanHalfFov * farDist;
-        float farX = farY * aspect;
-
-        Span<Vector3> viewCorners = stackalloc Vector3[8]
+        float k2 = tanHalfFov * tanHalfFov * (1.0f + aspect * aspect);
+        float centerDepth = 0.5f * (nearDist + farDist) * (1.0f + k2);
+        if (centerDepth > farDist)
         {
-            new(-nearX,  nearY, -nearDist),
-            new( nearX,  nearY, -nearDist),
-            new( nearX, -nearY, -nearDist),
-            new(-nearX, -nearY, -nearDist),
-            new(-farX,   farY,  -farDist),
-            new( farX,   farY,  -farDist),
-            new( farX,  -farY,  -farDist),
-            new(-farX,  -farY,  -farDist),
-        };
-
-        Vector3 center = Vector3.Zero;
-        Span<Vector3> worldCorners = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-        {
-            worldCorners[i] = Vector3.Transform(viewCorners[i], invCamView);
-            center += worldCorners[i];
-        }
-        center /= 8.0f;
-
-        // 2. Compute bounding sphere radius
-        float radius = 0.0f;
-        for (int i = 0; i < 8; i++)
-        {
-            float dist = Vector3.Distance(worldCorners[i], center);
-            if (dist > radius) radius = dist;
+            centerDepth = farDist;
         }
 
-        // 3. Round radius to texel increment
+        float farHalfY = tanHalfFov * farDist;
+        float farHalfX = farHalfY * aspect;
+        float nearHalfY = tanHalfFov * nearDist;
+        float nearHalfX = nearHalfY * aspect;
+        float farGap = farDist - centerDepth;
+        float nearGap = centerDepth - nearDist;
+        float radius = MathF.Sqrt(MathF.Max(
+            (farHalfX * farHalfX) + (farHalfY * farHalfY) + (farGap * farGap),
+            (nearHalfX * nearHalfX) + (nearHalfY * nearHalfY) + (nearGap * nearGap)));
+
+        // The view looks down -Z in camera-relative space; bring the sphere centre into that space.
+        Vector3 center = Vector3.Transform(new Vector3(0.0f, 0.0f, -centerDepth), invCamView);
+
+        // 2. Quantize the radius upward (1/16 m steps) so tiny FOV / aspect changes never resize the
+        //    cascade every frame, then derive the exact texel footprint from the final radius.
+        radius = MathF.Ceiling(radius * 16.0f) / 16.0f;
         float worldUnitsPerTexel = (radius * 2.0f) / resolution;
-        radius = MathF.Ceiling(radius / worldUnitsPerTexel) * worldUnitsPerTexel;
         BoundingRadius = radius;
         TexelSize = worldUnitsPerTexel;
 

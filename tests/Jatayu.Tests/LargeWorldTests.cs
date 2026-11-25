@@ -79,9 +79,10 @@ public sealed class LargeWorldTests
             Assert.False(eventReceived);
             Assert.Equal(WorldPosition.Zero, delta1);
 
-            // 2. Camera moves to 2200m (exceeds 2000m threshold)
+            // 2. Camera moves to 2200m from the local origin (exceeds threshold)
             // 2200 / 256 = 8.59375 -> rounded to 9 * 256 = 2304m
-            bool shifted2 = originShift.CheckAndShift(new WorldPosition(2200.0, 0.0, 0.0), out var delta2);
+            var localCamera = new WorldPosition(2200.0, 0.0, 0.0);
+            bool shifted2 = originShift.CheckAndShift(localCamera, out var delta2);
             Assert.True(shifted2);
             Assert.True(eventReceived);
             Assert.Equal(2304.0, delta2.X);
@@ -91,6 +92,11 @@ public sealed class LargeWorldTests
             Assert.Equal(2304.0, capturedEvent.DeltaX);
             Assert.Equal(0.0, capturedEvent.DeltaY);
             Assert.Equal(0.0, capturedEvent.DeltaZ);
+
+            // Rebasing local coordinates preserves the absolute camera location and prevents repeat shifts.
+            localCamera -= delta2.ToVector3();
+            Assert.Equal(2200.0, localCamera.X + originShift.CurrentOrigin.X);
+            Assert.False(originShift.CheckAndShift(localCamera, out _));
 
             // 3. New origin is now at 2304m
             Assert.Equal(2304.0, originShift.CurrentOrigin.X);

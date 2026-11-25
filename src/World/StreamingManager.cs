@@ -21,8 +21,8 @@ using System.Numerics;
 using Jatayu.AssetFormats;
 using Jatayu.AssetFormats.World;
 using Jatayu.Assets;
-using Jatayu.Core.Events;
 using Jatayu.Core.Jobs;
+using Jatayu.Core.Logging;
 using Jatayu.Core.Mathematics;
 using Jatayu.RHI.Vulkan.Memory;
 
@@ -58,7 +58,9 @@ public sealed class StreamingManager : IDisposable
 
     // Concurrency and state tracking
     private readonly HashSet<CellCoord> _inFlightLoads = new();
-    private readonly ConcurrentQueue<DecodedCellPayload> _readyToFinalize = new();
+    private readonly HashSet<CellCoord> _knownMissingCells = new();
+    private readonly ConcurrentQueue<CellLoadResult> _readyToFinalize = new();
+    private readonly Dictionary<CellCoord, long> _failedLoadRetryTicks = new();
     private readonly PrioritizedLoadRequest[] _topK;
 
     // Reusable query buffers (zero heap allocation in update loop)
@@ -66,13 +68,14 @@ public sealed class StreamingManager : IDisposable
     private readonly List<WorldCell> _cellsToUnload = new(64);
 
     private readonly object _stateLock = new();
-    private readonly Core.Events.EventHandler<OriginShiftedEvent> _originShiftHandler;
     private bool _disposed;
+    private const double FailedLoadRetrySeconds = 5.0;
 
     // Subsystems
     public Physics.PhysicsEngine? Physics { get; set; }
     public Audio.AudioEngine? Audio { get; set; }
     private WorldPosition _lastPlayerPos;
+    private WorldPosition _worldOrigin;
 
     // Worker pool for zero GC allocation background jobs
     private readonly ConcurrentQueue<CellLoadWorker> _workerPool = new();
@@ -80,10 +83,15 @@ public sealed class StreamingManager : IDisposable
     // Telemetry & Diagnostics
     public int InFlightCount => _inFlightLoads.Count;
     public int ReadyToFinalizeCount => _readyToFinalize.Count;
+    public int KnownMissingCellCount
+    {
+        get { lock (_stateLock) { return _knownMissingCells.Count; } }
+    }
     public int ActiveCellCount => _grid.ActiveCellCount;
     public float EffectiveLoadRadius { get; private set; }
     public float CurrentSpeedMps { get; private set; }
     public float LastStreamingTimeMs { get; private set; }
+    public string? LastLoadError { get; private set; }
 
     public WorldGrid Grid => _grid;
     public WorldConfig Config => _config;
@@ -109,16 +117,6 @@ public sealed class StreamingManager : IDisposable
         {
             _workerPool.Enqueue(new CellLoadWorker(this));
         }
-
-        // Subscribe to floating-origin rebase events
-        _originShiftHandler = OnOriginShifted;
-        EventBus.Subscribe<OriginShiftedEvent>(_originShiftHandler);
-    }
-
-    private void OnOriginShifted(in OriginShiftedEvent e)
-    {
-        _grid.ShiftOrigin(e.DeltaX, e.DeltaY, e.DeltaZ);
-        _lastPlayerPos = new WorldPosition(_lastPlayerPos.X + e.DeltaX, _lastPlayerPos.Y + e.DeltaY, _lastPlayerPos.Z + e.DeltaZ);
     }
 
     /// <summary>
@@ -127,8 +125,15 @@ public sealed class StreamingManager : IDisposable
     /// </summary>
     public void Update(double deltaTime, in WorldPosition playerPos, in Vector3 playerVelocity)
     {
+        var worldOrigin = WorldPosition.Zero;
+        Update(deltaTime, in playerPos, in playerVelocity, in worldOrigin);
+    }
+
+    public void Update(double deltaTime, in WorldPosition playerPos, in Vector3 playerVelocity, in WorldPosition worldOrigin)
+    {
         long startTicks = Stopwatch.GetTimestamp();
         _lastPlayerPos = playerPos;
+        _worldOrigin = worldOrigin;
 
         // 1. Compute velocity and effective prefetch radius (D19, D23)
         float speed = MathF.Sqrt((playerVelocity.X * playerVelocity.X) + (playerVelocity.Z * playerVelocity.Z));
@@ -201,6 +206,24 @@ public sealed class StreamingManager : IDisposable
                     if (_inFlightLoads.Contains(coord))
                         continue;
 
+                    if (_knownMissingCells.Contains(coord))
+                        continue;
+
+                    if (_packReader != null && !_packReader.TryGetEntry(coord.ToAssetGuid(), out _))
+                    {
+                        _knownMissingCells.Add(coord);
+                        continue;
+                    }
+
+                    long now = Stopwatch.GetTimestamp();
+                    if (_failedLoadRetryTicks.TryGetValue(coord, out long retryAfter))
+                    {
+                        if (now < retryAfter)
+                            continue;
+
+                        _failedLoadRetryTicks.Remove(coord);
+                    }
+
                     if (_grid.TryGetCell(coord, out var existing) && existing.State != CellState.Unloaded)
                         continue;
 
@@ -270,25 +293,55 @@ public sealed class StreamingManager : IDisposable
         long budgetTicks = (long)(_config.FinalizationBudgetMs * Stopwatch.Frequency / 1000.0);
         long startTicks = Stopwatch.GetTimestamp();
 
-        while (_readyToFinalize.TryDequeue(out var payload))
+        while (_readyToFinalize.TryDequeue(out var result))
         {
             lock (_stateLock)
             {
-                _inFlightLoads.Remove(payload.Coord);
+                _inFlightLoads.Remove(result.Coord);
             }
 
-            if (_grid.TryGetCell(payload.Coord, out var cell))
+            if (result.IsMissing)
+            {
+                if (_grid.TryGetCell(result.Coord, out var missingCell) &&
+                    missingCell.State == CellState.LoadingIO)
+                {
+                    missingCell.State = CellState.Unloaded;
+                }
+
+                lock (_stateLock)
+                {
+                    _knownMissingCells.Add(result.Coord);
+                }
+            }
+            else if (result.Payload is { } payload && _grid.TryGetCell(result.Coord, out var cell))
             {
                 CellLoader.ApplyPayloadToCell(cell, payload);
                 _grid.MarkActive(cell);
 
                 if (Physics != null)
                 {
-                    cell.SpawnPhysicsBodies(Physics, _lastPlayerPos);
+                    cell.SpawnPhysicsBodies(Physics, _worldOrigin);
                 }
                 if (Audio != null)
                 {
-                    cell.SpawnAudioEmitters(Audio, _lastPlayerPos);
+                    cell.SpawnAudioEmitters(Audio, _worldOrigin);
+                }
+            }
+            else
+            {
+                LastLoadError = $"Cell {result.Coord}: {result.Error ?? "Loader produced no payload."}";
+                Log.Error($"[StreamingManager] {LastLoadError}");
+
+                if (_grid.TryGetCell(result.Coord, out var failedCell) &&
+                    failedCell.State == CellState.LoadingIO)
+                {
+                    failedCell.State = CellState.Unloaded;
+                }
+
+                lock (_stateLock)
+                {
+                    _failedLoadRetryTicks[result.Coord] =
+                        Stopwatch.GetTimestamp() + (long)(FailedLoadRetrySeconds * Stopwatch.Frequency);
                 }
             }
 
@@ -345,11 +398,11 @@ public sealed class StreamingManager : IDisposable
 
             if (Physics != null)
             {
-                cell.SpawnPhysicsBodies(Physics, _lastPlayerPos);
+                cell.SpawnPhysicsBodies(Physics, _worldOrigin);
             }
             if (Audio != null)
             {
-                cell.SpawnAudioEmitters(Audio, _lastPlayerPos);
+                cell.SpawnAudioEmitters(Audio, _worldOrigin);
             }
             return true;
         }
@@ -364,9 +417,10 @@ public sealed class StreamingManager : IDisposable
             if (_disposed) return;
             _disposed = true;
 
-            EventBus.Unsubscribe<OriginShiftedEvent>(_originShiftHandler);
             Array.Clear(_topK, 0, _topK.Length);
             _inFlightLoads.Clear();
+            _knownMissingCells.Clear();
+            _failedLoadRetryTicks.Clear();
             while (_readyToFinalize.TryDequeue(out _)) { }
             while (_workerPool.TryDequeue(out _)) { }
 
@@ -406,28 +460,60 @@ public sealed class StreamingManager : IDisposable
             var coord = cell.Coord;
             var reader = _manager._packReader;
             DecodedCellPayload? payload = null;
-
-            if (reader != null)
+            string? error = null;
+            bool isMissing = false;
+            try
             {
-                CellLoader.TryLoadCellFromPack(reader, coord, out payload);
+                if (reader != null)
+                {
+                    var guid = coord.ToAssetGuid();
+                    if (!reader.TryGetEntry(guid, out _))
+                    {
+                        isMissing = true;
+                    }
+                    else if (!CellLoader.TryLoadCellFromPack(reader, coord, out payload))
+                    {
+                        error = $"Cell asset {guid} in {reader.FilePath} is invalid.";
+                    }
+                }
+
+                if (reader == null)
+                {
+                    var header = CookedCellHeader.Create(
+                        coord,
+                        coord.ToAssetGuid(),
+                        0, 0, 0,
+                        CellFlags.None,
+                        0, 0, 0,
+                        WorldConstants.CellSize, 10, WorldConstants.CellSize
+                    );
+                    payload = new DecodedCellPayload(coord, in header, Array.Empty<CookedStaticInstance>(), Array.Empty<CookedColliderRecord>(), Array.Empty<CookedAudioPointRecord>());
+                }
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
             }
 
-            if (payload == null)
-            {
-                var header = CookedCellHeader.Create(
-                    coord,
-                    coord.ToAssetGuid(),
-                    0, 0, 0,
-                    CellFlags.None,
-                    0, 0, 0,
-                    WorldConstants.CellSize, 10, WorldConstants.CellSize
-                );
-                payload = new DecodedCellPayload(coord, in header, Array.Empty<CookedStaticInstance>(), Array.Empty<CookedColliderRecord>(), Array.Empty<CookedAudioPointRecord>());
-            }
-
-            _manager._readyToFinalize.Enqueue(payload);
+            if (!Volatile.Read(ref _manager._disposed))
+                _manager._readyToFinalize.Enqueue(new CellLoadResult(coord, payload, error, isMissing));
             _manager.ReturnWorker(this);
         }
     }
-}
 
+    private readonly struct CellLoadResult
+    {
+        public readonly CellCoord Coord;
+        public readonly DecodedCellPayload? Payload;
+        public readonly string? Error;
+        public readonly bool IsMissing;
+
+        public CellLoadResult(CellCoord coord, DecodedCellPayload? payload, string? error, bool isMissing)
+        {
+            Coord = coord;
+            Payload = payload;
+            Error = error;
+            IsMissing = isMissing;
+        }
+    }
+}

@@ -7,37 +7,22 @@
  *   Continuous GPU Clipmap Terrain Fragment Shader.
  *   - Multi-layer procedural splat blending (Grass, Dirt, Rock).
  *   - Visualizes concentric clipmap LOD rings when debug ring color mode is active.
- *   - Directional sunlight PBR diffuse lighting with hemispherical ambient.
- *   - 4-Cascade CSM directional shadows.
+ *   - Directional sunlight diffuse lighting with hemispherical ambient.
+ *   - 4-Cascade CSM directional shadows through shadow_common.glsl (normal-offset + receiver-plane
+ *     bias, cascade blending, contact-hardening soft shadows, distance fade).
+ *   - Distance-faded procedural micro-relief normal and macro albedo variation, evaluated in stable
+ *     absolute world coordinates (inTexCoord) so lighting detail never swims with the camera.
  * ================================================================================================= */
 
 layout(location = 0) in vec3 inWorldPos;
 layout(location = 1) in vec3 inNormal;
-layout(location = 2) in vec2 inTexCoord;
+layout(location = 2) in vec2 inTexCoord;   // absolute world XZ (metres)
 layout(location = 3) in float inMorphFactor;
 layout(location = 4) in float inRingIndex;
 layout(location = 5) in vec4 inClipPos;
 
-layout(std140, set = 0, binding = 0) uniform LightEnvironmentUBO {
-    vec3 SunDirection;
-    float SunIntensity;
-    vec3 SunColor;
-    uint CastsShadows;
-    vec3 AmbientSkyColor;
-    float AmbientIntensity;
-    vec3 AmbientGroundColor;
-    float ShadowBias;
-    mat4 LightViewProj;
-    vec4 CascadeSplits;
-    mat4 CascadeViewProj0;
-    mat4 CascadeViewProj1;
-    mat4 CascadeViewProj2;
-    mat4 CascadeViewProj3;
-    vec4 ShadowParams;
-    vec4 ClusterParams;
-} uLight;
-
-layout(set = 0, binding = 1) uniform sampler2DArrayShadow uShadowMapArray;
+// Light environment UBO (binding 0), shadow samplers (bindings 1 / 11) and the shared shadow filter.
+#include "shadow_common.glsl"
 
 layout(push_constant) uniform PushConstants
 {
@@ -59,126 +44,65 @@ vec3 getRingColor(int r)
     return vec3(0.30, 0.70, 0.90);              // Ring 6: Light Blue
 }
 
-const vec2 POISSON_DISK[16] = vec2[](
-    vec2(-0.94201624, -0.39906216),
-    vec2( 0.94558609, -0.76890725),
-    vec2(-0.09418410, -0.92938870),
-    vec2( 0.34495938,  0.29387760),
-    vec2(-0.91588581,  0.45771432),
-    vec2(-0.81544232, -0.87912464),
-    vec2(-0.38277543,  0.27676845),
-    vec2( 0.97484398,  0.75648379),
-    vec2( 0.44323325, -0.97511554),
-    vec2( 0.53742981, -0.47373420),
-    vec2(-0.26496911, -0.41893023),
-    vec2( 0.79197514,  0.19090143),
-    vec2(-0.24188840,  0.99706507),
-    vec2(-0.81409955,  0.91437590),
-    vec2( 0.19984126,  0.78641367),
-    vec2( 0.14383161, -0.14100790)
-);
-
-// Directional shadow map evaluation with 4-Cascade CSM for terrain
-vec3 ShadowDebugColor(float value) {
-    uint debugMode = uint(round(uLight.ShadowParams.w));
-    if (debugMode == 1u) {
-        if (value >= 0.999) return vec3(1.0, 0.0, 1.0);
-        if (value < 0.25) return vec3(1.0, 0.15, 0.1);
-        if (value < 0.5) return vec3(0.1, 0.9, 0.2);
-        if (value < 0.75) return vec3(0.1, 0.4, 1.0);
-        return vec3(1.0, 0.75, 0.05);
-    }
-    return vec3(value);
+// Dave Hoskins hash: well behaved for large coordinates (no sin() precision problems).
+float TerrainHash12(vec2 p)
+{
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
 }
 
-float EvaluateShadow(vec3 worldPos, float viewDepth, float bias, float NdotL) {
-    uint shadowMode = uLight.CastsShadows & 3u;
-    uint debugMode = uint(round(uLight.ShadowParams.w));
-    if (debugMode == 0u && (shadowMode == 0u || NdotL <= 0.0)) {
-        return NdotL <= 0.0 ? 0.0 : 1.0;
+float TerrainValueNoise(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = TerrainHash12(i);
+    float b = TerrainHash12(i + vec2(1.0, 0.0));
+    float c = TerrainHash12(i + vec2(0.0, 1.0));
+    float d = TerrainHash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Height-field gradient (metres of rise per metre of run) of amplitude * noise(world / wavelength).
+vec2 TerrainNoiseSlope(vec2 world, float wavelength, float amplitude)
+{
+    vec2 p = world / wavelength;
+    const float h = 0.25;
+    float h0 = TerrainValueNoise(p);
+    float dx = TerrainValueNoise(p + vec2(h, 0.0)) - h0;
+    float dz = TerrainValueNoise(p + vec2(0.0, h)) - h0;
+    return vec2(dx, dz) * (amplitude / (h * wavelength));
+}
+
+// Two-octave micro relief perturbation, faded with view distance to avoid aliasing and shimmer.
+vec3 TerrainDetailNormal(vec3 N, vec2 world, float viewDepth)
+{
+    float fadeCoarse = 1.0 - smoothstep(40.0, 160.0, viewDepth);
+    if (fadeCoarse <= 0.0) return N;
+
+    vec2 slope = TerrainNoiseSlope(world, 6.0, 0.55) * fadeCoarse;
+
+    float fadeFine = 1.0 - smoothstep(15.0, 70.0, viewDepth);
+    if (fadeFine > 0.0) {
+        slope += TerrainNoiseSlope(world + 17.3, 1.7, 0.12) * fadeFine;
     }
 
-    // Determine initial cascade index based on view space depth
-    int cascadeIndex = 0;
-    if (viewDepth > uLight.CascadeSplits.x) cascadeIndex = 1;
-    if (viewDepth > uLight.CascadeSplits.y) cascadeIndex = 2;
-    if (viewDepth > uLight.CascadeSplits.z) cascadeIndex = 3;
-
-    if (viewDepth > uLight.CascadeSplits.w) {
-        return 1.0;
-    }
-
-    // Try current cascade first; if the sample falls outside its bounds, fall back to outer cascades
-    vec3 projCoords = vec3(0.0);
-    int selectedCascade = -1;
-
-    for (int c = cascadeIndex; c < 4; ++c) {
-        mat4 cascadeVP;
-        if (c == 0) cascadeVP = uLight.CascadeViewProj0;
-        else if (c == 1) cascadeVP = uLight.CascadeViewProj1;
-        else if (c == 2) cascadeVP = uLight.CascadeViewProj2;
-        else cascadeVP = uLight.CascadeViewProj3;
-
-        vec4 shadowClip = cascadeVP * vec4(worldPos, 1.0);
-        vec3 p = shadowClip.xyz / shadowClip.w;
-
-        // Convert from Vulkan NDC [-1, 1] to texture UV [0, 1]
-        p.x = p.x * 0.5 + 0.5;
-        p.y = p.y * 0.5 + 0.5;
-
-        // In Reverse-Z, valid depth is [0.0, 1.0]
-        if (p.x >= 0.001 && p.x <= 0.999 &&
-            p.y >= 0.001 && p.y <= 0.999 &&
-            p.z >= 0.0 && p.z <= 1.0) {
-            projCoords = p;
-            selectedCascade = c;
-            break;
-        }
-    }
-
-    if (selectedCascade == -1) {
-        return 1.0;
-    }
-
-    float cascadeScale = float(selectedCascade + 1);
-    float tanTheta = sqrt(clamp(1.0 - NdotL * NdotL, 0.0, 1.0)) / max(NdotL, 0.05);
-    float dynamicBias = min(max(bias, 0.0) * cascadeScale * (1.0 + min(tanTheta, 4.0) * 0.25), 0.002);
-    if (debugMode == 2u) return projCoords.z;
-    if (debugMode == 3u) return clamp(dynamicBias / 0.002, 0.0, 1.0);
-    if (debugMode == 1u) return (float(selectedCascade) + 0.5) * 0.25;
-    float currentDepth = projCoords.z + dynamicBias;
-
-    float layer = float(selectedCascade);
-    vec2 texelSize = vec2(uLight.ShadowParams.y);
-
-    if (shadowMode >= 2u) {
-        // Ultra High-Quality Mode: 16-tap Poisson Disk filter (cascade-scaled to maintain crisp distant shadows)
-        float filterRadius = max(uLight.ShadowParams.z / sqrt(cascadeScale), 1.0);
-        float shadow = 0.0;
-        for (int i = 0; i < 16; ++i) {
-            vec2 offset = POISSON_DISK[i] * (texelSize * filterRadius);
-            shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
-        }
-        return shadow / 16.0;
-    } else {
-        float shadow = 0.0;
-        for (int x = -1; x <= 1; ++x) {
-            for (int y = -1; y <= 1; ++y) {
-                vec2 offset = vec2(x, y) * texelSize;
-                shadow += texture(uShadowMapArray, vec4(projCoords.xy + offset, layer, currentDepth));
-            }
-        }
-        return shadow / 9.0;
-    }
+    // Tilt the normal against the micro height gradient; weaker on steep faces where N.y is small.
+    return normalize(N + vec3(-slope.x, 0.0, -slope.y) * N.y);
 }
 
 void main()
 {
-    vec3 N = normalize(inNormal);
+    // Derivatives for receiver-plane shadow bias (uniform control flow, no discards in this shader).
+    vec3 dPdx = dFdx(inWorldPos);
+    vec3 dPdy = dFdy(inWorldPos);
+
+    vec3 Ng = normalize(inNormal);
     vec3 L = normalize(-uLight.SunDirection); // Direction pointing towards sunlight source
 
     // Multi-layer procedural splat blending based on slope (N.y)
-    float slope = clamp(1.0 - N.y, 0.0, 1.0);
+    float slope = clamp(1.0 - Ng.y, 0.0, 1.0);
 
     vec3 grassColor = vec3(0.24, 0.55, 0.18);
     vec3 rockColor = vec3(0.48, 0.46, 0.44);
@@ -188,6 +112,13 @@ void main()
     vec3 albedo = mix(grassColor, dirtColor, smoothstep(0.15, 0.45, slope));
     albedo = mix(albedo, rockColor, smoothstep(0.40, 0.70, slope));
 
+    // Macro variation (about +-7%) breaks up flat colour fields; stable in absolute world space.
+    if (inClipPos.w < 160.0) {
+        float macroFade = 1.0 - smoothstep(60.0, 160.0, inClipPos.w);
+        float macro = TerrainValueNoise(inTexCoord / 45.0) * 0.65 + TerrainValueNoise(inTexCoord / 11.0) * 0.35;
+        albedo *= mix(1.0, mix(0.93, 1.07, macro), macroFade);
+    }
+
     // If debug ring colors are enabled (inRingIndex >= 0.0), blend LOD ring color
     if (inRingIndex >= 0.0)
     {
@@ -195,9 +126,12 @@ void main()
         albedo = mix(albedo, ringColor, 0.75);
     }
 
+    // Micro-relief shading normal (the shadow receiver offset keeps using the smooth geometric normal)
+    vec3 N = TerrainDetailNormal(Ng, inTexCoord, inClipPos.w);
+
     // Directional diffuse (calibrated for viewport dynamic range) with 4-Cascade CSM shadows
     float NdotL = max(dot(N, L), 0.0);
-    float shadow = EvaluateShadow(inWorldPos, inClipPos.w, uLight.ShadowBias, NdotL);
+    float shadow = EvaluateDirectionalShadow(inWorldPos, Ng, inClipPos.w, gl_FragCoord.xy, dPdx, dPdy);
     if (uLight.ShadowParams.w > 0.5)
     {
         outColor = vec4(ShadowDebugColor(shadow), 1.0);
@@ -207,7 +141,7 @@ void main()
     vec3 diffuse = lightRadiance * NdotL * shadow;
 
     // Hemispherical ambient (calibrated for clear visibility in shaded valleys)
-    vec3 ambient = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, N.y * 0.5 + 0.5) * (uLight.AmbientIntensity * 2.2);
+    vec3 ambient = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, N.y * 0.5 + 0.5) * (uLight.AmbientIntensity * 0.88);
 
     vec3 finalColor = albedo * (diffuse + ambient);
     outColor = vec4(finalColor, 1.0);

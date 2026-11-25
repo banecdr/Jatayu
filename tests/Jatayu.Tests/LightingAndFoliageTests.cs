@@ -212,8 +212,10 @@ public class LightingAndFoliageTests
             Assert.InRange(clip.Z / clip.W, -0.001f, 1.001f);
         }
 
+        float k2 = tanHalfFov * tanHalfFov * (1.0f + (16f / 9f) * (16f / 9f));
+        float centerDepth = MathF.Min(0.5f * (cascade.NearDistance + cascade.SplitDistance) * (1.0f + k2), cascade.SplitDistance);
         Vector3 frustumCenter = Vector3.Transform(
-            new Vector3(0f, 0f, -(cascade.NearDistance + cascade.SplitDistance) * 0.5f),
+            new Vector3(0f, 0f, -centerDepth),
             inverseRelativeView);
         Vector4 centerClip = Vector4.Transform(frustumCenter, cascade.ViewProjection);
         float pixelX = (centerClip.X / centerClip.W * 0.5f + 0.5f) * 2048f;

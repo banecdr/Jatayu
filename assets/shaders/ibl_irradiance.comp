@@ -48,7 +48,8 @@ void main() {
             vec3 tangentSample = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
             vec3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * N;
 
-            irradiance += texture(envMap, sampleVec).rgb * cos(theta) * sin(theta);
+            vec3 sampleColor = min(texture(envMap, sampleVec).rgb, vec3(5.0));
+            irradiance += sampleColor * cos(theta) * sin(theta);
             nrSamples += 1.0;
         }
     }

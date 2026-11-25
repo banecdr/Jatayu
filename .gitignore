@@ -55,3 +55,4 @@ assets/shaders/cache/
 assets/shaders/*.spv
 /Jatayu\ Engine\ Agent\ Brief\ 2\ (PLAN.md\ Reconciliation\ and\ Implementation\ Protocol).md
 /Jatayu\ Engine\ Gap\ Analysis\ and\ Open-World\ Implementation\ Brief.md
+assets/generated/cells/

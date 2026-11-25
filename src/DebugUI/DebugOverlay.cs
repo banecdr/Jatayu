@@ -220,6 +220,44 @@ public sealed class DebugOverlay
             {
                 if (lightEnv != null)
                 {
+                    bool sunActive = lightEnv.SunEnabled;
+                    if (ImGui.Checkbox("Sun Light"u8, ref sunActive))
+                    {
+                        lightEnv.SunEnabled = sunActive;
+                    }
+                    ImGui.SameLine();
+                    if (Utf8.TryWrite(buf, $"{(lightEnv.SunEnabled ? "ON" : "OFF")}", out w))
+                    {
+                        buf[w] = 0;
+                        ImGui.TextColored(lightEnv.SunEnabled ? _green : _red, buf[..w]);
+                    }
+
+                    float sunStrength = lightEnv.Sun.Intensity;
+                    if (ImGui.SliderFloat("Sun Strength"u8, ref sunStrength, 0.0f, 250000.0f, "%.0f Lux"u8, default))
+                    {
+                        lightEnv.Sun.Intensity = sunStrength;
+                    }
+
+                    bool hdriActive = lightEnv.HdriLightEnabled;
+                    if (ImGui.Checkbox("HDRI Light"u8, ref hdriActive))
+                    {
+                        lightEnv.HdriLightEnabled = hdriActive;
+                    }
+                    ImGui.SameLine();
+                    if (Utf8.TryWrite(buf, $"{(lightEnv.HdriLightEnabled ? "ON" : "OFF")}", out w))
+                    {
+                        buf[w] = 0;
+                        ImGui.TextColored(lightEnv.HdriLightEnabled ? _green : _red, buf[..w]);
+                    }
+
+                    float hdriStrength = lightEnv.AmbientIntensity;
+                    if (ImGui.SliderFloat("HDRI Strength"u8, ref hdriStrength, 0.0f, 3.0f, "%.2f"u8, default))
+                    {
+                        lightEnv.AmbientIntensity = hdriStrength;
+                    }
+
+                    ImGui.Separator();
+
                     var dir = lightEnv.Sun.Direction;
                     if (Utf8.TryWrite(buf, $"Sun Direction: ({dir.X:F2}, {dir.Y:F2}, {dir.Z:F2})", out w))
                     {
@@ -342,11 +380,19 @@ public sealed class DebugOverlay
             // -------------------------------------------------------------------------------------
             if (ImGui.CollapsingHeader("Interactive Controls Cheatsheet"u8))
             {
+                ImGui.Text("  [X]           : Toggle Character Mode vs Orbit Camera"u8);
+                ImGui.Text("  [WASD]        : Move character (relative to camera yaw) / Flycam"u8);
+                ImGui.Text("  [Shift]       : Sprint (Character Mode) / Slowdown (Flycam)"u8);
+                ImGui.Text("  [Space]       : Jump (Character Mode) / Pause Auto-Orbit"u8);
+                ImGui.Text("  Mouse         : Direct FPS Mouse Look (no RMB hold needed)"u8);
+                ImGui.Text("  [Click Window]: Capture mouse cursor for FPS look"u8);
+                ImGui.Text("  [Scroll Wheel]: Smooth Zoom (0m 1st-Person FPS <-> 15m 3rd-Person)"u8);
+                ImGui.Text("  [J]           : Shoot high-velocity physics cannonball"u8);
+                ImGui.Text("  [K]           : Reset physics demo pyramid & bouncing sphere"u8);
                 ImGui.Text("  [G]           : Toggle GPU-Driven Indirect Multi-Draw (Hi-Z Occlusion)"u8);
-                ImGui.Text("  [K]           : Toggle Procedural Wind Grass Field"u8);
-                ImGui.Text("  [J]           : Toggle GPU Particle Fountain"u8);
+                ImGui.Text("  [F5]          : Toggle Procedural Wind Grass Field"u8);
+                ImGui.Text("  [F6]          : Toggle GPU Particle Fountain"u8);
                 ImGui.Text("  [P]           : Toggle shadow filtering (3x3 vs 16-tap Poisson)"u8);
-                ImGui.Text("  [G]           : Cycle shadow debug view (cascades/depth/bias/off)"u8);
                 ImGui.Text("  [T]           : Teleport between 0m Origin and 50,000m Cluster"u8);
                 ImGui.Text("  [C]           : Toggle 6-DOF Flycam vs Orbit camera"u8);
                 ImGui.Text("  [F3]          : Toggle 100 m/s Supersonic Drone Tour"u8);
@@ -356,7 +402,7 @@ public sealed class DebugOverlay
                 ImGui.Text("  [F]           : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)"u8);
                 ImGui.Text("  [V]           : Toggle V-Sync live"u8);
                 ImGui.Text("  [F1] / [F2]   : Toggle Telemetry HUD / Streaming Radar"u8);
-                ImGui.Text("  [ESC]         : Graceful shutdown"u8);
+                ImGui.Text("  [ESC]         : Release cursor for UI / Graceful shutdown"u8);
             }
         }
         ImGui.End();

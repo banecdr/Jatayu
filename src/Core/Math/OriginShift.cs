@@ -47,22 +47,22 @@ public sealed class OriginShift
     /// Evaluates camera position and executes a deterministic origin shift if threshold is exceeded.
     /// Executes strictly at a frame boundary (Section 1.3).
     /// </summary>
-    /// <param name="cameraPosition">The absolute world position of the camera.</param>
+    /// <param name="cameraPosition">The camera position relative to the current simulation origin.</param>
     /// <param name="deltaShift">Out parameter returning the exact translation delta applied.</param>
     /// <returns>True if an origin shift occurred, false otherwise.</returns>
     public bool CheckAndShift(in WorldPosition cameraPosition, out WorldPosition deltaShift)
     {
         deltaShift = WorldPosition.Zero;
 
-        double distanceSq = cameraPosition.DistanceSquaredTo(_currentOrigin);
+        double distanceSq = cameraPosition.X * cameraPosition.X + cameraPosition.Z * cameraPosition.Z;
         if (distanceSq < _thresholdDistance * _thresholdDistance)
         {
             return false;
         }
 
         // Calculate offset snapped to 256m terrain tile multiple
-        double rawDx = cameraPosition.X - _currentOrigin.X;
-        double rawDz = cameraPosition.Z - _currentOrigin.Z;
+        double rawDx = cameraPosition.X;
+        double rawDz = cameraPosition.Z;
 
         double snappedDx = System.Math.Round(rawDx / SnapTileDimension) * SnapTileDimension;
         double snappedDz = System.Math.Round(rawDz / SnapTileDimension) * SnapTileDimension;

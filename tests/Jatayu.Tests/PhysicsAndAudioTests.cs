@@ -360,7 +360,7 @@ public class PhysicsAndAudioTests : IDisposable
     public void WorldCell_SpawnAndDespawnPhysicsAndAudio_Lifecycle()
     {
         var cell = new WorldCell(new CellCoord(1, 1));
-        var camPos = new WorldPosition(256.0, 0.0, 256.0);
+        var worldOrigin = new WorldPosition(128.0, 0.0, 128.0);
 
         // Setup test collider and audio point records
         cell.Colliders = new Jatayu.AssetFormats.World.CookedColliderRecord[]
@@ -372,11 +372,15 @@ public class PhysicsAndAudioTests : IDisposable
             new() { OffsetX = 5f, OffsetY = 2f, OffsetZ = 5f, Volume = 0.8f, Radius = 30f }
         };
 
-        cell.SpawnPhysicsBodies(_physics, in camPos);
-        cell.SpawnAudioEmitters(_audio, in camPos);
+        cell.SpawnPhysicsBodies(_physics, in worldOrigin);
+        cell.SpawnAudioEmitters(_audio, in worldOrigin);
 
         Assert.Single(cell.ResidentBodies);
         Assert.Single(cell.ResidentAudioSources);
+        Assert.Equal(10f, cell.ResidentBodies[0].Position.X, 0.05f);
+        Assert.Equal(5f, cell.ResidentBodies[0].Position.Y, 0.05f);
+        Assert.Equal(5f, cell.ResidentAudioSources[0].Position.X, 0.05f);
+        Assert.Equal(2f, cell.ResidentAudioSources[0].Position.Y, 0.05f);
 
         cell.DespawnPhysicsBodies(_physics);
         cell.DespawnAudioEmitters(_audio);

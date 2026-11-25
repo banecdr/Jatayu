@@ -107,6 +107,19 @@ public static class Program
         return 0;
     }
 
+    private static float EvaluateTerrainElevation(double worldX, double worldZ)
+    {
+        const float maxElevation = 45.0f;
+        float h1 = MathF.Sin((float)worldX * 0.005f) * MathF.Cos((float)worldZ * 0.005f) * maxElevation;
+        float h2 = MathF.Sin((float)worldX * 0.015f + 1.2f) * MathF.Sin((float)worldZ * 0.015f + 0.8f) * (maxElevation * 0.35f);
+        float h3 = MathF.Cos((float)worldX * 0.04f - 0.5f) * MathF.Sin((float)worldZ * 0.04f + 1.7f) * (maxElevation * 0.1f);
+
+        float dist = MathF.Sqrt((float)(worldX * worldX + worldZ * worldZ));
+        float flatFactor = Math.Clamp((dist - 200.0f) / 60.0f, 0.0f, 1.0f);
+        flatFactor = flatFactor * flatFactor * (3.0f - 2.0f * flatFactor); // smoothstep
+        return (h1 + h2 + h3) * flatFactor;
+    }
+
     private static CookedStaticInstance[] GenerateCellInstances(
         CellCoord coord,
         AssetGuid rockGuid,
@@ -118,14 +131,24 @@ public static class Program
         var rng = new Random(seed);
 
         // Density: 10 to 30 instances per 128m cell
-        int count = rng.Next(12, 28);
-        var instances = new CookedStaticInstance[count];
+        int candidateCount = rng.Next(12, 28);
+        var list = new List<CookedStaticInstance>(candidateCount);
 
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < candidateCount; i++)
         {
             float localX = (float)rng.NextDouble() * (WorldConstants.CellSize - 16f) + 8f;
             float localZ = (float)rng.NextDouble() * (WorldConstants.CellSize - 16f) + 8f;
-            float localY = 0f;
+
+            double worldX = (coord.X * WorldConstants.CellSize) + localX;
+            double worldZ = (coord.Z * WorldConstants.CellSize) + localZ;
+
+            // Exclusion zone around exhibition pavilion plinth
+            if (Math.Abs(worldX) < 100.0 && Math.Abs(worldZ) < 100.0)
+            {
+                continue;
+            }
+
+            float localY = EvaluateTerrainElevation(worldX, worldZ);
 
             // Random yaw rotation around Y axis
             float yaw = (float)(rng.NextDouble() * Math.PI * 2.0);
@@ -159,7 +182,7 @@ public static class Program
                 radius = 2.5f * scale;
             }
 
-            instances[i] = new CookedStaticInstance
+            list.Add(new CookedStaticInstance
             {
                 PosX = localX,
                 PosY = localY,
@@ -176,10 +199,10 @@ public static class Program
                 MaterialId = 0,
                 BoundingRadius = radius,
                 Flags = StaticInstanceFlags.CastShadow,
-            };
+            });
         }
 
-        return instances;
+        return list.ToArray();
     }
 
     private static byte[] SerializeCell(CellCoord coord, CookedStaticInstance[] instances)

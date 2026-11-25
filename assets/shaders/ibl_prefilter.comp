@@ -82,7 +82,11 @@ void main() {
 
         float NdotL = max(dot(N, L), 0.0);
         if (NdotL > 0.0) {
-            prefilteredColor += texture(envMap, L).rgb * NdotL;
+            vec3 sampleColor = texture(envMap, L).rgb;
+            if (pc.roughness > 0.0) {
+                sampleColor = min(sampleColor, vec3(100.0));
+            }
+            prefilteredColor += sampleColor * NdotL;
             totalWeight += NdotL;
         }
     }

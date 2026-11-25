@@ -33,7 +33,17 @@ void main() {
 
     if ((uLight.CastsShadows & 0x80000000u) != 0u) {
         vec3 skyColor = textureLod(uPrefilterMap, dir, 0.0).rgb;
-        outColor = vec4(skyColor, 1.0);
+
+        // ACES Filmic Tone Mapping + sRGB Gamma Correction for SDR UNorm swapchain
+        // Prevents sky dimness while smoothly rolling off ultra-bright sun radiance
+        float a = 2.51;
+        float b = 0.03;
+        float c = 2.43;
+        float d = 0.59;
+        float e = 0.14;
+        vec3 mapped = clamp((skyColor * (a * skyColor + b)) / (skyColor * (c * skyColor + d) + e), 0.0, 1.0);
+        vec3 srgb = pow(mapped, vec3(1.0 / 2.2));
+        outColor = vec4(srgb, 1.0);
         return;
     }
 

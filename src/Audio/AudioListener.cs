@@ -122,8 +122,7 @@ public sealed class AudioListener
     {
         if (camera == null) return;
 
-        // Camera position in camera-relative rendering space is origin (0, 0, 0)
-        Position = float3.Zero;
+        Position = new float3(camera.Position.X, camera.Position.Y, camera.Position.Z);
 
         // Camera forward and up direction vectors
         var fwd = camera.Forward;

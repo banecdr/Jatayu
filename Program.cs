@@ -12,8 +12,9 @@
  *        triggered when the camera exceeds threshold distance, broadcasting OriginShiftedEvent.
  *     3. Physically-Based Rendering (PBR): Cook-Torrance GGX microfacet specular and Lambertian
  *        diffuse BRDF with metallic/roughness material workflow and hemispherical sky/ground ambient.
- *     4. Real-Time Directional Soft Shadows: 2048x2048 D32_SFLOAT shadow map with Reverse-Z comparison
- *        sampler and 16-tap Poisson disk percentage-closer filtering (PCF).
+ *     4. Real-Time Directional Soft Shadows: 4-cascade D32_SFLOAT CSM with tight on-axis cascade spheres,
+ *        texel snapping, normal-offset + receiver-plane depth bias, cascade blending, and contact-hardening
+ *        PCSS soft shadows (High / Ultra) or 3x3 PCF (Standard) through shadow_common.glsl.
  *     5. Reverse-Z Procedural Skybox: Fullscreen atmospheric sky dome rendered at infinite depth
  *        (Z = 0.0) with zero precision degradation.
  *     6. Bindless Texturing: Vulkan 1.2 core descriptor indexing table supporting 4,096 textures
@@ -22,6 +23,11 @@
  *     8. Immediate-Mode 3D Debug Wireframes: Diagnostics lines, coordinate axes, and bounding boxes.
  *     9. Panini (Pannini) Projection: Cylindrical perspective model eliminating edge distortion at wide FOV.
  *    10. Zero Steady-State Allocations: Verified 0 bytes GC heap allocation per frame via AllocationTracker.
+ *    11. Jolt Physics (Sprint 8): Rigid body pyramid, dynamic cannonballs, streamed cell colliders and a
+ *        virtual character controller (walk, sprint, jump) with origin-shift aware body translation.
+ *    12. OpenAL Spatial Audio (Sprint 8): Positional footsteps, impacts and jumps with listener sync.
+ *    13. Lighting Refinement (Sprint 8, CL-60): height-correlated Smith-GGX specular, specular anti-aliasing,
+ *        multi-scatter energy compensation, specular/horizon occlusion for IBL, and a sun horizon fade.
  *
  * INTERACTIVE CONTROLS:
  *   [J]          : Launch High-Velocity Dynamic Cannonball into the Physics Pyramid at Origin
@@ -31,7 +37,7 @@
  *   [L]          : Toggle Sun Light Orbit animation (animates soft PCF directional shadows)
  *   [B]          : Toggle 3D Wireframe Debug bounds, physics colliders & coordinate axes
  *   [Space]      : Jump (in Character Mode) / Toggle Auto-Orbit camera (in Orbit Mode)
- *   [P]          : Toggle shadow PCF quality (3x3 vs 16-tap Poisson)
+ *   [P]          : Toggle shadow quality (3x3 PCF vs PCSS contact-hardening soft shadows)
  *   [G]          : Cycle shadow debug view (cascades, depth, bias, off)
  *   [F]          : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)
  *   [-] / [=]    : Fine-tune Panini distance 'd' (-0.1 / +0.1)
@@ -338,6 +344,15 @@ public static class Program
             Roughness = 0.0f
         });
 
+        // Slot 9: Character Hero Material (Cyber Cyan PBR, Metallic = 0.35, Roughness = 0.25)
+        uint characterMatId = materialTable.RegisterMaterial(new Material
+        {
+            Name = "CharacterHero",
+            BaseColor = new Vector4(0.12f, 0.72f, 0.98f, 1.0f),
+            Metallic = 0.35f,
+            Roughness = 0.25f
+        });
+
         materialTable.Flush(uploadManager);
 
         // ---------------------------------------------------------------------------------------------
@@ -519,8 +534,8 @@ public static class Program
             },
             AmbientSkyColor = new Vector3(0.2f, 0.35f, 0.6f),
             AmbientGroundColor = new Vector3(0.1f, 0.08f, 0.05f),
-            AmbientIntensity = 0.40f,
-            ShadowBias = 0.0005f,
+            AmbientIntensity = 1.0f,
+            ShadowBias = 0.0005f, // extra depth slack (scaled x0.25 in shader); texel-scaled normal-offset + receiver-plane bias do the heavy lifting
             HighQualityShadows = shadowQuality.HighQualityFiltering,
             ShadowFilterRadius = shadowQuality.FilterRadius
         };
@@ -634,7 +649,16 @@ public static class Program
         var worldConfig = new WorldConfig();
         var worldGrid = new WorldGrid(worldConfig);
         using var streamingManager = new StreamingManager(worldGrid, worldConfig, worldPack, vramBudget: vramBudget);
-        Vector3 prevCamPos = camera.Position;
+        var prevCamWorldPos = new WorldPosition(
+            camera.Position.X + originShift.CurrentOrigin.X,
+            camera.Position.Y + originShift.CurrentOrigin.Y,
+            camera.Position.Z + originShift.CurrentOrigin.Z);
+        EventBus.Subscribe<OriginShiftedEvent>((in OriginShiftedEvent e) =>
+        {
+            var delta = new Vector3((float)e.DeltaX, (float)e.DeltaY, (float)e.DeltaZ);
+            camera.Position -= delta;
+            camera.Target -= delta;
+        });
 
         // ---------------------------------------------------------------------------------------------
         // SPRINT 8: JOLT 3D PHYSICS & OPENAL 3D SPATIAL AUDIO PLAYGROUND
@@ -662,7 +686,9 @@ public static class Program
         {
             for (int tx = -2; tx <= 1; tx++)
             {
-                terrainClipmap.RegisterTile(TerrainTile.CreateProcedural(tx, tz));
+                var tile = TerrainTile.CreateProcedural(tx, tz);
+                tile.CreatePhysicsCollider(physicsEngine, new WorldPosition(0, 0, 0));
+                terrainClipmap.RegisterTile(tile);
             }
         }
         terrainClipmap.HeightPyramid.Initialize((wx, wz) =>
@@ -723,8 +749,18 @@ public static class Program
         bool referenceScaleEnabled = initialStress;
 
         var demoPhysicsEntities = new List<PhysicsDemoEntity>(64);
-        bool characterModeEnabled = false;
+        bool characterModeEnabled = true;
+        cameraController.AutoOrbitEnabled = false;
+        cameraController.Distance = 5.0f;
+        cameraController.Pitch = 0.35f;
+        cameraController.Yaw = 0.0f;
+        camera.Target = characterController.PositionVector3 + new Vector3(0f, 1.1f, 0f);
+        window.IsCursorCaptured = true;
+        EngineInput.ResetMouseDelta();
         float footstepTimer = 0.0f;
+        float characterYaw = 0.0f;
+        Matrix4x4 prevCharBodyModel = Matrix4x4.Identity;
+        Matrix4x4 prevCharHeadModel = Matrix4x4.Identity;
 
         Action resetPhysicsDemo = () =>
         {
@@ -750,9 +786,11 @@ public static class Program
                 (new float3(6.1f, 2.75f, 6.0f), emissiveMatId),
             ];
 
+            float3 plinthOffset = new(-(float)originShift.CurrentOrigin.X, 0f, -(float)originShift.CurrentOrigin.Z);
+
             for (int i = 0; i < boxDefs.Length; i++)
             {
-                var bPos = boxDefs[i].pos;
+                var bPos = boxDefs[i].pos + plinthOffset;
                 var bMat = boxDefs[i].mat;
                 var body = physicsEngine.CreateBoxBody(bPos, boxHalfExtents, BodyMotionType.Dynamic, mass: 5.0f, friction: 0.6f, restitution: 0.1f);
                 var entity = scene.CreateEntity(
@@ -782,7 +820,7 @@ public static class Program
 
             // Drop 1 dynamic bouncing sphere above pyramid
             float sphereRadius = 0.4f;
-            var sPos = new float3(6.1f, 4.3f, 6.0f);
+            var sPos = new float3(6.1f, 4.3f, 6.0f) + plinthOffset;
             var sBody = physicsEngine.CreateSphereBody(
                 sPos,
                 sphereRadius,
@@ -817,12 +855,12 @@ public static class Program
                 PrevTransform = Matrix4x4.CreateScale(sphereRadius) * Matrix4x4.CreateTranslation(sPos.X, sPos.Y, sPos.Z)
             });
 
-            // Reset character controller to spawn
-            characterController.Position = new float3(0f, 1.5f, 5f);
+            // Reset character controller to spawn on the plinth
+            characterController.Position = new float3(0f, 1.5f, 5f) + plinthOffset;
 
             if (audioEngine.IsHardwareAvailable && audioEngine.ImpactClip != null)
             {
-                audioEngine.PlayOneShot(audioEngine.ImpactClip, new float3(6f, 1f, 6f), 0.8f);
+                audioEngine.PlayOneShot(audioEngine.ImpactClip, new float3(6f, 1f, 6f) + plinthOffset, 0.8f);
             }
             Console.WriteLine("[PhysicsDemo] Physics pyramid & bouncing sphere stack reset at (X=6, Z=6)!");
         };
@@ -900,7 +938,7 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // INTERACTIVE HOTKEY EVENT HOOKS
         // ---------------------------------------------------------------------------------------------
-        bool sunOrbitEnabled = true;
+        bool sunOrbitEnabled = false;
         bool debugWireframeEnabled = true;
         bool atLargeWorldCluster = false;
         bool flyCamEnabled = false;
@@ -943,7 +981,7 @@ public static class Program
                 else if (key == GlfwKey.P)
                 {
                     lightEnv.HighQualityShadows = !lightEnv.HighQualityShadows;
-                    Console.WriteLine($"[Shadows] {(lightEnv.HighQualityShadows ? "16-Tap Poisson PCF" : "3x3 PCF")} at {cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}");
+                    Console.WriteLine($"[Shadows] {(lightEnv.HighQualityShadows ? "PCSS contact-hardening soft shadows" : "3x3 PCF")} at {cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}");
                 }
                 else if (key == GlfwKey.G)
                 {
@@ -994,7 +1032,11 @@ public static class Program
                     atLargeWorldCluster = !atLargeWorldCluster;
                     if (atLargeWorldCluster)
                     {
-                        camera.Target = new Vector3(50000.0f, 5.0f, -50000.0f);
+                        camera.Target = new Vector3(
+                            (float)(50000.0 - originShift.CurrentOrigin.X),
+                            5.0f,
+                            (float)(-50000.0 - originShift.CurrentOrigin.Z)
+                        );
                         cameraController.Distance = 25.0f;
                         cameraController.Pitch = 0.25f;
                         cameraController.Yaw = 0.5f;
@@ -1002,7 +1044,11 @@ public static class Program
                     }
                     else
                     {
-                        camera.Target = new Vector3(0.0f, 1.2f, 0.0f);
+                        camera.Target = new Vector3(
+                            (float)-originShift.CurrentOrigin.X,
+                            1.2f,
+                            (float)-originShift.CurrentOrigin.Z
+                        );
                         cameraController.Distance = 9.0f;
                         cameraController.Pitch = 0.28f;
                         cameraController.Yaw = 0.0f;
@@ -1066,10 +1112,14 @@ public static class Program
                         cameraController.AutoOrbitEnabled = false;
                         cameraController.Distance = 5.0f;
                         cameraController.Pitch = 0.35f;
-                        Console.WriteLine("[Character] Mode: VIRTUAL CHARACTER (WASD walk, Shift sprint, Space jump, Arrows orbit)");
+                        camera.Target = characterController.PositionVector3 + new Vector3(0f, 1.1f, 0f);
+                        window.IsCursorCaptured = true;
+                        EngineInput.ResetMouseDelta();
+                        Console.WriteLine("[Character] Mode: FPS/TPS CHARACTER (Mouse look active, WASD walk, Shift sprint, Space jump, Scroll zoom)");
                     }
                     else
                     {
+                        window.IsCursorCaptured = false;
                         Console.WriteLine("[Character] Mode: ORBIT CAM (Target-centered)");
                     }
                 }
@@ -1090,37 +1140,62 @@ public static class Program
                 }
                 else if (key == GlfwKey.Escape)
                 {
-                    window.Close();
+                    if (characterModeEnabled && window.IsCursorCaptured)
+                    {
+                        window.IsCursorCaptured = false;
+                        Console.WriteLine("[Input] Cursor freed for UI (Click in window to re-engage FPS look, or ESC again to exit)");
+                    }
+                    else
+                    {
+                        window.Close();
+                    }
                 }
             }
         };
 
         window.MouseButtonAction += (button, action) =>
         {
-            if (button == GlfwMouseButton.Right)
+            if (action == GlfwButtonAction.Press)
             {
-                if (action == GlfwButtonAction.Press)
+                if (characterModeEnabled && !window.IsCursorCaptured)
+                {
+                    window.IsCursorCaptured = true;
+                    EngineInput.ResetMouseDelta();
+                    Console.WriteLine("[Input] Cursor captured for FPS look");
+                    return;
+                }
+
+                if (button == GlfwMouseButton.Right)
                 {
                     isRightMouseDown = true;
                     window.IsCursorCaptured = true;
                     cameraController.AutoOrbitEnabled = false;
 
-                    Vector3 fwd = camera.Forward;
-                    flyCamPitch = MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
-                    flyCamYaw = MathF.Atan2(fwd.X, -fwd.Z);
+                    if (!characterModeEnabled)
+                    {
+                        Vector3 fwd = camera.Forward;
+                        flyCamPitch = MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
+                        flyCamYaw = MathF.Atan2(fwd.X, -fwd.Z);
+                    }
                     EngineInput.ResetMouseDelta();
                 }
-                else if (action == GlfwButtonAction.Release)
+            }
+            else if (action == GlfwButtonAction.Release)
+            {
+                if (button == GlfwMouseButton.Right)
                 {
                     isRightMouseDown = false;
-                    window.IsCursorCaptured = false;
 
-                    Vector3 fwd = camera.Forward;
-                    cameraController.AutoOrbitEnabled = false;
-                    cameraController.Pitch = -MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
-                    cameraController.Yaw = MathF.Atan2(-fwd.X, -fwd.Z);
-                    cameraController.Distance = 10.0f;
-                    camera.Target = camera.Position + fwd * 10.0f;
+                    if (!characterModeEnabled)
+                    {
+                        window.IsCursorCaptured = false;
+                        Vector3 fwd = camera.Forward;
+                        cameraController.AutoOrbitEnabled = false;
+                        cameraController.Pitch = -MathF.Asin(Math.Clamp(fwd.Y, -0.999f, 0.999f));
+                        cameraController.Yaw = MathF.Atan2(-fwd.X, -fwd.Z);
+                        cameraController.Distance = 10.0f;
+                        camera.Target = camera.Position + fwd * 10.0f;
+                    }
                 }
             }
         };
@@ -1129,8 +1204,16 @@ public static class Program
         {
             if (Math.Abs(yOffset) > 0.001)
             {
-                flyCamBaseSpeed = Math.Clamp(flyCamBaseSpeed + (float)yOffset * 3.0f, 1.0f, 300.0f);
-                Console.WriteLine($"[Camera] Flight Speed -> {flyCamBaseSpeed:F1} m/s");
+                if (characterModeEnabled)
+                {
+                    cameraController.Distance = Math.Clamp(cameraController.Distance - (float)yOffset * 0.5f, 0.0f, 15.0f);
+                    Console.WriteLine($"[Camera] View Distance -> {cameraController.Distance:F1}m {(cameraController.Distance <= 0.35f ? "(First-Person FPS)" : "(Third-Person)")}");
+                }
+                else
+                {
+                    flyCamBaseSpeed = Math.Clamp(flyCamBaseSpeed + (float)yOffset * 3.0f, 1.0f, 300.0f);
+                    Console.WriteLine($"[Camera] Flight Speed -> {flyCamBaseSpeed:F1} m/s");
+                }
             }
         };
 
@@ -1158,7 +1241,9 @@ public static class Program
         Console.WriteLine($" [Foliage]       : Disabled (Backend preserved; grass removed from scene)");
         Console.WriteLine($" [Particles]     : GPU Compute Simulation (Toggle [F6]) | {particleSystem.ActiveParticleCount} active / {particleSystem.MaxParticles} capacity, {ParticleSystem.DefaultEmissionRate:0} particles/s");
         Console.WriteLine($" [Depth Buffer]  : {depthBuffer.Width}x{depthBuffer.Height} | Format: {depthBuffer.Format} (32-bit Float Reverse-Z)");
-        Console.WriteLine($" [Shadow Map]    : 4-Cascade CSM ({cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}x4 D32_SFLOAT, Texel Snapping, Reverse-Z)");
+        Console.WriteLine($" [Shadow Map]    : 4-Cascade CSM ({cascadedShadowMap.Resolution}x{cascadedShadowMap.Resolution}x4 D32_SFLOAT, Tight Sphere Fit, Texel Snapping, Reverse-Z)");
+        Console.WriteLine($" [Shadow Filter] : {(lightEnv.HighQualityShadows ? "PCSS (blocker search + variable-radius PCF)" : "3x3 PCF")} | Normal-offset + receiver-plane bias | Cascade blending + distance fade");
+        Console.WriteLine(" [Lighting]      : GGX + correlated Smith visibility, specular AA, multi-scatter compensation, specular/horizon occlusion, sun horizon fade");
         Console.WriteLine($" [Clipmap]       : 7 nested LOD rings (8.4 km span), 10 modular piece meshes, 144 instances, watertight geomorphing");
         Console.WriteLine($" [Arena]         : 200m flat clearing + 160m x 160m Pavilion Plinth (Elevated Y = 0.10m, Zero Z-Fighting)");
         Console.WriteLine($" [Bindless]      : BindlessTable active ({bindlessTable.MaxTextures} slots) | Checkerboard Slot: #{checkerSlot}");
@@ -1190,7 +1275,7 @@ public static class Program
         Console.WriteLine("   [T]                : Teleport between Origin (0m) and 50,000m Monolith Cluster");
         Console.WriteLine("   [L]                : Toggle Sun Light Orbit animation (animates soft shadows)");
         Console.WriteLine("   [B]                : Toggle 3D Wireframe Debug bounds and colliders");
-        Console.WriteLine("   [P]                : Toggle shadow filtering (3x3 PCF vs 16-tap Poisson)");
+        Console.WriteLine("   [P]                : Toggle shadow filtering (3x3 PCF vs PCSS contact-hardening soft shadows)");
         Console.WriteLine("   [F]                : Toggle FOV (Standard 60° <-> Ultra-Wide 110°)");
         Console.WriteLine("   [Left/Right]       : Manual horizontal orbit (Yaw)");
         Console.WriteLine("   [Up/Down]          : Manual vertical orbit (Pitch)");
@@ -1221,7 +1306,8 @@ public static class Program
             cameraRelView.M42 = 0;
             cameraRelView.M43 = 0;
             Matrix4x4 folVp = cameraRelView * camera.ProjectionMatrix;
-            foliageSystem.Render(ctx.CommandBuffer, folVp, -camera.Position, (float)time.TotalTime);
+            Vector3 foliageCameraOffset = -camera.Position - originShift.CurrentOrigin.ToVector3();
+            foliageSystem.Render(ctx.CommandBuffer, folVp, foliageCameraOffset, (float)time.TotalTime);
         };
 
         Action<RenderPassContext> particlePassExecute = ctx =>
@@ -1249,6 +1335,8 @@ public static class Program
             setup.HasSideEffects(true);
         };
         Action<RenderPassContext> presentPassExecute = static _ => { };
+
+        time.Reset();
 
         while (!window.ShouldClose)
         {
@@ -1311,7 +1399,93 @@ public static class Program
             // Interactive camera controls (Right-Click Flycam, Autopilot Drone Tour, 6-DOF Flycam, Character Mode, or Target-Centered Orbit)
             using (Profiler.Scope("CameraUpdate"))
             {
-                if (isRightMouseDown)
+                if (characterModeEnabled)
+                {
+                    // Real FPS mouse look: always active when cursor is captured, or when RMB is held
+                    if (window.IsCursorCaptured || isRightMouseDown)
+                    {
+                        Vector2 mouseDelta = EngineInput.MouseDelta;
+                        const float mouseSensitivity = 0.0022f;
+                        cameraController.Yaw += mouseDelta.X * mouseSensitivity;
+                        cameraController.Pitch = Math.Clamp(cameraController.Pitch - mouseDelta.Y * mouseSensitivity, -1.4f, 1.4f);
+                    }
+
+                    if (window.IsKeyDown(GlfwKey.Left))
+                    {
+                        cameraController.Yaw -= 2.0f * (float)dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Right))
+                    {
+                        cameraController.Yaw += 2.0f * (float)dt;
+                    }
+                    if (window.IsKeyDown(GlfwKey.Up))
+                    {
+                        cameraController.Pitch = Math.Clamp(cameraController.Pitch + 1.5f * (float)dt, -0.2f, 1.4f);
+                    }
+                    if (window.IsKeyDown(GlfwKey.Down))
+                    {
+                        cameraController.Pitch = Math.Clamp(cameraController.Pitch - 1.5f * (float)dt, -0.2f, 1.4f);
+                    }
+
+                    // WASD character movement relative to camera yaw
+                    Vector3 camFwd = camera.Forward;
+                    camFwd.Y = 0f;
+                    if (camFwd.LengthSquared() > 0.0001f) camFwd = Vector3.Normalize(camFwd);
+                    Vector3 camRight = camera.Right;
+                    camRight.Y = 0f;
+                    if (camRight.LengthSquared() > 0.0001f) camRight = Vector3.Normalize(camRight);
+
+                    Vector3 charMove = Vector3.Zero;
+                    if (window.IsKeyDown(GlfwKey.W)) charMove += camFwd;
+                    if (window.IsKeyDown(GlfwKey.S)) charMove -= camFwd;
+                    if (window.IsKeyDown(GlfwKey.D)) charMove += camRight;
+                    if (window.IsKeyDown(GlfwKey.A)) charMove -= camRight;
+
+                    bool isSprinting = window.IsKeyDown(GlfwKey.LeftShift) || window.IsKeyDown(GlfwKey.RightShift);
+                    bool isJumping = window.IsKeyDown(GlfwKey.Space);
+
+                    if (charMove.LengthSquared() > 0.0001f)
+                    {
+                        charMove = Vector3.Normalize(charMove);
+                        float targetYaw = MathF.Atan2(charMove.X, charMove.Z);
+                        float diff = targetYaw - characterYaw;
+                        while (diff < -MathF.PI) diff += MathF.PI * 2f;
+                        while (diff > MathF.PI) diff -= MathF.PI * 2f;
+                        characterYaw += diff * Math.Min(1.0f, (float)dt * 12.0f);
+
+                        footstepTimer += (float)dt * (isSprinting ? 2.8f : 1.8f);
+                        if (footstepTimer >= 1.0f && characterController.IsGrounded)
+                        {
+                            footstepTimer = 0.0f;
+                            if (audioEngine.IsHardwareAvailable && audioEngine.FootstepClip != null)
+                            {
+                                audioEngine.PlayOneShot(audioEngine.FootstepClip, characterController.Position, 0.5f);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        footstepTimer = 0.9f;
+                    }
+
+                    characterController.Update(physicsDt, new Vector2(charMove.X, charMove.Z), isSprinting, jump: isJumping);
+
+                    float targetY = cameraController.Distance <= 0.35f ? 1.6f : 1.1f;
+                    camera.Target = characterController.PositionVector3 + new Vector3(0f, targetY, 0f);
+                    cameraController.Update((float)dt);
+
+                    // Third-person camera ground anti-clipping: ensure camera does not penetrate floor or plinth
+                    if (cameraController.Distance > 0.35f)
+                    {
+                        float terrainHeight = terrainClipmap.SampleElevation(camera.Position.X + originShift.CurrentOrigin.X, camera.Position.Z + originShift.CurrentOrigin.Z);
+                        float minCamY = MathF.Max(terrainHeight + 0.4f, PlinthY + 0.3f);
+                        if (camera.Position.Y < minCamY)
+                        {
+                            camera.Position = new Vector3(camera.Position.X, minCamY, camera.Position.Z);
+                        }
+                    }
+                }
+                else if (isRightMouseDown)
                 {
                     // Relative mouse motion look (Yaw and Pitch)
                     Vector2 mouseDelta = EngineInput.MouseDelta;
@@ -1367,7 +1541,10 @@ public static class Program
                     float groundElev = terrainClipmap.SampleElevation(droneX, droneZ);
                     float targetY = groundElev + 45.0f;
                     float droneY = camera.Position.Y + (targetY - camera.Position.Y) * Math.Min(1.0f, (float)dt * 6.0f);
-                    camera.Position = new Vector3((float)droneX, droneY, (float)droneZ);
+                    camera.Position = new Vector3(
+                        (float)(droneX - originShift.CurrentOrigin.X),
+                        (float)(droneY - originShift.CurrentOrigin.Y),
+                        (float)(droneZ - originShift.CurrentOrigin.Z));
 
                     double aheadS = s + 50.0;
                     double nextX = Math.Sin(aheadS * 0.001) * 1200.0;
@@ -1407,63 +1584,7 @@ public static class Program
                         fwd = Vector3.TransformNormal(fwd, Matrix4x4.CreateFromAxisAngle(right, -1.5f * (float)dt));
                     }
                     camera.Target = camera.Position + Vector3.Normalize(fwd) * 10.0f;
-                }
-                else if (characterModeEnabled)
-                {
-                    if (window.IsKeyDown(GlfwKey.Left))
-                    {
-                        cameraController.Yaw -= 2.0f * dt;
-                    }
-                    if (window.IsKeyDown(GlfwKey.Right))
-                    {
-                        cameraController.Yaw += 2.0f * dt;
-                    }
-                    if (window.IsKeyDown(GlfwKey.Up))
-                    {
-                        cameraController.Pitch += 1.5f * dt;
-                    }
-                    if (window.IsKeyDown(GlfwKey.Down))
-                    {
-                        cameraController.Pitch -= 1.5f * dt;
-                    }
-
-                    // WASD character movement relative to camera yaw
-                    Vector3 camFwd = camera.Forward;
-                    camFwd.Y = 0f;
-                    if (camFwd.LengthSquared() > 0.0001f) camFwd = Vector3.Normalize(camFwd);
-                    Vector3 camRight = camera.Right;
-                    camRight.Y = 0f;
-                    if (camRight.LengthSquared() > 0.0001f) camRight = Vector3.Normalize(camRight);
-
-                    Vector3 charMove = Vector3.Zero;
-                    if (window.IsKeyDown(GlfwKey.W)) charMove += camFwd;
-                    if (window.IsKeyDown(GlfwKey.S)) charMove -= camFwd;
-                    if (window.IsKeyDown(GlfwKey.D)) charMove += camRight;
-                    if (window.IsKeyDown(GlfwKey.A)) charMove -= camRight;
-
-                    bool isSprinting = window.IsKeyDown(GlfwKey.LeftShift) || window.IsKeyDown(GlfwKey.RightShift);
-                    if (charMove.LengthSquared() > 0.0001f)
-                    {
-                        charMove = Vector3.Normalize(charMove);
-                        footstepTimer += (float)dt * (isSprinting ? 2.8f : 1.8f);
-                        if (footstepTimer >= 1.0f && characterController.IsGrounded)
-                        {
-                            footstepTimer = 0.0f;
-                            if (audioEngine.IsHardwareAvailable && audioEngine.FootstepClip != null)
-                            {
-                                audioEngine.PlayOneShot(audioEngine.FootstepClip, characterController.Position, 0.5f);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        footstepTimer = 0.9f;
-                    }
-
-                    characterController.Update(physicsDt, new Vector2(charMove.X, charMove.Z), isSprinting, jump: false);
-
-                    camera.Target = characterController.PositionVector3 + new Vector3(0f, 0.9f, 0f);
-                    cameraController.Update(dt);
+                    characterController.Update(physicsDt, Vector2.Zero, false, false);
                 }
                 else
                 {
@@ -1548,15 +1669,20 @@ public static class Program
             sat2T.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitX, (float)time.TotalTime * 1.0f);
 
             // 5. Evaluate Floating-Origin Rebase at Frame Boundary
-            var camWorldPos = new WorldPosition(camera.Position.X, camera.Position.Y, camera.Position.Z);
-            originShift.CheckAndShift(camWorldPos, out _);
+            var camLocalPos = new WorldPosition(camera.Position.X, camera.Position.Y, camera.Position.Z);
+            originShift.CheckAndShift(camLocalPos, out _);
+            var camWorldPos = new WorldPosition(
+                camera.Position.X + originShift.CurrentOrigin.X,
+                camera.Position.Y + originShift.CurrentOrigin.Y,
+                camera.Position.Z + originShift.CurrentOrigin.Z);
 
             // 5b. Open-World Region Streaming (Sprint 6a) & Texture Mip Streaming (Sprint 6b)
-            Vector3 camVelocity = (camera.Position - prevCamPos) / Math.Max(0.0001f, (float)dt);
-            prevCamPos = camera.Position;
+            Vector3 camVelocity = (camWorldPos - prevCamWorldPos).ToVector3() / Math.Max(0.0001f, (float)dt);
+            prevCamWorldPos = camWorldPos;
             using (Profiler.Scope("WorldStreaming"))
             {
-                streamingManager.Update(dt, in camWorldPos, in camVelocity);
+                var worldOrigin = originShift.CurrentOrigin;
+                streamingManager.Update(dt, in camWorldPos, in camVelocity, in worldOrigin);
                 textureStreamer.Update((ulong)frameSync.CurrentFrame);
             }
 
@@ -1565,42 +1691,70 @@ public static class Program
             {
                 float totalSec = (float)time.TotalTime;
             // Glowing Neon Blue Crystal Point Light (at 0, 3.2, 0)
-            Vector3 bluePosRel = new Vector3(0.0f, 3.2f, 0.0f) - camera.Position;
+            Vector3 bluePosRel = new(
+                (float)-camWorldPos.X,
+                (float)(3.2 - camWorldPos.Y),
+                (float)-camWorldPos.Z);
             pointLights[0] = new PointLight(bluePosRel, radius: 12.0f, color: new Vector3(0.2f, 0.8f, 1.0f), intensity: 60000.0f);
 
             // Orbiting warm amber campfire Point Light around the exhibition cubes
             Vector3 firePosWorld = new Vector3(MathF.Cos(totalSec * 1.5f) * 5.0f, 1.5f, MathF.Sin(totalSec * 1.5f) * 5.0f);
-            Vector3 firePosRel = firePosWorld - camera.Position;
+            Vector3 firePosRel = new(
+                (float)(firePosWorld.X - camWorldPos.X),
+                (float)(firePosWorld.Y - camWorldPos.Y),
+                (float)(firePosWorld.Z - camWorldPos.Z));
             pointLights[1] = new PointLight(firePosRel, radius: 10.0f, color: new Vector3(1.0f, 0.6f, 0.2f), intensity: 45000.0f);
-            for (int i = 2; i < pointLights.Length; i++)
+
+            int activePointLights = 2;
+            int activeSpotLights = 1;
+
+            if (referenceScaleEnabled)
             {
-                float angle = totalSec * 0.12f + i * 2.39996323f;
-                float radius = 30.0f + (i % 9) * 7.0f;
-                float height = 1.0f + (i % 13) * 0.75f;
-                var position = new Vector3(MathF.Cos(angle) * radius, height, MathF.Sin(angle) * radius);
-                var color = new Vector3(
-                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.31f)),
-                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.47f + 1.0f)),
-                    0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.59f + 2.0f)));
-                pointLights[i] = new PointLight(position, radius: 16.0f, color, intensity: 1800.0f);
+                activePointLights = pointLights.Length;
+                activeSpotLights = spotLights.Length;
+
+                for (int i = 2; i < pointLights.Length; i++)
+                {
+                    float angle = totalSec * 0.12f + i * 2.39996323f;
+                    float radius = 30.0f + (i % 9) * 7.0f;
+                    float height = 1.0f + (i % 13) * 0.75f;
+                    var worldPos = new Vector3(MathF.Cos(angle) * radius, height, MathF.Sin(angle) * radius);
+                    var position = new Vector3(
+                        (float)(worldPos.X - camWorldPos.X),
+                        (float)(worldPos.Y - camWorldPos.Y),
+                        (float)(worldPos.Z - camWorldPos.Z));
+                    var color = new Vector3(
+                        0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.31f)),
+                        0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.47f + 1.0f)),
+                        0.35f + 0.65f * MathF.Abs(MathF.Sin(i * 0.59f + 2.0f)));
+                    pointLights[i] = new PointLight(position, radius: 16.0f, color, intensity: 1800.0f);
+                }
+
+                for (int i = 1; i < spotLights.Length; i++)
+                {
+                    float angle = -totalSec * 0.08f + i * 2.39996323f;
+                    float radius = 20.0f + (i % 7) * 6.0f;
+                    var worldPos = new Vector3(MathF.Cos(angle) * radius, 12.0f, MathF.Sin(angle) * radius);
+                    var position = new Vector3(
+                        (float)(worldPos.X - camWorldPos.X),
+                        (float)(worldPos.Y - camWorldPos.Y),
+                        (float)(worldPos.Z - camWorldPos.Z));
+                    var color = new Vector3(
+                        0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.23f)),
+                        0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.41f + 1.0f)),
+                        0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.61f + 2.0f)));
+                    spotLights[i] = new SpotLight(position, range: 22.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color);
+                }
             }
 
             // Spotlight pointing down from above the exhibition center
-            Vector3 spotPosRel = new Vector3(0.0f, 8.0f, 0.0f) - camera.Position;
+            Vector3 spotPosRel = new(
+                (float)-camWorldPos.X,
+                (float)(8.0 - camWorldPos.Y),
+                (float)-camWorldPos.Z);
             spotLights[0] = new SpotLight(spotPosRel, range: 18.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color: new Vector3(1.0f, 0.95f, 0.8f));
-            for (int i = 1; i < spotLights.Length; i++)
-            {
-                float angle = -totalSec * 0.08f + i * 2.39996323f;
-                float radius = 20.0f + (i % 7) * 6.0f;
-                var position = new Vector3(MathF.Cos(angle) * radius, 12.0f, MathF.Sin(angle) * radius);
-                var color = new Vector3(
-                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.23f)),
-                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.41f + 1.0f)),
-                    0.4f + 0.6f * MathF.Abs(MathF.Sin(i * 0.61f + 2.0f)));
-                spotLights[i] = new SpotLight(position, range: 22.0f, direction: new Vector3(0.0f, -1.0f, 0.0f), innerAngleRad: 0.35f, outerAngleRad: 0.65f, color);
-            }
 
-                clusteredLightCulling.UpdateLights(pointLights, spotLights);
+            clusteredLightCulling.UpdateLights(pointLights.AsSpan(0, activePointLights), spotLights.AsSpan(0, activeSpotLights));
             }
 
             // 5d. Update GPU-Driven Instance Buffer (Sprint 7a)
@@ -1611,10 +1765,13 @@ public static class Program
                 float camX = camera.Position.X;
                 float camY = camera.Position.Y;
                 float camZ = camera.Position.Z;
+                double worldCamX = camWorldPos.X;
+                double worldCamY = camWorldPos.Y;
+                double worldCamZ = camWorldPos.Z;
 
                 // 0: Exhibition Pavilion Plinth
-                Vector3 groundRel = new Vector3(-camX, PlinthY - camY, -camZ);
-                Matrix4x4 groundModel = Matrix4x4.CreateTranslation(-camX, -camY, -camZ);
+                Vector3 groundRel = new Vector3((float)-worldCamX, (float)(PlinthY - worldCamY), (float)-worldCamZ);
+                Matrix4x4 groundModel = Matrix4x4.CreateTranslation(groundRel);
                 dynInstances[0] = new GpuInstanceData
                 {
                     CurrentTransform = groundModel,
@@ -1718,7 +1875,7 @@ public static class Program
                 };
 
                 // 7: Monolith
-                Vector3 monoRel = new Vector3((float)(monoT.WorldX - camX), (float)(monoT.WorldY - camY), (float)(monoT.WorldZ - camZ));
+                Vector3 monoRel = new Vector3((float)(monoT.WorldX - worldCamX), (float)(monoT.WorldY - worldCamY), (float)(monoT.WorldZ - worldCamZ));
                 Matrix4x4 monoModel = Matrix4x4.CreateScale(2f, 10f, 2f) * Matrix4x4.CreateFromQuaternion(monoT.Rotation) * Matrix4x4.CreateTranslation(monoRel);
                 dynInstances[7] = new GpuInstanceData
                 {
@@ -1733,7 +1890,7 @@ public static class Program
                 };
 
                 // 8: Satellite 1
-                Vector3 sat1Rel = new Vector3((float)(sat1T.WorldX - camX), (float)(sat1T.WorldY - camY), (float)(sat1T.WorldZ - camZ));
+                Vector3 sat1Rel = new Vector3((float)(sat1T.WorldX - worldCamX), (float)(sat1T.WorldY - worldCamY), (float)(sat1T.WorldZ - worldCamZ));
                 Matrix4x4 sat1Model = Matrix4x4.CreateScale(1.5f) * Matrix4x4.CreateFromQuaternion(sat1T.Rotation) * Matrix4x4.CreateTranslation(sat1Rel);
                 dynInstances[8] = new GpuInstanceData
                 {
@@ -1748,7 +1905,7 @@ public static class Program
                 };
 
                 // 9: Satellite 2
-                Vector3 sat2Rel = new Vector3((float)(sat2T.WorldX - camX), (float)(sat2T.WorldY - camY), (float)(sat2T.WorldZ - camZ));
+                Vector3 sat2Rel = new Vector3((float)(sat2T.WorldX - worldCamX), (float)(sat2T.WorldY - worldCamY), (float)(sat2T.WorldZ - worldCamZ));
                 Matrix4x4 sat2Model = Matrix4x4.CreateScale(1.5f) * Matrix4x4.CreateFromQuaternion(sat2T.Rotation) * Matrix4x4.CreateTranslation(sat2Rel);
                 dynInstances[9] = new GpuInstanceData
                 {
@@ -1762,7 +1919,49 @@ public static class Program
                     LodBias = 0f,
                 };
 
-                // 10..N: Dynamic Physics Entities at Origin
+                // 10 & 11: Character Avatar (Stylized Player Pawn - Body & Helmet)
+                bool showAvatar = cameraController.Distance > 0.35f;
+                Vector3 charPos = characterController.PositionVector3;
+                Vector3 charRelPos = charPos - camera.Position;
+                Quaternion charRot = Quaternion.CreateFromAxisAngle(Vector3.UnitY, characterYaw);
+
+                Matrix4x4 charBodyModel = showAvatar
+                    ? Matrix4x4.CreateScale(0.32f, 0.55f, 0.32f) * Matrix4x4.CreateFromQuaternion(charRot) * Matrix4x4.CreateTranslation(charRelPos)
+                    : Matrix4x4.CreateScale(0.0001f) * Matrix4x4.CreateTranslation(charRelPos);
+
+                dynInstances[10] = new GpuInstanceData
+                {
+                    CurrentTransform = charBodyModel,
+                    PreviousTransform = prevCharBodyModel == Matrix4x4.Identity ? charBodyModel : prevCharBodyModel,
+                    BoundingCenter = charRelPos,
+                    BoundingRadius = showAvatar ? 0.8f : 0.0f,
+                    MeshId = sphereSlice.MeshId,
+                    MaterialId = characterMatId,
+                    Flags = showAvatar ? 1u : 0u,
+                    LodBias = 0f,
+                };
+                prevCharBodyModel = charBodyModel;
+
+                Vector3 headOffset = Vector3.Transform(new Vector3(0f, 0.55f, 0f), charRot);
+                Vector3 headRelPos = charRelPos + headOffset;
+                Matrix4x4 charHeadModel = showAvatar
+                    ? Matrix4x4.CreateScale(0.24f) * Matrix4x4.CreateFromQuaternion(charRot) * Matrix4x4.CreateTranslation(headRelPos)
+                    : Matrix4x4.CreateScale(0.0001f) * Matrix4x4.CreateTranslation(headRelPos);
+
+                dynInstances[11] = new GpuInstanceData
+                {
+                    CurrentTransform = charHeadModel,
+                    PreviousTransform = prevCharHeadModel == Matrix4x4.Identity ? charHeadModel : prevCharHeadModel,
+                    BoundingCenter = headRelPos,
+                    BoundingRadius = showAvatar ? 0.4f : 0.0f,
+                    MeshId = sphereSlice.MeshId,
+                    MaterialId = mirrorSphereMatId,
+                    Flags = showAvatar ? 1u : 0u,
+                    LodBias = 0f,
+                };
+                prevCharHeadModel = charHeadModel;
+
+                // 12..N: Dynamic Physics Entities at Origin
                 for (int i = 0; i < demoPhysicsEntities.Count; i++)
                 {
                     var demoObj = demoPhysicsEntities[i];
@@ -1784,7 +1983,7 @@ public static class Program
                                       Matrix4x4.CreateFromQuaternion(worldRot) *
                                       Matrix4x4.CreateTranslation(relPos);
 
-                    dynInstances[10 + i] = new GpuInstanceData
+                    dynInstances[12 + i] = new GpuInstanceData
                     {
                         CurrentTransform = model,
                         PreviousTransform = demoObj.PrevTransform,
@@ -1816,9 +2015,9 @@ public static class Program
                         double objWorldZ = cell.Origin.Z + inst.PosZ;
 
                         Vector3 relPos = new(
-                            (float)(objWorldX - camX),
-                            (float)(objWorldY - camY),
-                            (float)(objWorldZ - camZ)
+                            (float)(objWorldX - worldCamX),
+                            (float)(objWorldY - worldCamY),
+                            (float)(objWorldZ - worldCamZ)
                         );
 
                         var rot = new Quaternion(inst.RotX, inst.RotY, inst.RotZ, inst.RotW);
@@ -1905,7 +2104,7 @@ public static class Program
                 }
 
                     instanceBuffer.SetStaticInstances(streamingGpuInstances.AsSpan(0, staticInstIdx));
-                    instanceBuffer.SetDynamicInstances(dynInstances.AsSpan(0, 10 + demoPhysicsEntities.Count));
+                    instanceBuffer.SetDynamicInstances(dynInstances.AsSpan(0, 12 + demoPhysicsEntities.Count));
                 }
             }
 
@@ -1919,14 +2118,16 @@ public static class Program
 
                 if (!atLargeWorldCluster)
                 {
-                    // AABB wireframe bounding boxes for local objects
-                    debugRenderer.DrawBox(new Vector3(-PlinthExtent, PlinthY - 0.02f, -PlinthExtent), new Vector3(PlinthExtent, PlinthY + 0.02f, PlinthExtent), new Vector4(0.5f, 0.5f, 0.6f, 0.4f));
-                    debugRenderer.DrawBox(new Vector3(-1f, 0.2f, -1f), new Vector3(1f, 2.2f, 1f), new Vector4(1f, 1f, 0f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-4.8f, 0.2f, -0.8f), new Vector3(-3.2f, 1.8f, 0.8f), new Vector4(0.9f, 0.6f, 0.4f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(3.2f, 0.2f, -0.8f), new Vector3(4.8f, 1.8f, 0.8f), new Vector4(0.8f, 0.8f, 0.9f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, -4.8f), new Vector3(0.8f, 1.8f, -3.2f), new Vector4(0.85f, 0.35f, 0.2f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-0.8f, 0.2f, 3.2f), new Vector3(0.8f, 1.8f, 4.8f), new Vector4(0.2f, 0.8f, 0.2f, 0.8f));
-                    debugRenderer.DrawBox(new Vector3(-0.5f, 1.7f, -0.5f), new Vector3(0.5f, 4.7f, 0.5f), new Vector4(0.2f, 0.8f, 1.0f, 0.8f));
+                    // AABB wireframe bounding boxes for local objects (anchored to current simulation origin)
+                    Vector3 plinthLocalPos = new((float)-originShift.CurrentOrigin.X, PlinthY, (float)-originShift.CurrentOrigin.Z);
+                    debugRenderer.DrawBox(plinthLocalPos + new Vector3(-PlinthExtent, -0.02f, -PlinthExtent), plinthLocalPos + new Vector3(PlinthExtent, 0.02f, PlinthExtent), new Vector4(0.5f, 0.5f, 0.6f, 0.4f));
+
+                    debugRenderer.DrawBox(heroT.Position - Vector3.One, heroT.Position + Vector3.One, new Vector4(1f, 1f, 0f, 0.8f));
+                    debugRenderer.DrawBox(copperT.Position - new Vector3(0.8f), copperT.Position + new Vector3(0.8f), new Vector4(0.9f, 0.6f, 0.4f, 0.8f));
+                    debugRenderer.DrawBox(chromeT.Position - new Vector3(0.8f), chromeT.Position + new Vector3(0.8f), new Vector4(0.8f, 0.8f, 0.9f, 0.8f));
+                    debugRenderer.DrawBox(terracottaT.Position - new Vector3(0.8f), terracottaT.Position + new Vector3(0.8f), new Vector4(0.85f, 0.35f, 0.2f, 0.8f));
+                    debugRenderer.DrawBox(checkerT.Position - new Vector3(0.8f), checkerT.Position + new Vector3(0.8f), new Vector4(0.2f, 0.8f, 0.2f, 0.8f));
+                    debugRenderer.DrawBox(emissiveT.Position - new Vector3(0.5f, 1.5f, 0.5f), emissiveT.Position + new Vector3(0.5f, 1.5f, 0.5f), new Vector4(0.2f, 0.8f, 1.0f, 0.8f));
 
                     // Physics demo dynamic bodies wireframe bounds
                     for (int i = 0; i < demoPhysicsEntities.Count; i++)
@@ -1943,7 +2144,8 @@ public static class Program
                 else
                 {
                     // AABB wireframe bounding box for 50,000m Monolith
-                    debugRenderer.DrawBox(new Vector3(49998f, -5f, -50002f), new Vector3(50002f, 15f, -49998f), new Vector4(1f, 0.8f, 0.2f, 0.8f));
+                    Vector3 monoPos = monoT.Position;
+                    debugRenderer.DrawBox(monoPos - new Vector3(2f, 10f, 2f), monoPos + new Vector3(2f, 10f, 2f), new Vector4(1f, 0.8f, 0.2f, 0.8f));
                 }
             }
 
@@ -1965,7 +2167,7 @@ public static class Program
                             originShift: originShift,
                             lightEnv: lightEnv,
                             visibleEntities: forwardRenderer.VisibleItemCount,
-                            totalEntities: 10 + demoPhysicsEntities.Count,
+                            totalEntities: 12 + demoPhysicsEntities.Count,
                             shadowCasters: forwardRenderer.ShadowCasterCount,
                             terrainDrawCount: forwardRenderer.TerrainDrawCount,
                             terrainTriangleCount: forwardRenderer.TerrainTriangleCount,
@@ -2001,6 +2203,7 @@ public static class Program
                 // Run GPU particle compute physics simulation (Sprint 7b)
                 if (particlesEnabled)
                 {
+                    particleSystem.EmitterPosition = new Vector3(emissiveT.Position.X, emissiveT.Position.Y + 1.5f, emissiveT.Position.Z);
                     particleSystem.Simulate(cmd, (float)dt);
                 }
 

@@ -8,8 +8,11 @@ using System.Runtime.CompilerServices;
 using Arch.Core;
 using Arch.Core.Extensions;
 using ArchWorld = Arch.Core.World;
+using Jatayu.Core.Events;
+using Jatayu.Core.Mathematics;
 using Jatayu.Renderer.Camera;
 using Jatayu.Scene.Components;
+using System.Numerics;
 
 namespace Jatayu.Scene;
 
@@ -19,8 +22,21 @@ namespace Jatayu.Scene;
 /// </summary>
 public sealed class Scene : IDisposable
 {
+    private static readonly QueryDescription TransformQuery = new QueryDescription().WithAll<Transform>();
+
     private readonly ArchWorld _world;
+    private readonly Jatayu.Core.Events.EventHandler<OriginShiftedEvent> _originShiftHandler;
     private bool _isDisposed;
+
+    private struct OriginShiftJob : IForEach<Transform>
+    {
+        public Vector3 Delta;
+
+        public void Update(ref Transform transform)
+        {
+            transform.Position -= Delta;
+        }
+    }
 
     /// <summary>
     /// Gets the underlying Arch World instance.
@@ -33,6 +49,17 @@ public sealed class Scene : IDisposable
     public Scene()
     {
         _world = ArchWorld.Create();
+        _originShiftHandler = OnOriginShifted;
+        EventBus.Subscribe(_originShiftHandler);
+    }
+
+    private void OnOriginShifted(in OriginShiftedEvent e)
+    {
+        var job = new OriginShiftJob
+        {
+            Delta = new Vector3((float)e.DeltaX, (float)e.DeltaY, (float)e.DeltaZ),
+        };
+        _world.InlineQuery<OriginShiftJob, Transform>(in TransformQuery, ref job);
     }
 
     /// <summary>
@@ -152,6 +179,7 @@ public sealed class Scene : IDisposable
     {
         if (!_isDisposed)
         {
+            EventBus.Unsubscribe(_originShiftHandler);
             ArchWorld.Destroy(_world);
             _isDisposed = true;
         }
