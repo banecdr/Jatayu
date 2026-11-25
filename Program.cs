@@ -186,15 +186,18 @@ public static class Program
         const int InitialWidth = 1280;
         const int InitialHeight = 720;
 
+        var settings = Settings.Load();
+        bool defaultVsync = !initialNoVsync && settings.VSync;
+
         // ---------------------------------------------------------------------------------------------
         // PHASE 1: DESKTOP WINDOW & VULKAN 1.3 HARDWARE DEVICE BOOTSTRAP
         // ---------------------------------------------------------------------------------------------
         using var window = new Window(
-            title: "Jatayu Engine - Sprint 7: GPU-Driven Indirect, Wind Foliage & Particles",
+            title: "Jatayu Engine - Sprint 8: Jolt Physics & Spatial Audio",
             width: InitialWidth,
             height: InitialHeight,
             resizable: true,
-            vsync: !initialNoVsync
+            vsync: defaultVsync
         );
 
         using var context = new VulkanContext(window);
@@ -488,7 +491,6 @@ public static class Program
         // ---------------------------------------------------------------------------------------------
         // PHASE 6: LIGHTING, SHADOWS, DEBUG RENDERER & ORIGIN SHIFT
         // ---------------------------------------------------------------------------------------------
-        var settings = Settings.Load();
         if (!ShadowQualityPreset.TryParse(settings.ShadowQuality, out var shadowQuality))
         {
             Console.WriteLine($"[Settings] Unknown shadow quality '{settings.ShadowQuality}'. Falling back to High.");
@@ -608,7 +610,7 @@ public static class Program
         var commandBuffers = commandPool.AllocateMultiple(frameSync.MaxFramesInFlight);
         using var gpuTimer = new GpuTimer(context, maxQueriesPerFrame: 64, framesInFlight: frameSync.MaxFramesInFlight);
         using var imguiBackend = new ImGuiVulkanBackend(context, allocator, uploadManager, window, swapchain.ColorFormat);
-        var debugOverlay = new DebugOverlay();
+        var debugOverlay = new DebugOverlay { IsVisible = !benchmarkMode };
         var streamingOverlay = new StreamingDebugOverlay();
 
         string worldPakPath = Path.Combine(AppContext.BaseDirectory, "assets", "packages", "world.jpak");
@@ -1265,7 +1267,11 @@ public static class Program
             }
 
             int imageIndex;
-            var acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out imageIndex);
+            VkResult acquireResult;
+            using (Profiler.Scope("AcquireNextImage"))
+            {
+                acquireResult = swapchain.AcquireNextImage(frameSync.CurrentImageAvailable, out imageIndex);
+            }
             if (acquireResult is VkResult.ErrorOutOfDateKHR or VkResult.SuboptimalKHR || swapchain.IsOutOfDate)
             {
                 swapchain.Recreate();
@@ -2083,7 +2089,10 @@ public static class Program
             }
 
             // 11. Submit recorded commands to GPU Graphics Queue
-            uploadManager.FlushBatch();
+            using (Profiler.Scope("FlushBatch"))
+            {
+                uploadManager.FlushBatch();
+            }
 
             var signalSemaphore = frameSync.GetRenderFinishedSemaphore(imageIndex);
             using (Profiler.Scope("QueueSubmit"))
@@ -2158,8 +2167,11 @@ public static class Program
             }
 
             // 13. Retire deferred resource deletions & advance frame ring
-            deletionQueue.Flush((ulong)frameSync.CurrentFrame);
-            frameSync.AdvanceFrame();
+            using (Profiler.Scope("AdvanceFrame"))
+            {
+                deletionQueue.Flush((ulong)frameSync.CurrentFrame);
+                frameSync.AdvanceFrame();
+            }
 
             Profiler.EndFrame();
             AllocationTracker.EndFrame();
@@ -2209,6 +2221,9 @@ public static class Program
                 Console.WriteLine($"   - {cpu.Name,-25} : {cpu.DurationMs,6:F2} ms");
             }
             Console.WriteLine($"   * {"TOTAL CPU MEASURED",-25} : {cpuSum,6:F2} ms");
+            Console.WriteLine($"   * {"TOTAL CPU FRAME DURATION",-25} : {Profiler.FrameDurationMs,6:F2} ms");
+            Console.WriteLine($"   * {"GAME TIME DELTA",-25} : {time.UnscaledDeltaTime * 1000.0f,6:F2} ms");
+            Console.WriteLine($"   * {"GAME TIME AVG",-25} : {time.AverageFrameTimeMs,6:F2} ms");
             Console.WriteLine(" GPU Pass Breakdown (GpuTimer):");
             float gpuSum = 0f;
             foreach (var pass in gpuTimer.LatestSnapshot)

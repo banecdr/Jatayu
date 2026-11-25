@@ -153,6 +153,7 @@ public sealed class WorldGrid
         float radiusMeters,
         List<CellCoord> destination)
     {
+        destination.Clear();
         float cellSize = _config.CellSize;
         int minCx = (int)Math.Floor((center.X - radiusMeters) / cellSize);
         int maxCx = (int)Math.Floor((center.X + radiusMeters) / cellSize);
