@@ -433,7 +433,8 @@ public class PhysicsAndAudioTests : IDisposable
     public void StreamingManager_TraversalAt100Mps_ZeroHeapAllocations()
     {
         var grid = new WorldGrid();
-        using var streamer = new StreamingManager(grid);
+        var config = new WorldConfig { UnloadRadiusRingA = 1000f };
+        using var streamer = new StreamingManager(grid, config);
         streamer.Physics = _physics;
         streamer.Audio = _audio;
 
@@ -455,6 +456,11 @@ public class PhysicsAndAudioTests : IDisposable
             streamer.Update(1.0 / 60.0, in pos, in velocity);
         }
 
+        var measurementEnd = new WorldPosition(currentX + 100.0, 0.0, currentZ);
+        WaitForStreamingToSettle(streamer, in measurementEnd, in velocity);
+        var measurementStart = new WorldPosition(currentX, 0.0, currentZ);
+        WaitForStreamingToSettle(streamer, in measurementStart, in velocity);
+
         // Measure steady state allocation
         GC.Collect(2, GCCollectionMode.Forced, true);
         GC.WaitForPendingFinalizers();
@@ -475,5 +481,31 @@ public class PhysicsAndAudioTests : IDisposable
 
         // Verify zero or near-zero allocations in the streaming loop (excluding thread pool task dispatch)
         Assert.True(totalAlloc < 1024, $"Expected zero steady-state allocation during traversal, got {totalAlloc} bytes");
+    }
+
+    private static void WaitForStreamingToSettle(
+        StreamingManager streamer,
+        in WorldPosition playerPosition,
+        in System.Numerics.Vector3 playerVelocity)
+    {
+        int consecutiveIdleFrames = 0;
+        for (int i = 0; i < 1000; i++)
+        {
+            streamer.Update(1.0 / 60.0, in playerPosition, in playerVelocity);
+
+            if (streamer.InFlightCount == 0 && streamer.ReadyToFinalizeCount == 0)
+            {
+                if (++consecutiveIdleFrames == 2)
+                    return;
+            }
+            else
+            {
+                consecutiveIdleFrames = 0;
+            }
+
+            System.Threading.Thread.Sleep(1);
+        }
+
+        Assert.Fail("Streaming jobs did not settle during test warmup.");
     }
 }
