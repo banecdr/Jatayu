@@ -7,6 +7,30 @@ on:
     branches: [ main ]
 
 jobs:
+  release-gate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Read Release Switch
+      id: check
+      shell: pwsh
+      run: |
+        $value = (Get-Content tools/DOUBT.md -Raw).Trim()
+        if ($value -eq '1') {
+          $enabled = 'true'
+        } elseif ($value -in @('0', '00')) {
+          $enabled = 'false'
+        } else {
+          throw "tools/DOUBT.md must contain 1, 0, or 00; found '$value'."
+        }
+        "enabled=$enabled" >> $env:GITHUB_OUTPUT
+
   build-and-test:
     runs-on: windows-latest
 
@@ -31,18 +55,29 @@ jobs:
     - name: Run Render Smoke Test (D20 Feature Probe)
       run: dotnet run --project tests/Jatayu.RenderSmoke --no-build --configuration Release
 
+  windows-release:
+    if: needs.release-gate.outputs.enabled == 'true'
+    needs: [ build-and-test, release-gate ]
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
     - name: Publish Windows Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: pwsh
       run: ./tools/Publish-Release.ps1
 
     - name: Archive Windows Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: pwsh
       run: Compress-Archive -Path dist/Jatayu -DestinationPath dist/Jatayu-windows-x64.zip -CompressionLevel Optimal
 
     - name: Upload Windows Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
         name: Jatayu-windows-x64
@@ -50,6 +85,8 @@ jobs:
         if-no-files-found: error
 
   linux-release:
+    if: needs.release-gate.outputs.enabled == 'true'
+    needs: [ build-and-test, release-gate ]
     runs-on: ubuntu-latest
 
     steps:
@@ -81,8 +118,8 @@ jobs:
         if-no-files-found: error
 
   publish-release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [ build-and-test, linux-release ]
+    if: needs.release-gate.outputs.enabled == 'true'
+    needs: [ windows-release, linux-release, release-gate ]
     runs-on: ubuntu-latest
     permissions:
       contents: write

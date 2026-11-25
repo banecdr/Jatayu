@@ -71,7 +71,7 @@ To export the Linux x64 package, run:
 
 This builds and validates a self-contained Linux x64 package in `dist/Jatayu-linux-x64`. Run it on Linux with `./Jatayu`; the .NET runtime is bundled, but a Vulkan-capable GPU driver and the native windowing/audio system libraries are still required.
 
-After a push to `main` passes CI, GitHub Actions creates a release and marks it as the latest. The release includes `Jatayu-windows-x64.zip` and `Jatayu-linux-x64.tar.gz`.
+After a push to `main` passes CI, GitHub Actions creates a release and marks it as the latest when `tools/DOUBT.md` contains `1`. Set it to `0` (or `00`) to skip release builds and publishing while keeping CI checks enabled. Releases include `Jatayu-windows-x64.zip` and `Jatayu-linux-x64.tar.gz`.
 
 ## License
 
