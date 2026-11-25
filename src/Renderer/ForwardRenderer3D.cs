@@ -1388,44 +1388,44 @@ public sealed class ForwardRenderer3D : IDisposable
             );
         }
 
-        _pbrDescriptorSets[0] = _frameDescriptorSet;
-        _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
-        cmd.BindDescriptorSets(
-            VkPipelineBindPoint.Graphics,
-            _shadowPipelineLayout,
-            0,
-            _pbrDescriptorSets,
-            Span<ByteSize32>.Empty
-        );
-
-        for (int i = 0; i < _shadowCasters.Count; i++)
+        if (!gpuInstancesDrawn)
         {
-            var item = _shadowCasters[i];
-            if (gpuInstancesDrawn && _currentInstanceBuffer is { StaticCount: > 0 } && item.IsWorldGridStatic)
-                continue;
-
-            var pc = new PbrPushConstants
-            {
-                ModelMatrix = item.CameraRelativeModel,
-                ViewProjMatrix = cascadeVp,
-                LightViewProj = cascadeVp,
-                MaterialId = item.MaterialId,
-                UseInstanceBuffer = 0,
-            };
-
-            CommandBufferExtensions.PushConstants(
-                cmd,
+            _pbrDescriptorSets[0] = _frameDescriptorSet;
+            _pbrDescriptorSets[1] = _currentBindlessTable.DescriptorSet;
+            cmd.BindDescriptorSets(
+                VkPipelineBindPoint.Graphics,
                 _shadowPipelineLayout,
-                VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
-                new ByteSize(0),
-                new ReadOnlySpan<PbrPushConstants>(&pc, 1)
+                0,
+                _pbrDescriptorSets,
+                Span<ByteSize32>.Empty
             );
 
-            _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-            _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
-            cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-            cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
-            cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+            for (int i = 0; i < _shadowCasters.Count; i++)
+            {
+                var item = _shadowCasters[i];
+                var pc = new PbrPushConstants
+                {
+                    ModelMatrix = item.CameraRelativeModel,
+                    ViewProjMatrix = cascadeVp,
+                    LightViewProj = cascadeVp,
+                    MaterialId = item.MaterialId,
+                    UseInstanceBuffer = 0,
+                };
+
+                CommandBufferExtensions.PushConstants(
+                    cmd,
+                    _shadowPipelineLayout,
+                    VkShaderStageFlags.VertexBit | VkShaderStageFlags.FragmentBit,
+                    new ByteSize(0),
+                    new ReadOnlySpan<PbrPushConstants>(&pc, 1)
+                );
+
+                _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+                cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
+            }
         }
     }
 

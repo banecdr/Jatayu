@@ -1766,6 +1766,9 @@ public static class Program
                     ref var t = ref demoObj.SceneEntity.Get<Transform>();
                     t.Position = worldPos;
                     t.Rotation = worldRot;
+                    t.WorldX = worldPos.X + originShift.CurrentOrigin.X;
+                    t.WorldY = worldPos.Y + originShift.CurrentOrigin.Y;
+                    t.WorldZ = worldPos.Z + originShift.CurrentOrigin.Z;
 
                     Vector3 relPos = worldPos - camera.Position;
                     Matrix4x4 model = Matrix4x4.CreateScale(demoObj.Scale) *
