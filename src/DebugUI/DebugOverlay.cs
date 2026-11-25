@@ -210,6 +210,7 @@ public sealed class DebugOverlay
                 ImGui.TextColored(_cyan, "  #5 Neon Blue:     Emissive 4.0 lux, Glow (0.2, 0.8, 1.0)"u8);
                 ImGui.TextColored(_green, "  #6 Checkerboard:  Bindless Slot #0 (Anisotropic 16x)"u8);
                 ImGui.TextColored(new float4(0.5f, 0.55f, 0.6f, 1.0f), "  #7 Ground Slate:  Roughness 0.90 (200m x 200m Plane)"u8);
+                ImGui.TextColored(new float4(1.0f, 1.0f, 1.0f, 1.0f), "  #8 Mirror Sphere: Metallic 1.00, Roughness 0.00 (White)"u8);
             }
 
             // -------------------------------------------------------------------------------------

@@ -329,6 +329,15 @@ public static class Program
             Roughness = 0.85f
         });
 
+        // Slot 8: Interactive Mirror Sphere (White Albedo, Roughness = 0.0, Metallic = 1.0)
+        uint mirrorSphereMatId = materialTable.RegisterMaterial(new Material
+        {
+            Name = "MirrorSphere",
+            BaseColor = Vector4.One,
+            Metallic = 1.0f,
+            Roughness = 0.0f
+        });
+
         materialTable.Flush(uploadManager);
 
         // ---------------------------------------------------------------------------------------------
@@ -786,7 +795,7 @@ public static class Program
             );
             var sEntity = scene.CreateEntity(
                 new Transform(sPos.X, sPos.Y, sPos.Z, Quaternion.Identity, new Vector3(sphereRadius)),
-                new MeshRenderer(sphereMesh, materialId: goldMatId, castShadows: true)
+                new MeshRenderer(sphereMesh, materialId: mirrorSphereMatId, castShadows: true)
             );
             sEntity.Add(new RigidBodyComponent
             {
@@ -802,7 +811,7 @@ public static class Program
                 Body = sBody,
                 SceneEntity = sEntity,
                 MeshId = sphereSlice.MeshId,
-                MaterialId = goldMatId,
+                MaterialId = mirrorSphereMatId,
                 Scale = new Vector3(sphereRadius),
                 BoundingRadius = sphereRadius,
                 PrevTransform = Matrix4x4.CreateScale(sphereRadius) * Matrix4x4.CreateTranslation(sPos.X, sPos.Y, sPos.Z)
@@ -848,7 +857,7 @@ public static class Program
 
             var ballEntity = scene.CreateEntity(
                 new Transform(spawnPos.X, spawnPos.Y, spawnPos.Z, Quaternion.Identity, new Vector3(cannonRadius)),
-                new MeshRenderer(sphereMesh, materialId: chromeMatId, castShadows: true)
+                new MeshRenderer(sphereMesh, materialId: mirrorSphereMatId, castShadows: true)
             );
             ballEntity.Add(new RigidBodyComponent
             {
@@ -865,7 +874,7 @@ public static class Program
                 Body = ballBody,
                 SceneEntity = ballEntity,
                 MeshId = sphereSlice.MeshId,
-                MaterialId = chromeMatId,
+                MaterialId = mirrorSphereMatId,
                 Scale = new Vector3(cannonRadius),
                 BoundingRadius = cannonRadius,
                 PrevTransform = Matrix4x4.CreateScale(cannonRadius) * Matrix4x4.CreateTranslation(spawnPos)
