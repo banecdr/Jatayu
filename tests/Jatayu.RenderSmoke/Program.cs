@@ -119,10 +119,20 @@ public static class Program
         }
         catch (Exception ex)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"[Vulkan Exception]: {ex.Message}");
-            Console.ResetColor();
-            failureCount++;
+            if (string.Equals(Environment.GetEnvironmentVariable("GITHUB_ACTIONS"), "true", StringComparison.OrdinalIgnoreCase) &&
+                ex.Message.Contains("VK_ERROR_INCOMPATIBLE_DRIVER", StringComparison.Ordinal))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("[Vulkan] No compatible driver on this GitHub Actions runner; skipping D10 hardware probe.");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Vulkan Exception]: {ex.Message}");
+                Console.ResetColor();
+                failureCount++;
+            }
         }
 
         // -----------------------------------------------------------------------------------------
