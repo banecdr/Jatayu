@@ -201,13 +201,17 @@ public sealed class ForwardRenderer3D : IDisposable
         public readonly Mesh.Mesh Mesh;
         public readonly Matrix4x4 CameraRelativeModel;
         public readonly uint MaterialId;
+        public readonly Vector3 Center;
+        public readonly float BoundingRadius;
         public readonly bool IsWorldGridStatic;
 
-        public RenderItem(Mesh.Mesh mesh, in Matrix4x4 cameraRelativeModel, uint materialId, bool isWorldGridStatic = false)
+        public RenderItem(Mesh.Mesh mesh, in Matrix4x4 cameraRelativeModel, uint materialId, Vector3 center = default, float boundingRadius = 0f, bool isWorldGridStatic = false)
         {
             Mesh = mesh;
             CameraRelativeModel = cameraRelativeModel;
             MaterialId = materialId;
+            Center = center;
+            BoundingRadius = boundingRadius;
             IsWorldGridStatic = isWorldGridStatic;
         }
     }
@@ -243,12 +247,12 @@ public sealed class ForwardRenderer3D : IDisposable
 
             if (Frustum.IsSphereVisible(relPos, radius))
             {
-                VisibleItems.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId));
+                VisibleItems.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId, relPos, radius));
             }
 
             if (mr.CastShadows)
             {
-                ShadowCasters.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId));
+                ShadowCasters.Add(new RenderItem(mr.Mesh, cameraRelativeModel, mr.MaterialId, relPos, radius));
             }
         }
     }
@@ -1211,7 +1215,7 @@ public sealed class ForwardRenderer3D : IDisposable
                                 Matrix4x4.CreateFromQuaternion(rot) *
                                 Matrix4x4.CreateTranslation(relPos);
 
-                            var item = new RenderItem(mesh, cameraRelativeModel, inst.MaterialId, isWorldGridStatic: true);
+                            var item = new RenderItem(mesh, cameraRelativeModel, inst.MaterialId, relPos, radius, isWorldGridStatic: true);
                             _visibleItems.Add(item);
 
                             if ((inst.Flags & StaticInstanceFlags.CastShadow) != 0)
@@ -1288,8 +1292,9 @@ public sealed class ForwardRenderer3D : IDisposable
         }
 
         // 6. Register Shadow Pass(es)
+        bool sunHasLight = lightEnv.SunEnabled && lightEnv.Sun.Intensity > 0.001f;
         bool hasGpuShadowCasters = cascadedShadowMap != null && instanceBuffer is { TotalCount: > 0 };
-        if (lightEnv.Sun.CastsShadows && (_shadowCasters.Count > 0 || hasGpuShadowCasters))
+        if (sunHasLight && lightEnv.Sun.CastsShadows && (_shadowCasters.Count > 0 || hasGpuShadowCasters))
         {
             if (cascadedShadowMap != null)
             {
@@ -1432,9 +1437,18 @@ public sealed class ForwardRenderer3D : IDisposable
                 Span<ByteSize32>.Empty
             );
 
+            _shadowFrustum.Update(cascadeVp, Vector3.Zero);
+            nint lastVertexBufferHandle = 0;
+            ulong lastVertexOffset = ulong.MaxValue;
+            nint lastIndexBufferHandle = 0;
+            ulong lastIndexOffset = ulong.MaxValue;
+
             for (int i = 0; i < _shadowCasters.Count; i++)
             {
                 var item = _shadowCasters[i];
+                if (!_shadowFrustum.IsSphereVisible(item.Center, item.BoundingRadius))
+                    continue;
+
                 var pc = new PbrPushConstants
                 {
                     ModelMatrix = item.CameraRelativeModel,
@@ -1452,10 +1466,24 @@ public sealed class ForwardRenderer3D : IDisposable
                     new ReadOnlySpan<PbrPushConstants>(&pc, 1)
                 );
 
-                _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-                _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
-                cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-                cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                nint vbHandle = item.Mesh.VertexBuffer.Handle.VkHandle;
+                if (vbHandle != lastVertexBufferHandle || (ulong)item.Mesh.VertexOffset != lastVertexOffset)
+                {
+                    _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                    _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                    cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+                    lastVertexBufferHandle = vbHandle;
+                    lastVertexOffset = (ulong)item.Mesh.VertexOffset;
+                }
+
+                nint ibHandle = item.Mesh.IndexBuffer.Handle.VkHandle;
+                if (ibHandle != lastIndexBufferHandle || (ulong)item.Mesh.IndexOffset != lastIndexOffset)
+                {
+                    cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                    lastIndexBufferHandle = ibHandle;
+                    lastIndexOffset = (ulong)item.Mesh.IndexOffset;
+                }
+
                 cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
             }
         }
@@ -1720,6 +1748,11 @@ public sealed class ForwardRenderer3D : IDisposable
         }
         else
         {
+            nint lastVertexBufferHandle = 0;
+            ulong lastVertexOffset = ulong.MaxValue;
+            nint lastIndexBufferHandle = 0;
+            ulong lastIndexOffset = ulong.MaxValue;
+
             for (int i = 0; i < _visibleItems.Count; i++)
             {
                 var item = _visibleItems[i];
@@ -1740,10 +1773,24 @@ public sealed class ForwardRenderer3D : IDisposable
                     new ReadOnlySpan<PbrPushConstants>(&pc, 1)
                 );
 
-                _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
-                _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
-                cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
-                cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                nint vbHandle = item.Mesh.VertexBuffer.Handle.VkHandle;
+                if (vbHandle != lastVertexBufferHandle || (ulong)item.Mesh.VertexOffset != lastVertexOffset)
+                {
+                    _vertexBufferArray[0] = item.Mesh.VertexBuffer.Handle;
+                    _vertexOffsetArray[0] = new ByteSize64(item.Mesh.VertexOffset);
+                    cmd.BindVertexBuffers(0, _vertexBufferArray, _vertexOffsetArray);
+                    lastVertexBufferHandle = vbHandle;
+                    lastVertexOffset = (ulong)item.Mesh.VertexOffset;
+                }
+
+                nint ibHandle = item.Mesh.IndexBuffer.Handle.VkHandle;
+                if (ibHandle != lastIndexBufferHandle || (ulong)item.Mesh.IndexOffset != lastIndexOffset)
+                {
+                    cmd.BindIndexBuffer(item.Mesh.IndexBuffer.Handle, new ByteSize64(item.Mesh.IndexOffset), item.Mesh.IndexType);
+                    lastIndexBufferHandle = ibHandle;
+                    lastIndexOffset = (ulong)item.Mesh.IndexOffset;
+                }
+
                 cmd.DrawIndexed((int)item.Mesh.IndexCount, 1, 0, 0, 0);
             }
         }

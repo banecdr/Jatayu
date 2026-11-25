@@ -264,19 +264,27 @@ float ShadowEvaluateCascade(
 
     // Penumbra width from similar triangles: receiver-blocker distance (metres) x sun angular size.
     float avgBlocker = blockerSum / float(blockerCount);
+
+    // Full umbra early out: if all search taps were solid blockers well above bias, pixel is completely shadowed.
+    if (blockerCount == SHADOW_SEARCH_TAPS && (avgBlocker - uvz.z) > baseBias * 2.5) {
+        return 0.0;
+    }
+
     float blockerDistM = max(avgBlocker - uvz.z, 0.0) / depthPerMetre;
     float softness = max(uLight.ShadowParams.z, 0.5);
     float radiusTexels = clamp(blockerDistM * SHADOW_SUN_TAN * softness / texelWorld,
                                 1.0 + 0.25 * softness, SHADOW_MAX_FILTER_TEXELS);
     float radiusUv = radiusTexels * texelUv;
 
+    // Adaptive filter taps: narrow penumbras (contact shadows) need only 8 taps; wide penumbras use 16.
+    int filterTaps = radiusTexels <= 2.2 ? 8 : SHADOW_FILTER_TAPS;
     float lit = 0.0;
-    for (int i = 0; i < SHADOW_FILTER_TAPS; ++i) {
+    for (int i = 0; i < filterTaps; ++i) {
         vec2 off = ShadowRotateDisk(VOGEL_DISK_16[i], rot) * radiusUv;
         float planeBias = clamp(dot(off, gradZ), -slopeBias, slopeBias);
         lit += texture(uShadowMapArray, vec4(uvz.xy + off, layer, uvz.z + planeBias + baseBias));
     }
-    return lit / float(SHADOW_FILTER_TAPS);
+    return lit / float(filterTaps);
 }
 
 // --------------------------------------------------------------------------------------------------
