@@ -6,9 +6,7 @@ layout(set = 0, binding = 0, rgba16f) writeonly uniform image2DArray outEnvironm
 
 const vec3 ZenithColor = vec3(0.12, 0.32, 0.72);
 const vec3 HorizonColor = vec3(0.70, 0.82, 0.95);
-const vec3 GroundColor = vec3(0.32, 0.36, 0.30);
-const vec3 SunDirection = normalize(vec3(0.6, 1.0, 0.4));
-const vec3 SunColor = vec3(1.0, 0.98, 0.92);
+const vec3 GroundColor = vec3(0.18, 0.16, 0.14);
 
 vec3 CubeDirection(vec2 uv, uint face) {
     vec2 st = uv * 2.0 - 1.0;
@@ -37,13 +35,8 @@ void main() {
         // Sky hemisphere: blend horizon to zenith matching skybox.frag
         float t = pow(dir.y, 0.6);
         color = mix(HorizonColor, ZenithColor, t);
-
-        // Atmospheric sun glow halo in environment reflection probe
-        float sunDot = max(dot(dir, SunDirection), 0.0);
-        float sunGlow = pow(sunDot, 12.0) * 0.6;
-        color += (SunColor * sunGlow);
     } else {
-        // Ground hemisphere: blend horizon to ground matching slate/grass
+        // Ground hemisphere: blend horizon to ground matching skybox.frag
         float t = pow(-dir.y, 0.7);
         color = mix(HorizonColor, GroundColor, t);
     }

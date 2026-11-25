@@ -415,14 +415,5 @@ void main() {
 
     vec3 finalColor = directLighting + localLighting + ambientLighting + emissive;
 
-    // ACES Filmic Tone Mapping (Krzysztof Narkowicz fit) + sRGB Gamma Correction for SDR UNorm framebuffer
-    float a = 2.51;
-    float b = 0.03;
-    float c = 2.43;
-    float d = 0.59;
-    float e = 0.14;
-    vec3 mapped = clamp((finalColor * (a * finalColor + b)) / (finalColor * (c * finalColor + d) + e), 0.0, 1.0);
-    vec3 srgb = pow(max(mapped, vec3(0.0)), vec3(1.0 / 2.2));
-
-    outColor = vec4(srgb, albedo.a);
+    outColor = vec4(finalColor, albedo.a);
 }
