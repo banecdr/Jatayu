@@ -27,6 +27,8 @@ public sealed class AudioEngine : IDisposable
 {
     private Device _device = default!;
     private Context _context = default!;
+    private bool _deviceOpened;
+    private bool _contextCreated;
     private readonly bool _isHardwareAvailable;
 
     private readonly AudioListener _listener;
@@ -86,9 +88,11 @@ public sealed class AudioEngine : IDisposable
             _device = Alc.OpenDevice(deviceName!);
             if (!_device.IsNull())
             {
+                _deviceOpened = true;
                 _context = _device.CreateContext(default);
                 if (!_context.IsNull())
                 {
+                    _contextCreated = true;
                     _context.MakeCurrent();
                     _isHardwareAvailable = true;
                     try
@@ -129,7 +133,7 @@ public sealed class AudioEngine : IDisposable
         _oneShotPool = new AudioSource[16];
         for (int i = 0; i < _oneShotPool.Length; i++)
         {
-            _oneShotPool[i] = new AudioSource();
+            _oneShotPool[i] = new AudioSource(_isHardwareAvailable);
         }
 
         // Subscribe to floating-origin shift events (Section 1.3, D16)
@@ -162,10 +166,7 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public AudioSource CreateSource()
     {
-        if (!_isHardwareAvailable)
-            return null!;
-
-        var source = new AudioSource();
+        var source = new AudioSource(_isHardwareAvailable);
         lock (_lock)
         {
             _activeSources.Add(source);
@@ -229,17 +230,19 @@ public sealed class AudioEngine : IDisposable
                 JumpClip?.Dispose();
             }
 
-            if (!_context.IsNull())
+            if (_contextCreated)
             {
                 _context.Dispose();
                 _context = default!;
+                _contextCreated = false;
             }
 
-            if (!_device.IsNull())
+            if (_deviceOpened)
             {
                 _device.Close();
                 _device.Dispose();
                 _device = default!;
+                _deviceOpened = false;
             }
 
             _disposed = true;

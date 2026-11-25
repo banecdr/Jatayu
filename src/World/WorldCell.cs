@@ -236,7 +236,7 @@ public sealed class WorldCell
     /// </summary>
     public void SpawnAudioEmitters(Audio.AudioEngine audioEngine, in WorldPosition worldOrigin)
     {
-        if (audioEngine == null || !audioEngine.IsHardwareAvailable || AudioEmitters.Length == 0) return;
+        if (audioEngine == null || AudioEmitters.Length == 0) return;
         DespawnAudioEmitters(audioEngine);
 
         for (int i = 0; i < AudioEmitters.Length; i++)

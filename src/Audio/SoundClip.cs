@@ -23,6 +23,8 @@ public sealed class SoundClip : IDisposable
     private readonly float _durationSeconds;
     private readonly int _sampleRate;
     private readonly int _channels;
+    private bool _bufferCreated;
+    private bool _isValid;
     private bool _disposed;
 
     /// <summary>
@@ -49,7 +51,7 @@ public sealed class SoundClip : IDisposable
     /// <summary>
     /// True if the buffer is allocated and valid.
     /// </summary>
-    public bool IsValid => !_buffer.IsNull();
+    public bool IsValid => _isValid;
 
     /// <summary>
     /// Constructs a sound clip from raw 16-bit signed PCM samples.
@@ -63,13 +65,15 @@ public sealed class SoundClip : IDisposable
         try
         {
             _buffer = Al.GenBuffer();
+            _bufferCreated = !_buffer.IsNull();
             var format = channels == 1 ? AlFormat.Mono16 : AlFormat.Stereo16;
             ReadOnlySpan<byte> byteData = MemoryMarshal.AsBytes(pcmSamples);
             _buffer.SetData(format, byteData, sampleRate);
+            _isValid = _bufferCreated;
         }
         catch
         {
-            _buffer = default;
+            _isValid = false;
         }
     }
 
@@ -86,11 +90,13 @@ public sealed class SoundClip : IDisposable
         try
         {
             _buffer = Al.GenBuffer();
+            _bufferCreated = !_buffer.IsNull();
             _buffer.SetData(format, pcmData, sampleRate);
+            _isValid = _bufferCreated;
         }
         catch
         {
-            _buffer = default;
+            _isValid = false;
         }
     }
 
@@ -281,11 +287,13 @@ public sealed class SoundClip : IDisposable
     {
         if (!_disposed)
         {
-            if (!_buffer.IsNull())
+            if (_bufferCreated)
             {
                 _buffer.Delete();
                 _buffer = AlBuffer.Null;
+                _bufferCreated = false;
             }
+            _isValid = false;
             _disposed = true;
         }
         GC.SuppressFinalize(this);

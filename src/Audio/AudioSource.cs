@@ -22,6 +22,7 @@ public sealed class AudioSource : IDisposable
 {
     private AlSource _source;
     private SoundClip? _clip;
+    private bool _sourceCreated;
     private bool _disposed;
 
     /// <summary>
@@ -38,7 +39,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _clip = value;
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 _source.Buffer = value != null ? value.Buffer : AlBuffer.Null;
             }
@@ -63,7 +64,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _position = value;
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.Position = value; } catch { }
             }
@@ -88,7 +89,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _velocity = value;
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.Velocity = value; } catch { }
             }
@@ -104,7 +105,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _gain = MathF.Max(0.0f, value);
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.Gain = _gain; } catch { }
             }
@@ -120,7 +121,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _pitch = Math.Clamp(value, 0.05f, 32.0f);
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.Pitch = _pitch; } catch { }
             }
@@ -136,7 +137,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _looping = value;
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.Looping = value; } catch { }
             }
@@ -152,7 +153,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _referenceDistance = MathF.Max(0.01f, value);
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.ReferenceDistance = _referenceDistance; } catch { }
             }
@@ -168,7 +169,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _maxDistance = MathF.Max(0.1f, value);
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.MaxDistance = _maxDistance; } catch { }
             }
@@ -184,7 +185,7 @@ public sealed class AudioSource : IDisposable
         set
         {
             _rolloffFactor = MathF.Max(0.0f, value);
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 try { _source.RolloffFactor = _rolloffFactor; } catch { }
             }
@@ -194,22 +195,31 @@ public sealed class AudioSource : IDisposable
     /// <summary>
     /// Gets whether this emitter is currently actively playing sound.
     /// </summary>
-    public bool IsPlaying => !_source.IsNull() && _source.State == AlSourceState.Playing;
+    public bool IsPlaying => _sourceCreated && _source.State == AlSourceState.Playing;
 
     /// <summary>
     /// Gets whether this emitter is paused.
     /// </summary>
-    public bool IsPaused => !_source.IsNull() && _source.State == AlSourceState.Paused;
+    public bool IsPaused => _sourceCreated && _source.State == AlSourceState.Paused;
 
     /// <summary>
     /// Constructs a 3D audio emitter.
     /// </summary>
     public AudioSource()
+        : this(hardwareAvailable: true)
     {
+    }
+
+    internal AudioSource(bool hardwareAvailable)
+    {
+        if (!hardwareAvailable)
+            return;
+
         try
         {
             _source = Al.GenSource();
-            if (!_source.IsNull())
+            _sourceCreated = !_source.IsNull();
+            if (_sourceCreated)
             {
                 _source.Position = _position;
                 _source.Velocity = _velocity;
@@ -224,6 +234,7 @@ public sealed class AudioSource : IDisposable
         catch
         {
             _source = default;
+            _sourceCreated = false;
         }
     }
 
@@ -232,7 +243,7 @@ public sealed class AudioSource : IDisposable
     /// </summary>
     public void Play()
     {
-        if (!_source.IsNull() && _clip != null)
+        if (_sourceCreated && _clip != null)
         {
             _source.Play();
         }
@@ -243,7 +254,7 @@ public sealed class AudioSource : IDisposable
     /// </summary>
     public void PlayOneShot(SoundClip clip, float volumeScale = 1.0f)
     {
-        if (clip == null || _source.IsNull()) return;
+        if (clip == null || !_sourceCreated) return;
         Stop();
         Clip = clip;
         Gain = volumeScale;
@@ -256,7 +267,7 @@ public sealed class AudioSource : IDisposable
     /// </summary>
     public void Pause()
     {
-        if (!_source.IsNull())
+        if (_sourceCreated)
         {
             _source.Pause();
         }
@@ -267,7 +278,7 @@ public sealed class AudioSource : IDisposable
     /// </summary>
     public void Stop()
     {
-        if (!_source.IsNull())
+        if (_sourceCreated)
         {
             _source.Stop();
         }
@@ -286,12 +297,13 @@ public sealed class AudioSource : IDisposable
     {
         if (!_disposed)
         {
-            if (!_source.IsNull())
+            if (_sourceCreated)
             {
                 _source.Stop();
                 _source.Buffer = AlBuffer.Null;
                 _source.Delete();
                 _source = AlSource.Null;
+                _sourceCreated = false;
             }
             _clip = null;
             _disposed = true;
