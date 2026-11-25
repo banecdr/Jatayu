@@ -20,7 +20,7 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Restore Dependencies
-      run: dotnet restore
+      run: dotnet restore -p:Configuration=Release
 
     - name: Build Solution
       run: dotnet build --no-restore --configuration Release
