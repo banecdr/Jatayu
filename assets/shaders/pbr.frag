@@ -392,18 +392,20 @@ void main() {
     vec3 ambientColor = mix(uLight.AmbientGroundColor, uLight.AmbientSkyColor, skyFactor);
     vec3 ambientDiffuse;
     vec3 ambientSpecular;
+    vec3 ambientLighting;
     if ((uLight.CastsShadows & 0x80000000u) != 0u) {
         vec3 irradiance = texture(uIrradianceMap, N).rgb;
         vec3 reflected = reflect(-V, N);
-        vec3 prefiltered = textureLod(uPrefilterMap, reflected, roughness * 4.0).rgb;
+        vec3 prefiltered = textureLod(uPrefilterMap, vec3(reflected.x, -reflected.y, reflected.z), roughness * 4.0).rgb;
         vec3 fresnelRoughness = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
-        ambientDiffuse = irradiance * albedo.rgb * (1.0 - metallic) / PI;
+        ambientDiffuse = irradiance * albedo.rgb * (1.0 - metallic);
         ambientSpecular = prefiltered * (fresnelRoughness * brdf.x + brdf.y);
+        ambientLighting = (ambientDiffuse * uLight.AmbientIntensity + ambientSpecular) * ao;
     } else {
         ambientDiffuse = ambientColor * albedo.rgb * (1.0 - metallic);
         ambientSpecular = ambientColor * (F0 * brdf.x + brdf.y);
+        ambientLighting = (ambientDiffuse + ambientSpecular) * uLight.AmbientIntensity * ao;
     }
-    vec3 ambientLighting = (ambientDiffuse + ambientSpecular) * uLight.AmbientIntensity * ao;
 
     // Emissive contribution
     vec3 emissive = mat.EmissiveFactor * mat.EmissiveIntensity;
