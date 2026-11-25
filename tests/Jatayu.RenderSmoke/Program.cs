@@ -112,10 +112,9 @@ public static class Program
             catch (InvalidOperationException ex)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine(">> D10 Hardware Floor: INCOMPLETE (Decision D20 fallback to SKIPPED on CI/software runner)");
+                Console.WriteLine(">> D10 Hardware Floor: SKIPPED (Decision D20 fallback on CI/software runner)");
                 Console.WriteLine(ex.Message);
                 Console.ResetColor();
-                failureCount++;
             }
         }
         catch (Exception ex)
