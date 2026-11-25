@@ -51,6 +51,12 @@ public static class Program
                     string? shaderOutputDir = args.Length > 2 ? args[2] : null;
                     return ShaderCooker.CookAllShaders(shaderInputDir, shaderOutputDir);
 
+                case "cook-hdr-cubemap":
+                    if (args.Length < 3) { Console.WriteLine("Usage: cook-hdr-cubemap <inputHdrOrExr> <outputJtex> [resolution=512] [format=rgba16f|rgba32f]"); return 1; }
+                    int cubemapRes = args.Length > 3 && int.TryParse(args[3], out int parsedRes) ? parsedRes : 512;
+                    string cubemapFmt = args.Length > 4 ? args[4] : "rgba16f";
+                    return ExecuteCookHdrCubemap(args[1], args[2], cubemapRes, cubemapFmt);
+
                 case "inspect":
                     if (args.Length < 2) { Console.WriteLine("Usage: inspect <packagePath.jpak>"); return 1; }
                     return ExecuteInspect(args[1]);
@@ -226,6 +232,69 @@ public static class Program
         return 0;
     }
 
+    private static int ExecuteCookHdrCubemap(string inputFile, string outputFile, int resolution = 512, string format = "rgba16f")
+    {
+        Console.WriteLine($"[Cooker] Baking HDR equirectangular panorama into {resolution}x{resolution} cubemap: {inputFile} -> {outputFile}");
+        if (!File.Exists(inputFile))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Error] Input file not found: {inputFile}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        string scriptPath = Path.Combine(AppContext.BaseDirectory, "bake_hdr_cubemap.py");
+        if (!File.Exists(scriptPath))
+            scriptPath = Path.Combine(Directory.GetCurrentDirectory(), "tools", "Jatayu.Cooker", "bake_hdr_cubemap.py");
+
+        if (!File.Exists(scriptPath))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Error] Cubemap baking script not found at: {scriptPath}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "python",
+            Arguments = $"\"{scriptPath}\" \"{inputFile}\" \"{outputFile}\" -r {resolution} -f {format}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        if (process == null)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("[Error] Failed to start python process for baking cubemap.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        string stdout = process.StandardOutput.ReadToEnd();
+        string stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+            Console.WriteLine(stdout.Trim());
+
+        if (process.ExitCode != 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Cooker Error] Python bake script exited with code {process.ExitCode}:\n{stderr}");
+            Console.ResetColor();
+            return process.ExitCode;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"[Cooker] Cubemap asset successfully baked: {outputFile}");
+        Console.ResetColor();
+        return 0;
+    }
+
     private static void PrintUsage()
     {
         Console.WriteLine("Available commands:");
@@ -233,6 +302,7 @@ public static class Program
         Console.WriteLine("  cook-model <inputGltf> <outputDir>      : Bakes glTF meshes into optimized .jmesh files");
         Console.WriteLine("  cook-pak <outputJpak> <inputDir>        : Bundles cooked assets into a .jpak package");
         Console.WriteLine("  cook-shaders [inputDir] [outputDir]     : Compiles GLSL shaders into SPIR-V (.spv) bytecode");
+        Console.WriteLine("  cook-hdr-cubemap <input> <output> [res] : Bakes an equirectangular HDR/EXR into a 6-face .jtex cubemap");
         Console.WriteLine("  inspect <packagePath.jpak>              : Inspects .jpak Table of Contents header");
     }
 }

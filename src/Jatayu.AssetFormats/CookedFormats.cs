@@ -46,6 +46,8 @@ public enum CookedTextureFormat : byte
     Bc5Rg = 6,
     Bc7Rgba = 7,
     BasisUniversal = 8,
+    Rgba16Float = 9,
+    Rgba32Float = 10,
 }
 
 [Flags]

@@ -152,4 +152,30 @@ public class CookerTests
                 File.Delete(tempPak);
         }
     }
+
+    [Fact]
+    public void CookedTextureHeader_ValidatesBakedCubemapAsset()
+    {
+        string cubemapPath = Path.Combine(AppContext.BaseDirectory, "assets", "textures", "HDRI", "sunflowers_puresky_cubemap_512.jtex");
+        if (!File.Exists(cubemapPath))
+            cubemapPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "textures", "HDRI", "sunflowers_puresky_cubemap_512.jtex");
+
+        if (!File.Exists(cubemapPath))
+            return; // Skip if offline bake not run in clean env
+
+        using var fs = File.OpenRead(cubemapPath);
+        int headerSize = Marshal.SizeOf<CookedTextureHeader>();
+        Span<byte> headerBytes = stackalloc byte[headerSize];
+        fs.ReadExactly(headerBytes);
+        var header = MemoryMarshal.Read<CookedTextureHeader>(headerBytes);
+
+        Assert.True(header.IsValid);
+        Assert.Equal(512u, header.Width);
+        Assert.Equal(512u, header.Height);
+        Assert.Equal(CookedTextureFormat.Rgba16Float, header.Format);
+        Assert.True(header.Flags.HasFlag(TextureFlags.Cubemap));
+
+        long expectedPayload = 6L * 512 * 512 * 4 * 2; // 6 faces * 512 * 512 * RGBA16F (8 bytes/pixel)
+        Assert.Equal(expectedPayload, fs.Length - headerSize);
+    }
 }
