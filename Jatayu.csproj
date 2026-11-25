@@ -113,6 +113,14 @@
     </None>
   </ItemGroup>
 
+  <!-- Audio Assets: copied for both Debug and Release configurations, as well as publishing -->
+  <ItemGroup>
+    <None Include="assets\sounds\**\*.wav" Condition="Exists('assets\sounds')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
   <!-- Release configuration: Copy ONLY pre-compiled SPIR-V binaries and production .jpak containers -->
   <ItemGroup Condition="'$(Configuration)' == 'Release'">
     <None Include="assets\generated\world.jpak" Condition="Exists('assets\generated\world.jpak')">
@@ -134,15 +142,15 @@
   <!-- Publish shaders outside the source tree; Release runtime resolves SPIR-V beside the executable. -->
   <Target Name="PrecompileShadersRelease" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release'">
     <PropertyGroup>
-      <_ReleaseShaderOutputDir>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)release-shaders</_ReleaseShaderOutputDir>
+      <_ReleaseShaderOutputDir>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/$(RuntimeIdentifier)/release-shaders</_ReleaseShaderOutputDir>
     </PropertyGroup>
     <Message Importance="high" Text="[Release Publish] Compiling shaders into $(_ReleaseShaderOutputDir)" />
-    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)tools\Jatayu.Cooker\Jatayu.Cooker.csproj&quot; --configuration Release -- cook-shaders &quot;$(MSBuildThisFileDirectory)assets\shaders&quot; &quot;$(_ReleaseShaderOutputDir)&quot;" />
+    <Exec Command="dotnet run --project &quot;$(MSBuildThisFileDirectory)tools/Jatayu.Cooker/Jatayu.Cooker.csproj&quot; --configuration Release -- cook-shaders &quot;$(MSBuildThisFileDirectory)assets/shaders&quot; &quot;$(_ReleaseShaderOutputDir)&quot;" />
     <ItemGroup>
-      <_ReleaseShader Include="$(_ReleaseShaderOutputDir)\*.spv" />
+      <_ReleaseShader Include="$(_ReleaseShaderOutputDir)/*.spv" />
     </ItemGroup>
     <Error Condition="'@(_ReleaseShader)' == ''" Text="Release shader compilation produced no SPIR-V files." />
-    <Copy SourceFiles="@(_ReleaseShader)" DestinationFolder="$(PublishDir)assets\shaders" />
+    <Copy SourceFiles="@(_ReleaseShader)" DestinationFolder="$(PublishDir)assets/shaders" />
   </Target>
 
 </Project>

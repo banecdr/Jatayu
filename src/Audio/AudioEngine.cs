@@ -63,6 +63,22 @@ public sealed class AudioEngine : IDisposable
         set => _listener.Gain = value;
     }
 
+    /// <summary>
+    /// Gets or sets the OpenAL 3D spatial attenuation distance model.
+    /// Defaults to LinearDistanceClamped so audio fades completely to silence beyond MaxDistance.
+    /// </summary>
+    public AlDistanceModel DistanceModel
+    {
+        get => _isHardwareAvailable ? Al.DistanceModel : AlDistanceModel.None;
+        set
+        {
+            if (_isHardwareAvailable)
+            {
+                Al.DistanceModel = value;
+            }
+        }
+    }
+
     public AudioEngine(string? deviceName = null)
     {
         try
@@ -75,7 +91,15 @@ public sealed class AudioEngine : IDisposable
                 {
                     _context.MakeCurrent();
                     _isHardwareAvailable = true;
-                    Log.Info($"[AudioEngine] OpenAL initialized successfully on device: {_device.Specifier}");
+                    try
+                    {
+                        Al.DistanceModel = AlDistanceModel.LinearDistanceClamped;
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning($"[AudioEngine] Failed to set DistanceModel: {ex.Message}");
+                    }
+                    Log.Info($"[AudioEngine] OpenAL initialized successfully on device: {_device.Specifier} (DistanceModel: LinearDistanceClamped)");
                 }
                 else
                 {

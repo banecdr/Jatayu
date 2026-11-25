@@ -95,6 +95,95 @@ public sealed class SoundClip : IDisposable
     }
 
     /// <summary>
+    /// Loads a standard PCM .wav audio file into an OpenAL sound clip.
+    /// If the audio file has 2 channels (stereo), it is automatically downmixed to mono
+    /// so that OpenAL can apply full 3D spatial attenuation and directional panning.
+    /// </summary>
+    public static SoundClip FromFile(string filePath)
+    {
+        if (!System.IO.File.Exists(filePath))
+            throw new System.IO.FileNotFoundException($"Audio file not found: {filePath}", filePath);
+
+        using var stream = System.IO.File.OpenRead(filePath);
+        using var reader = new System.IO.BinaryReader(stream);
+
+        // RIFF header
+        string riff = new string(reader.ReadChars(4));
+        if (riff != "RIFF")
+            throw new System.IO.InvalidDataException($"Invalid WAV file (missing RIFF header): {filePath}");
+
+        reader.ReadInt32(); // total size
+
+        string wave = new string(reader.ReadChars(4));
+        if (wave != "WAVE")
+            throw new System.IO.InvalidDataException($"Invalid WAV file (missing WAVE format): {filePath}");
+
+        short formatTag = 0;
+        short channels = 0;
+        int sampleRate = 0;
+        short bitsPerSample = 0;
+        byte[]? pcmData = null;
+
+        while (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            string chunkId = new string(reader.ReadChars(4));
+            int chunkSize = reader.ReadInt32();
+
+            if (chunkId == "fmt ")
+            {
+                formatTag = reader.ReadInt16();
+                channels = reader.ReadInt16();
+                sampleRate = reader.ReadInt32();
+                reader.ReadInt32(); // byte rate
+                reader.ReadInt16(); // block align
+                bitsPerSample = reader.ReadInt16();
+
+                // Skip any extra format bytes
+                if (chunkSize > 16)
+                    reader.BaseStream.Seek(chunkSize - 16, System.IO.SeekOrigin.Current);
+            }
+            else if (chunkId == "data")
+            {
+                pcmData = reader.ReadBytes(chunkSize);
+                break; // Got audio data
+            }
+            else
+            {
+                // Skip unknown chunk (e.g. LIST, INFO, JUNK)
+                reader.BaseStream.Seek(chunkSize, System.IO.SeekOrigin.Current);
+            }
+        }
+
+        if (pcmData == null || pcmData.Length == 0)
+            throw new System.IO.InvalidDataException($"No audio PCM data found in WAV file: {filePath}");
+
+        // Downmix 16-bit stereo to mono for OpenAL 3D spatial audio
+        if (channels == 2 && bitsPerSample == 16)
+        {
+            int sampleCount = pcmData.Length / 4; // 2 channels * 2 bytes = 4 bytes per stereo sample
+            var monoSamples = new short[sampleCount];
+            var srcSpan = MemoryMarshal.Cast<byte, short>(pcmData.AsSpan());
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                int left = srcSpan[i * 2];
+                int right = srcSpan[i * 2 + 1];
+                monoSamples[i] = (short)((left + right) / 2);
+            }
+
+            return new SoundClip(monoSamples, sampleRate, channels: 1);
+        }
+
+        var alFormat = channels switch
+        {
+            1 => bitsPerSample == 8 ? AlFormat.Mono8 : AlFormat.Mono16,
+            _ => bitsPerSample == 8 ? AlFormat.Stereo8 : AlFormat.Stereo16,
+        };
+
+        return new SoundClip(pcmData, alFormat, sampleRate);
+    }
+
+    /// <summary>
     /// Generates a procedural sine wave tone (useful for tests and audio diagnostics).
     /// </summary>
     public static SoundClip CreateSineWave(float frequency = 440.0f, float durationSeconds = 1.0f, int sampleRate = 44100)

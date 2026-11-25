@@ -30,3 +30,34 @@ jobs:
 
     - name: Run Render Smoke Test (D20 Feature Probe)
       run: dotnet run --project tests/Jatayu.RenderSmoke --no-build --configuration Release
+
+  linux-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Publish Linux Release
+      shell: pwsh
+      run: ./tools/Publish-Linux-Release.ps1
+
+    - name: Verify Linux Release Executable
+      run: |
+        test -x dist/Jatayu-linux-x64/Jatayu
+        file dist/Jatayu-linux-x64/Jatayu
+
+    - name: Archive Linux Release
+      run: tar -czf dist/Jatayu-linux-x64.tar.gz -C dist Jatayu-linux-x64
+
+    - name: Upload Linux Release
+      uses: actions/upload-artifact@v4
+      with:
+        name: Jatayu-linux-x64
+        path: dist/Jatayu-linux-x64.tar.gz
+        if-no-files-found: error

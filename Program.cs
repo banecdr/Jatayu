@@ -668,6 +668,98 @@ public static class Program
         streamingManager.Physics = physicsEngine;
         streamingManager.Audio = audioEngine;
 
+        // ---------------------------------------------------------------------------------------------
+        // Spatial Audio Demo Tracks (Kevin MacLeod) attached to 3D world objects
+        // ---------------------------------------------------------------------------------------------
+        SoundClip? monkeysClip = null;
+        SoundClip? sneekyClip = null;
+        SoundClip? sugarPlumClip = null;
+        SoundClip? hitmanClip = null;
+        AudioSource? monkeysSource = null;
+        AudioSource? sneekySource = null;
+        AudioSource? sugarPlumSource = null;
+        AudioSource? hitmanSource = null;
+
+        if (audioEngine.IsHardwareAvailable)
+        {
+            string soundsDir = Path.Combine(AppContext.BaseDirectory, "assets", "sounds");
+            if (!Directory.Exists(soundsDir) && Directory.Exists("assets/sounds"))
+                soundsDir = "assets/sounds";
+
+            string monkeysPath = Path.Combine(soundsDir, "monkeys.wav");
+            string sneekyPath = Path.Combine(soundsDir, "sneaky_snitch.wav");
+            string sugarPlumPath = Path.Combine(soundsDir, "sugar_plum.wav");
+            string hitmanPath = Path.Combine(soundsDir, "hitman.wav");
+
+            if (File.Exists(monkeysPath))
+            {
+                monkeysClip = SoundClip.FromFile(monkeysPath);
+                monkeysSource = audioEngine.CreateSource();
+                monkeysSource.Clip = monkeysClip;
+                monkeysSource.IsLooping = true;
+                monkeysSource.Gain = 1.0f;
+                monkeysSource.ReferenceDistance = 4.0f;
+                monkeysSource.MaxDistance = 60.0f;
+                monkeysSource.RolloffFactor = 1.0f;
+                monkeysSource.Position = new float3(-4f, 1f, 0f); // Copper Cube
+                monkeysSource.Play();
+                Console.WriteLine($"[Audio] Started spatial playback: Monkeys ({monkeysClip.DurationSeconds:F1}s) @ Copper Cube (-4, 1, 0) | IsPlaying: {monkeysSource.IsPlaying}");
+            }
+            else
+            {
+                Console.WriteLine($"[Audio] WARNING: {monkeysPath} not found!");
+            }
+
+            if (File.Exists(sneekyPath))
+            {
+                sneekyClip = SoundClip.FromFile(sneekyPath);
+                sneekySource = audioEngine.CreateSource();
+                sneekySource.Clip = sneekyClip;
+                sneekySource.IsLooping = true;
+                sneekySource.Gain = 1.0f;
+                sneekySource.ReferenceDistance = 4.0f;
+                sneekySource.MaxDistance = 60.0f;
+                sneekySource.RolloffFactor = 1.0f;
+                sneekySource.Position = new float3(4f, 1f, 0f); // Chrome Cube
+                sneekySource.Play();
+                Console.WriteLine($"[Audio] Started spatial playback: Sneaky Snitch ({sneekyClip.DurationSeconds:F1}s) @ Chrome Cube (4, 1, 0) | IsPlaying: {sneekySource.IsPlaying}");
+            }
+
+            if (File.Exists(sugarPlumPath))
+            {
+                sugarPlumClip = SoundClip.FromFile(sugarPlumPath);
+                sugarPlumSource = audioEngine.CreateSource();
+                sugarPlumSource.Clip = sugarPlumClip;
+                sugarPlumSource.IsLooping = true;
+                sugarPlumSource.Gain = 1.0f;
+                sugarPlumSource.ReferenceDistance = 4.0f;
+                sugarPlumSource.MaxDistance = 60.0f;
+                sugarPlumSource.RolloffFactor = 1.0f;
+                sugarPlumSource.Position = new float3(0f, 3.2f, 0f); // Emissive Crystal
+                sugarPlumSource.Play();
+                Console.WriteLine($"[Audio] Started spatial playback: Sugar Plum Fairy ({sugarPlumClip.DurationSeconds:F1}s) @ Emissive Crystal (0, 3.2, 0) | IsPlaying: {sugarPlumSource.IsPlaying}");
+            }
+
+            if (File.Exists(hitmanPath))
+            {
+                hitmanClip = SoundClip.FromFile(hitmanPath);
+                hitmanSource = audioEngine.CreateSource();
+                hitmanSource.Clip = hitmanClip;
+                hitmanSource.IsLooping = true;
+                hitmanSource.Gain = 1.0f;
+                hitmanSource.ReferenceDistance = 15.0f;
+                hitmanSource.MaxDistance = 200.0f;
+                hitmanSource.RolloffFactor = 1.0f;
+                hitmanSource.Position = new float3(50000f, 5f, -50000f); // 50,000m Monolith
+                hitmanSource.Play();
+                Console.WriteLine($"[Audio] Started spatial playback: Hitman ({hitmanClip.DurationSeconds:F1}s) @ 50,000m Monolith");
+            }
+        }
+        else
+        {
+            Console.WriteLine("[Audio] WARNING: OpenAL Hardware is NOT available (running in headless silent mode)!");
+        }
+
         // Static floor collider for Central Exhibition Pavilion Plinth (160m x 160m, 1m thick box placed so top surface is at Y = PlinthY = 0.10f)
         var plinthFloorBody = physicsEngine.CreateBoxBody(
             new float3(0f, PlinthY - 0.5f, 0f),
@@ -1401,12 +1493,14 @@ public static class Program
             {
                 if (characterModeEnabled)
                 {
-                    // Real FPS mouse look: always active when cursor is captured, or when RMB is held
+                    // Mouse look: always active when cursor is captured, or when RMB is held
                     if (window.IsCursorCaptured || isRightMouseDown)
                     {
                         Vector2 mouseDelta = EngineInput.MouseDelta;
                         const float mouseSensitivity = 0.0022f;
-                        cameraController.Yaw += mouseDelta.X * mouseSensitivity;
+                        bool isTpsMode = cameraController.Distance > 0.35f;
+                        float yawSign = isTpsMode ? -1.0f : 1.0f;
+                        cameraController.Yaw += yawSign * mouseDelta.X * mouseSensitivity;
                         cameraController.Pitch = Math.Clamp(cameraController.Pitch - mouseDelta.Y * mouseSensitivity, -1.4f, 1.4f);
                     }
 

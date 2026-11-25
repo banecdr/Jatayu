@@ -272,6 +272,19 @@ public class PhysicsAndAudioTests : IDisposable
     }
 
     [Fact]
+    public void SoundClip_FromFile_LoadsWavCorrectly()
+    {
+        string wavPath = Path.Combine(AppContext.BaseDirectory, "../../../assets/sounds/monkeys.wav");
+        if (File.Exists(wavPath))
+        {
+            using var clip = SoundClip.FromFile(wavPath);
+            Assert.True(clip.DurationSeconds > 1.0f);
+            Assert.Equal(1, clip.Channels);
+            Assert.Equal(44100, clip.SampleRate);
+        }
+    }
+
+    [Fact]
     public void AudioEngine_SourcePlayback_PropertiesAndControl()
     {
         var source = _audio.CreateSource();
@@ -327,6 +340,29 @@ public class PhysicsAndAudioTests : IDisposable
         Assert.Equal(0f, source.Position.Z, 0.05f);
 
         _audio.RemoveSource(source);
+    }
+
+    [Fact]
+    public void AudioEngine_DistanceModel_DefaultsToLinearDistanceClamped()
+    {
+        if (_audio.IsHardwareAvailable)
+        {
+            Assert.Equal(Brutal.OpenAlApi.AlDistanceModel.LinearDistanceClamped, _audio.DistanceModel);
+        }
+    }
+
+    [Fact]
+    public void AudioEngine_DistanceModel_CanBeChanged()
+    {
+        if (_audio.IsHardwareAvailable)
+        {
+            _audio.DistanceModel = Brutal.OpenAlApi.AlDistanceModel.InverseDistanceClamped;
+            Assert.Equal(Brutal.OpenAlApi.AlDistanceModel.InverseDistanceClamped, _audio.DistanceModel);
+
+            // Revert back to LinearDistanceClamped
+            _audio.DistanceModel = Brutal.OpenAlApi.AlDistanceModel.LinearDistanceClamped;
+            Assert.Equal(Brutal.OpenAlApi.AlDistanceModel.LinearDistanceClamped, _audio.DistanceModel);
+        }
     }
 
     // =============================================================================================

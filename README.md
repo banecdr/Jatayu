@@ -55,6 +55,14 @@ This stages a self-contained `win-x64` publish and replaces `dist\Jatayu` only a
 
 The managed and application-native dependencies are bundled into the single-file executable; .NET extracts native libraries to its runtime extraction cache as needed, so `assets\libs` is not required. A Vulkan-capable Windows GPU driver remains a system prerequisite. Debug builds continue copying GLSL sources to the normal `bin\Debug` output for development.
 
+To export the Linux x64 package, run:
+
+```powershell
+.\tools\Publish-Linux-Release.ps1
+```
+
+This creates `dist/Jatayu-linux-x64` without changing the Windows package. It contains the self-contained `Jatayu` executable, precompiled SPIR-V shaders, and the optional world package. On Linux, run `./Jatayu`; the .NET runtime is bundled, but a Vulkan 1.3-capable GPU driver and the Linux window/audio system libraries required by the native dependencies must be installed. The Ubuntu CI workflow also publishes this package as the `Jatayu-linux-x64` build artifact. If the package was exported on Windows, set the executable bit after copying it to Linux with `chmod +x Jatayu`.
+
 ## License
 
 [GPL-2.0](LICENSE)
