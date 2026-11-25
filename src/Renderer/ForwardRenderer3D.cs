@@ -594,7 +594,7 @@ public sealed class ForwardRenderer3D : IDisposable
             Offset = new ByteSize32(0),
             Size = new ByteSize32((uint)Marshal.SizeOf<SkyboxPushConstants>()),
         };
-        _skyboxPipelineLayout = device.CreatePipelineLayout([], [skyboxPushConstant], null);
+        _skyboxPipelineLayout = device.CreatePipelineLayout([_frameDescriptorLayout], [skyboxPushConstant], null);
 
         // Debug Line Pipeline Layout: 64 bytes push constants
         var debugPushConstant = new VkPushConstantRange
@@ -1520,6 +1520,9 @@ public sealed class ForwardRenderer3D : IDisposable
         cmd.SetViewport(0, _viewports);
         _scissors[0] = new VkRect2D(ctx.RenderArea);
         cmd.SetScissor(0, _scissors);
+
+        Span<VkDescriptorSet> sets = stackalloc VkDescriptorSet[1] { _frameDescriptorSet };
+        cmd.BindDescriptorSets(VkPipelineBindPoint.Graphics, _skyboxPipelineLayout, 0, sets, Span<ByteSize32>.Empty);
 
         var pc = new SkyboxPushConstants { InvViewProj = _currentInvVp };
 

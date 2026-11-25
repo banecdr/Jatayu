@@ -396,7 +396,7 @@ void main() {
     if ((uLight.CastsShadows & 0x80000000u) != 0u) {
         vec3 irradiance = texture(uIrradianceMap, N).rgb;
         vec3 reflected = reflect(-V, N);
-        vec3 prefiltered = textureLod(uPrefilterMap, vec3(reflected.x, -reflected.y, reflected.z), roughness * 4.0).rgb;
+        vec3 prefiltered = textureLod(uPrefilterMap, reflected, roughness * 4.0).rgb;
         vec3 fresnelRoughness = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
         ambientDiffuse = irradiance * albedo.rgb * (1.0 - metallic);
         ambientSpecular = prefiltered * (fresnelRoughness * brdf.x + brdf.y);

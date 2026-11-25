@@ -12,10 +12,10 @@ import struct
 import time
 import numpy as np
 
-# Header layout matching CookedTextureHeader (Pack = 1):
+# Header layout matching CookedTextureHeader (Pack = 1, 48 bytes):
 # uint32 Magic (0x5845544A)
 # uint32 Version (1)
-# uint64 GuidLow, uint64 GuidHigh
+# uint64 Guid
 # uint32 Width
 # uint32 Height
 # uint32 MipLevels
@@ -26,12 +26,12 @@ import numpy as np
 # uint32 Flags (8 = Cubemap)
 # uint64 ResidentTailOffset
 # uint32 ResidentTailSize
-HEADER_FORMAT = "<IIQQIIIIBBHIQI"
+HEADER_FORMAT = "<IIQIIIIBBHIQI"
 
 def compute_guid(path: str):
     h = hashlib.md5(path.encode("utf-8")).digest()
-    low, high = struct.unpack("<QQ", h)
-    return low, high
+    (guid,) = struct.unpack("<Q", h[:8])
+    return guid
 
 def load_equirect_image(path: str):
     if not os.path.isfile(path):
@@ -169,7 +169,7 @@ def main():
 
     magic = 0x5845544A # "JTEX"
     version = 1
-    guid_low, guid_high = compute_guid(args.output)
+    guid = compute_guid(args.output)
     width = args.resolution
     height = args.resolution
     mip_levels = 1
@@ -182,8 +182,7 @@ def main():
         HEADER_FORMAT,
         magic,
         version,
-        guid_low,
-        guid_high,
+        guid,
         width,
         height,
         mip_levels,

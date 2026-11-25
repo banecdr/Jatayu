@@ -105,6 +105,9 @@
     <None Include="assets\shaders\**\*.vert;assets\shaders\**\*.frag;assets\shaders\**\*.comp;assets\shaders\**\*.glsl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="assets\textures\**\*.jtex" Condition="Exists('assets\textures')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="assets\generated\world.jpak" Condition="Exists('assets\generated\world.jpak')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

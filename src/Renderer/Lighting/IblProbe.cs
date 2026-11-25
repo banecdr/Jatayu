@@ -31,7 +31,7 @@ public sealed class IblProbe : IDisposable
 {
     public const int BrdfLutResolution = 256;
     public const int IrradianceResolution = 64;
-    public const int PrefilterResolution = 128;
+    public const int PrefilterResolution = 512;
     public const int PrefilterMipLevels = 5;
 
     [StructLayout(LayoutKind.Sequential, Size = 16)]
@@ -45,6 +45,8 @@ public sealed class IblProbe : IDisposable
 
     private readonly VulkanContext _context;
     private readonly GpuAllocator _allocator;
+    private VkBuffer _stagingBuffer;
+    private VmaAllocation _stagingAlloc;
 
     private GpuTexture _brdfLutTexture;
     private VkImageView _brdfLutStorageView;
@@ -94,7 +96,7 @@ public sealed class IblProbe : IDisposable
 
         var device = _context.Device;
 
-        _environmentTexture = CreateCubeTexture(PrefilterResolution, 1, VkImageUsageFlags.StorageBit | VkImageUsageFlags.SampledBit);
+        _environmentTexture = CreateCubeTexture(PrefilterResolution, 1, VkImageUsageFlags.StorageBit | VkImageUsageFlags.SampledBit | VkImageUsageFlags.TransferDstBit);
         _irradianceTexture = CreateCubeTexture(IrradianceResolution, 1, VkImageUsageFlags.StorageBit | VkImageUsageFlags.SampledBit);
         _prefilterTexture = CreateCubeTexture(PrefilterResolution, PrefilterMipLevels, VkImageUsageFlags.StorageBit | VkImageUsageFlags.SampledBit);
         _environmentStorageView = CreateArrayView(_environmentTexture, 0, 1);
@@ -394,10 +396,23 @@ public sealed class IblProbe : IDisposable
         _irradiancePipeline = CreateComputePipeline(compiler, "ibl_irradiance.comp", _convolutionPipelineLayout, ownsLayout: true);
         _prefilterPipeline = CreateComputePipeline(compiler, "ibl_prefilter.comp", _convolutionPipelineLayout, ownsLayout: false);
 
-        TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.Undefined, VkImageLayout.General,
-            VkPipelineStageFlags2.TopOfPipeBit, VkAccessFlags2.None,
-            VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
-            0, 1);
+        bool loadedHdr = TryLoadHdrCubemap(cmd);
+        if (!loadedHdr)
+        {
+            TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.Undefined, VkImageLayout.General,
+                VkPipelineStageFlags2.TopOfPipeBit, VkAccessFlags2.None,
+                VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
+                0, 1);
+
+            device.PInvoke.vkCmdBindPipeline.Invoke(cmd, VkPipelineBindPoint.Compute, _environmentPipeline.Handle);
+            device.PInvoke.vkCmdBindDescriptorSets.Invoke(cmd, VkPipelineBindPoint.Compute, _environmentPipelineLayout, 0, 1, &envSet, 0, null);
+            device.PInvoke.vkCmdDispatch.Invoke(cmd, (PrefilterResolution + 15) / 16, (PrefilterResolution + 15) / 16, 6);
+            TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.General, VkImageLayout.ShaderReadOnlyOptimal,
+                VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
+                VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderSampledReadBit,
+                0, 1);
+        }
+
         TransitionImage(cmd, _irradianceTexture.Image, VkImageLayout.Undefined, VkImageLayout.General,
             VkPipelineStageFlags2.TopOfPipeBit, VkAccessFlags2.None,
             VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
@@ -406,14 +421,6 @@ public sealed class IblProbe : IDisposable
             VkPipelineStageFlags2.TopOfPipeBit, VkAccessFlags2.None,
             VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
             0, PrefilterMipLevels);
-
-        device.PInvoke.vkCmdBindPipeline.Invoke(cmd, VkPipelineBindPoint.Compute, _environmentPipeline.Handle);
-        device.PInvoke.vkCmdBindDescriptorSets.Invoke(cmd, VkPipelineBindPoint.Compute, _environmentPipelineLayout, 0, 1, &envSet, 0, null);
-        device.PInvoke.vkCmdDispatch.Invoke(cmd, (PrefilterResolution + 15) / 16, (PrefilterResolution + 15) / 16, 6);
-        TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.General, VkImageLayout.ShaderReadOnlyOptimal,
-            VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderStorageWriteBit,
-            VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderSampledReadBit,
-            0, 1);
 
         device.PInvoke.vkCmdBindPipeline.Invoke(cmd, VkPipelineBindPoint.Compute, _irradiancePipeline.Handle);
         device.PInvoke.vkCmdBindDescriptorSets.Invoke(cmd, VkPipelineBindPoint.Compute, _convolutionPipelineLayout, 0, 1, &irradianceSet, 0, null);
@@ -429,7 +436,7 @@ public sealed class IblProbe : IDisposable
             {
                 Roughness = (float)mip / (PrefilterMipLevels - 1),
                 Resolution = resolution,
-                NumSamples = 256,
+                NumSamples = (mip == 0) ? 32u : 256u,
             };
             device.PInvoke.vkCmdPushConstants.Invoke(
                 cmd,
@@ -518,6 +525,109 @@ public sealed class IblProbe : IDisposable
         _context.Device.PInvoke.vkCmdPipelineBarrier2.Invoke(cmd, &dependency);
     }
 
+    private unsafe bool TryLoadHdrCubemap(VkCommandBuffer cmd)
+    {
+        string[] candidates =
+        [
+            Path.Combine(AppContext.BaseDirectory, "assets", "textures", "HDRI", "sunflowers_puresky_cubemap_512.jtex"),
+            Path.Combine(Directory.GetCurrentDirectory(), "assets", "textures", "HDRI", "sunflowers_puresky_cubemap_512.jtex"),
+            "assets/textures/HDRI/sunflowers_puresky_cubemap_512.jtex"
+        ];
+
+        string? validPath = null;
+        foreach (var p in candidates)
+        {
+            if (File.Exists(p))
+            {
+                validPath = p;
+                break;
+            }
+        }
+
+        if (validPath == null)
+            return false;
+
+        try
+        {
+            using var fs = File.OpenRead(validPath);
+            int headerSize = Marshal.SizeOf<Jatayu.AssetFormats.CookedTextureHeader>();
+            Span<byte> headerBytes = stackalloc byte[headerSize];
+            fs.ReadExactly(headerBytes);
+            var header = MemoryMarshal.Read<Jatayu.AssetFormats.CookedTextureHeader>(headerBytes);
+
+            if (!header.IsValid || header.Width != (uint)PrefilterResolution || header.Height != (uint)PrefilterResolution || header.Format != Jatayu.AssetFormats.CookedTextureFormat.Rgba16Float)
+                return false;
+
+            long payloadSize = fs.Length - headerSize;
+            long expectedSize = 6L * PrefilterResolution * PrefilterResolution * 4 * 2;
+            if (payloadSize != expectedSize)
+                return false;
+
+            _allocator.CreateBuffer(
+                (ulong)payloadSize,
+                VkBufferUsageFlags.TransferSrcBit,
+                VmaMemoryUsage.CpuToGpu,
+                VmaAllocationCreateFlags.MappedBit,
+                out _stagingBuffer,
+                out _stagingAlloc,
+                out var allocInfo
+            );
+
+            byte* pDst = (byte*)allocInfo.PMappedData;
+            var dstSpan = new Span<byte>(pDst, (int)payloadSize);
+            fs.ReadExactly(dstSpan);
+            _allocator.FlushAllocation(_stagingAlloc);
+
+            TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal,
+                VkPipelineStageFlags2.TopOfPipeBit, VkAccessFlags2.None,
+                VkPipelineStageFlags2.TransferBit, VkAccessFlags2.TransferWriteBit,
+                0, 1);
+
+            ulong faceBytes = (ulong)(PrefilterResolution * PrefilterResolution * 4 * 2);
+            var copyRegions = stackalloc VkBufferImageCopy[6];
+            for (int f = 0; f < 6; f++)
+            {
+                copyRegions[f] = new VkBufferImageCopy
+                {
+                    BufferOffset = new ByteSize64((ulong)f * faceBytes),
+                    BufferRowLength = 0,
+                    BufferImageHeight = 0,
+                    ImageSubresource = new VkImageSubresourceLayers
+                    {
+                        AspectMask = VkImageAspectFlags.ColorBit,
+                        MipLevel = 0,
+                        BaseArrayLayer = f,
+                        LayerCount = 1,
+                    },
+                    ImageOffset = new VkOffset3D(0, 0, 0),
+                    ImageExtent = new VkExtent3D(PrefilterResolution, PrefilterResolution, 1),
+                };
+            }
+
+            _context.Device.PInvoke.vkCmdCopyBufferToImage.Invoke(
+                cmd,
+                _stagingBuffer,
+                _environmentTexture.Image,
+                VkImageLayout.TransferDstOptimal,
+                6,
+                copyRegions
+            );
+
+            TransitionImage(cmd, _environmentTexture.Image, VkImageLayout.TransferDstOptimal, VkImageLayout.ShaderReadOnlyOptimal,
+                VkPipelineStageFlags2.TransferBit, VkAccessFlags2.TransferWriteBit,
+                VkPipelineStageFlags2.ComputeShaderBit, VkAccessFlags2.ShaderSampledReadBit,
+                0, 1);
+
+            Console.WriteLine($"[IblProbe] Successfully loaded 512x512 HDR cubemap from: {validPath}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[IblProbe Warning] Failed to load HDR cubemap from '{validPath}': {ex.Message}");
+            return false;
+        }
+    }
+
     public unsafe void Dispose()
     {
         if (_disposed) return;
@@ -532,6 +642,12 @@ public sealed class IblProbe : IDisposable
         _brdfDescLayout?.Dispose();
         _environmentDescLayout?.Dispose();
         _convolutionDescLayout?.Dispose();
+
+        if (_stagingBuffer.VkHandle != 0)
+        {
+            _allocator.DestroyBuffer(_stagingBuffer, _stagingAlloc);
+            _stagingBuffer = default;
+        }
 
         if (_brdfLutSampler.VkHandle != 0) device.DestroySampler(_brdfLutSampler, null);
         if (_environmentSampler.VkHandle != 0) device.DestroySampler(_environmentSampler, null);
